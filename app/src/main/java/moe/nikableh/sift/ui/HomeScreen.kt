@@ -3,6 +3,7 @@ package moe.nikableh.sift.ui
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,10 +45,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
@@ -138,43 +141,55 @@ private fun AlbumCard(vm: SiftViewModel) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         val cover = vm.photos.firstOrNull()
+        val coverModifier = Modifier.fillMaxWidth().height(180.dp).clip(MaterialTheme.shapes.extraLarge)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
         if (cover != null) {
             AsyncImage(
                 model = cover.file,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().height(180.dp).clip(MaterialTheme.shapes.extraLarge)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                modifier = coverModifier,
             )
+        } else if (vm.scanning) {
+            // Most albums have a cover, so reserving its space keeps the card from growing after the read
+            Box(coverModifier)
         }
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(File(source).name, style = MaterialTheme.typography.headlineSmallEmphasized)
             Text(source, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(4.dp))
             when {
-                vm.scanning -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    LoadingIndicator(Modifier.size(28.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text("Reading the album", style = MaterialTheme.typography.bodyLarge)
+                vm.scanning -> Box(contentAlignment = Alignment.CenterStart) {
+                    // An invisible copy of the loaded stats gives the indicator the same height at any font scale
+                    AlbumStats("0 photos", "0 queued  ·  0 skipped  ·  0 left", 0f,
+                        Modifier.alpha(0f).clearAndSetSemantics {})
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        LoadingIndicator(Modifier.size(28.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text("Reading the album", style = MaterialTheme.typography.bodyLarge)
+                    }
                 }
                 total == 0 -> Text("No photos in this album", style = MaterialTheme.typography.bodyLarge)
-                else -> {
-                    Text(
-                        if (total == 1) "1 photo" else "$total photos",
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    // Skipped photos were looked at and left in place, so they no longer count as left
-                    Text(
-                        "$queuedHere queued  ·  $skippedHere skipped  ·  ${vm.leftHere} left",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    LinearWavyProgressIndicator(
-                        progress = { (queuedHere + skippedHere) / total.toFloat() },
-                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                    )
-                }
+                // Skipped photos were looked at and left in place, so they no longer count as left
+                else -> AlbumStats(
+                    if (total == 1) "1 photo" else "$total photos",
+                    "$queuedHere queued  ·  $skippedHere skipped  ·  ${vm.leftHere} left",
+                    (queuedHere + skippedHere) / total.toFloat(),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun AlbumStats(count: String, stats: String, progress: Float, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(count, style = MaterialTheme.typography.bodyLarge)
+        Text(stats, style = MaterialTheme.typography.titleMedium)
+        LinearWavyProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+        )
     }
 }
 
