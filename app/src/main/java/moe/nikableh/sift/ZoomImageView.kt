@@ -21,7 +21,6 @@ import kotlin.math.min
 class ZoomImageView(ctx: Context) : View(ctx) {
     /** +1 for next, -1 for previous. */
     var onSwipe: ((Int) -> Unit)? = null
-    var onTap: (() -> Unit)? = null
 
     /** Fired once per image when the user first zooms in, to fetch a sharper bitmap. */
     var onZoomIn: (() -> Unit)? = null
@@ -179,11 +178,6 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     private val gestures = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
-
-        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-            onTap?.invoke()
-            return true
-        }
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
             if (bitmap == null) return true

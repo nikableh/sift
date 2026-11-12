@@ -7,11 +7,8 @@ import android.net.Uri
 import android.provider.Settings
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -71,21 +68,23 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -114,7 +113,6 @@ import kotlin.math.ceil
 @Composable
 fun SortScreen(vm: SiftViewModel) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    var chrome by rememberSaveable { mutableStateOf(true) }
     val context = LocalContext.current
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -136,12 +134,12 @@ fun SortScreen(vm: SiftViewModel) {
 
             else -> if (landscape) {
                 Row(Modifier.fillMaxSize()) {
-                    Viewer(vm, chrome, { chrome = !chrome }, Modifier.weight(1f).fillMaxHeight())
+                    Viewer(vm, Modifier.weight(1f).fillMaxHeight())
                     Panel(vm, landscape = true, Modifier.width(280.dp).fillMaxHeight())
                 }
             } else {
                 Column(Modifier.fillMaxSize()) {
-                    Viewer(vm, chrome, { chrome = !chrome }, Modifier.weight(1f).fillMaxWidth())
+                    Viewer(vm, Modifier.weight(1f).fillMaxWidth())
                     Panel(vm, landscape = false, Modifier.fillMaxWidth())
                 }
             }
@@ -201,20 +199,27 @@ private fun BigButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Viewer(vm: SiftViewModel, chrome: Boolean, onToggleChrome: () -> Unit, modifier: Modifier) {
-    val toggle by rememberUpdatedState(onToggleChrome)
-    val gate = vm.gate
+private fun Viewer(vm: SiftViewModel, modifier: Modifier) {
     val folder = File(vm.source ?: "").name
 
-    Box(
+    Column(
         modifier.background(MaterialTheme.colorScheme.surface)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))
     ) {
+        TopBar(vm, folder)
+        Photo(vm, folder, Modifier.weight(1f).fillMaxWidth())
+    }
+}
+
+@Composable
+private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
+    val gate = vm.gate
+
+    Box(modifier) {
         AndroidView(
             factory = { context ->
                 ZoomImageView(context).apply {
                     onSwipe = { vm.go(it) }
-                    onTap = { toggle() }
                     onZoomIn = { vm.loadSharper() }
                 }
             },
@@ -260,10 +265,6 @@ private fun Viewer(vm: SiftViewModel, chrome: Boolean, onToggleChrome: () -> Uni
             else -> if (vm.decodeFailed) {
                 Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}") {}
             }
-        }
-
-        AnimatedVisibility(chrome, Modifier.align(Alignment.TopCenter), enter = fadeIn(), exit = fadeOut()) {
-            TopBar(vm, folder)
         }
 
         val assigned = vm.assigned
@@ -317,14 +318,9 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
     var menu by remember { mutableStateOf(false) }
     val photo = vm.current
     val idle = !vm.busy && !vm.scanning
-    // Solid behind the text and fading only below it, so a tall dark photo can't swallow the info line
-    val scrim = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
 
-    Column(Modifier.fillMaxWidth()) {
     Row(
-        Modifier.fillMaxWidth()
-            .background(scrim)
-            .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
@@ -382,25 +378,42 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             }
         }
 
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            if (photo == null) {
-                Text(if (vm.reviewing) "Skipped in $folder" else folder, style = MaterialTheme.typography.titleSmall)
-            } else {
-                val parent = if (vm.recursive) "  ·  ${photo.file.parentFile?.name}" else ""
-                val list = if (vm.reviewing) "Skipped " else ""
-                Text(
-                    "$list${vm.index + 1} / ${vm.photos.size}$parent  ·  ${Formatter.formatShortFileSize(context, photo.size)}",
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    "${photo.file.name}  ·  ${dateFormat.format(Date(photo.mtime))}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        if (photo == null) {
+            Text(
+                if (vm.reviewing) "Skipped in $folder" else folder,
+                Modifier.weight(1f).padding(horizontal = 12.dp),
+                style = MaterialTheme.typography.titleSmall,
+            )
+        } else {
+            val date = dateFormat.format(Date(photo.mtime))
+            // TooltipBox does not pass its modifier to the node the Row measures, so the weight sits on a wrapper
+            Box(Modifier.weight(1f)) {
+                TooltipBox(
+                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+                    tooltip = {
+                        RichTooltip(title = { Text(photo.file.name) }) { Text(date) }
+                    },
+                    // Persistent, so a long name stays up until a tap outside instead of timing out mid-read
+                    state = rememberTooltipState(isPersistent = true),
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        val parent = if (vm.recursive) "  ·  ${photo.file.parentFile?.name}" else ""
+                        val list = if (vm.reviewing) "Skipped " else ""
+                        Text(
+                            "$list${vm.index + 1} / ${vm.photos.size}$parent  ·  ${Formatter.formatShortFileSize(context, photo.size)}",
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            "${photo.file.name}  ·  $date",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
 
@@ -414,11 +427,6 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             Text(if (vm.queued > 0) "Apply ${vm.queued}" else "Apply")
         }
-    }
-    Box(
-        Modifier.fillMaxWidth().height(14.dp)
-            .background(Brush.verticalGradient(listOf(scrim, scrim.copy(alpha = 0f))))
-    )
     }
 }
 
