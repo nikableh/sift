@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
@@ -232,15 +233,31 @@ private fun Viewer(vm: SiftViewModel, chrome: Boolean, onToggleChrome: () -> Uni
 
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
-            Gate.Empty -> Status(Modifier.align(Alignment.Center), "No photos in $folder") {
-                BigButton("Change folders") { vm.open(Screen.Setup) }
+            Gate.Empty -> if (vm.hiddenHere > 0) {
+                Status(
+                    Modifier.align(Alignment.Center),
+                    "Nothing left to sort in $folder",
+                    if (vm.hiddenHere == 1) "1 skipped photo is hidden" else "${vm.hiddenHere} skipped photos are hidden",
+                ) {
+                    BigButton("Review skipped") { vm.enterReview() }
+                }
+            } else {
+                Status(Modifier.align(Alignment.Center), "No photos in $folder") {
+                    BigButton("Change folders") { vm.open(Screen.Setup) }
+                }
             }
-            Gate.End -> Status(
-                Modifier.align(Alignment.Center),
-                "That was the last photo",
-                "${vm.queuedHere} queued to move, ${vm.skippedHere} skipped, ${vm.leftHere} not reviewed",
-            ) {
-                if (vm.queued > 0) BigButton("Apply ${vm.queued} moves") { vm.askApply() }
+            Gate.End -> if (vm.reviewing) {
+                Status(Modifier.align(Alignment.Center), "That was the last skipped photo") {
+                    BigButton("Back to sorting") { vm.exitReview() }
+                }
+            } else {
+                Status(
+                    Modifier.align(Alignment.Center),
+                    "That was the last photo",
+                    "${vm.queuedHere} queued to move, ${vm.skippedHere} skipped, ${vm.leftHere} not reviewed",
+                ) {
+                    if (vm.selections > 0) BigButton(applyLabel(vm)) { vm.askApply() }
+                }
             }
             else -> if (vm.decodeFailed) {
                 Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}") {}
@@ -328,27 +345,42 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                         action()
                     },
                 )
-                item("Home", Icons.Rounded.Home) { vm.back() }
-                if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
-                item("Folders and settings", Icons.Rounded.Tune) { vm.open(Screen.Setup) }
-                item("Go to first unreviewed photo", Icons.Rounded.ImageSearch) { vm.jumpToFirstUnsorted() }
-                if (vm.photos.isNotEmpty()) {
-                    item("Go to photo…", Icons.Rounded.Numbers) {
-                        vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
+                @Composable
+                fun goToPhoto() {
+                    if (vm.photos.isNotEmpty()) {
+                        item("Go to photo…", Icons.Rounded.Numbers) {
+                            vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
+                        }
                     }
                 }
-                item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
-                if (vm.queued > 0) {
-                    item("Clear the queue (${vm.queued})", Icons.Rounded.ClearAll) { vm.dialog = Dialog.ConfirmClear }
-                }
-                if (vm.skippedHere > 0) {
-                    item("Reset skipped (${vm.skippedHere})", Icons.Rounded.RestartAlt) {
-                        vm.dialog = Dialog.ConfirmResetSkipped(vm.skippedHere)
+                if (vm.reviewing) {
+                    item("Back to sorting", Icons.AutoMirrored.Rounded.ArrowBack) { vm.exitReview() }
+                    if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
+                    goToPhoto()
+                    if (vm.hiddenHere > 0) {
+                        item("Unhide all skipped (${vm.hiddenHere})", Icons.Rounded.RestartAlt) {
+                            vm.dialog = Dialog.ConfirmUnhide(vm.hiddenHere)
+                        }
                     }
-                }
-                if (batch != null) {
-                    item("Undo last applied batch (${batch.second})", Icons.Rounded.History) {
-                        vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second)
+                } else {
+                    item("Home", Icons.Rounded.Home) { vm.back() }
+                    if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
+                    item("Folders and settings", Icons.Rounded.Tune) { vm.open(Screen.Setup) }
+                    item("Go to first unreviewed photo", Icons.Rounded.ImageSearch) { vm.jumpToFirstUnsorted() }
+                    goToPhoto()
+                    item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
+                    if (vm.hiddenHere > 0) {
+                        item("Review skipped (${vm.hiddenHere})", Icons.Rounded.SkipNext) { vm.enterReview() }
+                    }
+                    if (vm.selections > 0) {
+                        item("Clear selections (${vm.selections})", Icons.Rounded.ClearAll) {
+                            vm.dialog = Dialog.ConfirmClear
+                        }
+                    }
+                    if (batch != null) {
+                        item("Undo last applied batch (${batch.second})", Icons.Rounded.History) {
+                            vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second)
+                        }
                     }
                 }
             }
@@ -356,11 +388,12 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
 
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             if (photo == null) {
-                Text(folder, style = MaterialTheme.typography.titleSmall)
+                Text(if (vm.reviewing) "Skipped in $folder" else folder, style = MaterialTheme.typography.titleSmall)
             } else {
                 val parent = if (vm.recursive) "  ·  ${photo.file.parentFile?.name}" else ""
+                val list = if (vm.reviewing) "Skipped " else ""
                 Text(
-                    "${vm.index + 1} / ${vm.photos.size}$parent  ·  ${Formatter.formatShortFileSize(context, photo.size)}",
+                    "$list${vm.index + 1} / ${vm.photos.size}$parent  ·  ${Formatter.formatShortFileSize(context, photo.size)}",
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -378,7 +411,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
         Button(
             onClick = { vm.askApply() },
             shapes = ButtonDefaults.shapes(),
-            enabled = vm.queued > 0 && idle,
+            enabled = vm.selections > 0 && idle,
             contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
         ) {
             Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.IconSize))

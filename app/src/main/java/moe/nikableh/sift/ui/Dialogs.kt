@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.History
@@ -47,23 +46,6 @@ fun Dialogs(vm: SiftViewModel) {
     val close = { vm.dialog = null }
     when (val d = vm.dialog) {
         null -> {}
-
-        Dialog.ConfirmApply -> Confirm(
-            icon = Icons.AutoMirrored.Rounded.DriveFileMove,
-            title = "Move ${vm.queued} photos?",
-            confirm = "Move",
-            onConfirm = { vm.apply() },
-            onDismiss = close,
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for ((label, count) in vm.applySummary()) {
-                    Row(Modifier.fillMaxWidth()) {
-                        Text(label, Modifier.weight(1f))
-                        Text(count.toString(), style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-            }
-        }
 
         is Dialog.Progress -> AlertDialog(
             onDismissRequest = {},
@@ -125,30 +107,54 @@ fun Dialogs(vm: SiftViewModel) {
             onDismiss = close,
         ) { Text(if (d.count == 1) "1 ticked folder has not been added." else "${d.count} ticked folders have not been added.") }
 
-        is Dialog.ConfirmResetSkipped -> Confirm(
-            title = "Reset skipped photos?",
-            confirm = "Reset",
+        is Dialog.ConfirmUnhide -> Confirm(
+            title = "Unhide skipped photos?",
+            confirm = "Unhide",
             onConfirm = {
-                vm.resetSkipped()
+                vm.unhideAll()
                 close()
             },
             onDismiss = close,
         ) {
             Text(
-                (if (d.count == 1) "1 skipped photo in this album counts" else "${d.count} skipped photos in this album count") +
-                    " as not reviewed again. No files are touched."
+                (if (d.count == 1) "1 skipped photo returns" else "${d.count} skipped photos return") +
+                    " to this album as not reviewed. No files are touched."
             )
         }
 
         Dialog.ConfirmClear -> Confirm(
-            title = "Clear the queue?",
+            title = "Clear selections?",
             confirm = "Clear",
             onConfirm = {
-                vm.clearQueue()
+                vm.clearSelections()
                 close()
             },
             onDismiss = close,
-        ) { Text("${vm.queued} photos lose their folder choice. No files are touched.") }
+        ) {
+            val one = vm.selections == 1
+            Text("${selectionCounts(vm)} ${if (one) "is" else "are"} dropped. No files are touched.")
+        }
+
+        Dialog.SelectionsLocked -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Finish this album first") },
+            text = {
+                val one = vm.selections == 1
+                Text(
+                    "${selectionCounts(vm)} ${if (one) "is" else "are"} waiting. " +
+                        "Apply or clear ${if (one) "it" else "them"} before changing what is sorted."
+                )
+            },
+            confirmButton = {
+                Button(onClick = { vm.askApply() }, shapes = ButtonDefaults.shapes()) { Text("Apply") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = close) { Text("Cancel") }
+                    TextButton(onClick = { vm.dialog = Dialog.ConfirmClear }) { Text("Clear") }
+                }
+            },
+        )
 
         is Dialog.ConfirmRemoveDest -> Confirm(
             title = "Remove ${d.dest.label}?",
@@ -229,6 +235,25 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/** Text of the big Apply buttons. With nothing queued, Apply only hides the skips. */
+fun applyLabel(vm: SiftViewModel): String {
+    val skips = vm.selections - vm.queued
+    return when {
+        vm.queued == 1 -> "Apply 1 move"
+        vm.queued > 0 -> "Apply ${vm.queued} moves"
+        else -> "Hide $skips skipped"
+    }
+}
+
+/** "80 folder choices and 15 skips", leaving out the part that is zero. */
+private fun selectionCounts(vm: SiftViewModel): String {
+    val skips = vm.selections - vm.queued
+    val parts = ArrayList<String>()
+    if (vm.queued > 0) parts.add(if (vm.queued == 1) "1 folder choice" else "${vm.queued} folder choices")
+    if (skips > 0) parts.add(if (skips == 1) "1 skip" else "$skips skips")
+    return parts.joinToString(" and ")
 }
 
 private fun failureLines(failed: List<Pair<String, String>>): String {

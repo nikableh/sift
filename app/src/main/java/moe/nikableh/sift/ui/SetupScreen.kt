@@ -90,7 +90,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             item {
                 val source = vm.source
                 SegmentedListItem(
-                    onClick = { vm.open(Screen.Picker(forSource = true)) },
+                    onClick = { vm.askPickSource() },
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
                     colors = segmentColors(),
                     leadingContent = { Icon(Icons.Rounded.PhotoLibrary, null) },

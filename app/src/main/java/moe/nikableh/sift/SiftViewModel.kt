@@ -25,17 +25,18 @@ sealed interface Screen {
     data object Home : Screen
     data object Sort : Screen
     data object Setup : Screen
+    data object Selections : Screen
     data class Picker(val forSource: Boolean) : Screen
 }
 
 sealed interface Dialog {
-    data object ConfirmApply : Dialog
     data class Progress(val title: String, val total: Int, val cancellable: Boolean) : Dialog
     data class ApplyDone(val result: Mover.Result, val journal: File?) : Dialog
     data class ConfirmUndoBatch(val journal: File, val count: Int) : Dialog
     data class UndoFailed(val restored: Int, val failed: List<Pair<String, String>>) : Dialog
     data object ConfirmClear : Dialog
-    data class ConfirmResetSkipped(val count: Int) : Dialog
+    data object SelectionsLocked : Dialog
+    data class ConfirmUnhide(val count: Int) : Dialog
     data class ConfirmDiscardPicks(val count: Int) : Dialog
     data class ConfirmRemoveDest(val dest: Dest, val queued: Int) : Dialog
     data class RenameDest(val dest: Dest) : Dialog
@@ -51,6 +52,9 @@ class Folder(val dir: File, val title: String, val subtitle: String)
 
 class Flash(val id: Int, val label: String, val colorIndex: Int)
 
+/** One photo waiting for Apply. A null [dest] is a skip, which Apply hides. */
+class Selection(val file: File, val dest: String?)
+
 /** Screen state in front of [Store], which Compose can't observe on its own. Main thread only. */
 class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** One reversible step. A photo is queued for a folder, marked skipped, or neither. */
@@ -58,8 +62,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val path: String,
         val before: String?,
         val after: String?,
-        val skippedBefore: Boolean = false,
-        val skippedAfter: Boolean = false,
+        val skipBefore: Int = Store.SKIP_NONE,
+        val skipAfter: Int = Store.SKIP_NONE,
     )
 
     private val ctx get() = getApplication<Application>()
@@ -81,7 +85,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     var allowed by mutableStateOf(false)
         private set
+    /** The photos on screen: the album without its hidden skips, or only those while [reviewing]. */
     var photos by mutableStateOf<List<Photo>>(emptyList())
+        private set
+
+    /** True while the sorting screen shows the hidden skips instead of the album. */
+    var reviewing by mutableStateOf(false)
         private set
 
     /** Equal to photos.size on the end card. */
@@ -136,7 +145,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var imagesHere by mutableIntStateOf(0)
         private set
 
+    /** The whole scan, hidden skips included. */
+    private var all: List<Photo> = emptyList()
     private var indexOf: Map<String, Int> = emptyMap()
+
+    /** Where sorting continues after a look at the hidden skips. */
+    private var resumePath: String? = null
     private val undo = ArrayDeque<UndoEntry>()
     private var scannedVersion = -1
     private var lastAssignAt = 0L
@@ -160,12 +174,29 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var queuedHere by mutableIntStateOf(0)
         private set
 
-    /** Photos of this album the user looked at and left in place with Skip. */
+    /** Photos of this album skipped since the last Apply. They stay in the list until the next one. */
     var skippedHere by mutableIntStateOf(0)
         private set
 
+    /** Skipped photos of this album that an Apply took out of the list. */
+    var hiddenHere by mutableIntStateOf(0)
+        private set
+
+    /** Size of the album without its hidden skips. */
+    var total by mutableIntStateOf(0)
+        private set
+
     /** Photos of this album that are neither queued nor skipped. */
-    val leftHere: Int get() = photos.size - queuedHere - skippedHere
+    var leftHere by mutableIntStateOf(0)
+        private set
+
+    /** Folder choices and skips no Apply has committed yet. The album can't change while there are any. */
+    var selections by mutableIntStateOf(0)
+        private set
+
+    /** What the Selections screen lists: folder choices in button order, then skips. */
+    var selectionList by mutableStateOf<List<Selection>>(emptyList())
+        private set
 
     /** True when the photo on screen carries a skip mark. */
     var isSkipped by mutableStateOf(false)
@@ -184,9 +215,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     fun open(target: Screen) {
         if (busy) return
+        exitReview()
         keepPosition()
         backStack.add(target)
         if (target == Screen.Sort) refresh()
+        if (target == Screen.Selections) loadSelections()
         if (target is Screen.Picker) {
             browsing = false
             picked.clear()
@@ -195,6 +228,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun back() {
+        if (reviewing) {
+            exitReview()
+            return
+        }
         keepPosition()
         if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
         if (screen == Screen.Sort || screen == Screen.Home) refresh()
@@ -225,7 +262,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun persist() {
-        if (scannedVersion == Store.scanVersion) Store.lastPath = current?.path
+        if (scannedVersion == Store.scanVersion) Store.lastPath = if (reviewing) resumePath else current?.path
         Store.saveConfig()
     }
 
@@ -240,15 +277,65 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { Scanner.scan(File(root), recursive, exclude, order) }
             scanning = false
-            photos = list
-            indexOf = HashMap<String, Int>(list.size * 2).also { m -> list.forEachIndexed { i, p -> m[p.path] = i } }
+            all = list
+            reviewing = false
             scannedVersion = version
-            index = Store.lastPath?.let { indexOf[it] } ?: firstUnsorted()
+            showAlbum(Store.lastPath)
             refresh()
         }
     }
 
-    private fun reviewed(path: String) = Store.pending.containsKey(path) || path in Store.skipped
+    private fun show(list: List<Photo>) {
+        photos = list
+        indexOf = HashMap<String, Int>(list.size * 2).also { m -> list.forEachIndexed { i, p -> m[p.path] = i } }
+    }
+
+    /** Lists the album without its hidden skips and lands on [at], or on the first unsorted photo. */
+    private fun showAlbum(at: String?) {
+        show(all.filter { it.path !in Store.hidden })
+        index = at?.let { indexOf[it] } ?: firstUnsorted()
+    }
+
+    /** Switches the sorting screen to the hidden skips, to file them or bring them back. */
+    fun enterReview() {
+        if (busy || scanning || reviewing) return
+        val list = all.filter { it.path in Store.hidden }
+        if (list.isEmpty()) return
+        resumePath = current?.path
+        reviewing = true
+        // Steps taken in one list can't be replayed in the other
+        undo.clear()
+        flash = null
+        show(list)
+        index = 0
+        sync()
+    }
+
+    fun exitReview() {
+        if (!reviewing) return
+        reviewing = false
+        undo.clear()
+        flash = null
+        showAlbum(resumePath)
+        sync()
+    }
+
+    /** Puts every hidden skip of this album back into the list as not reviewed. */
+    fun unhideAll() {
+        if (busy || scanning) return
+        var changed = false
+        for (photo in all) if (Store.hidden.remove(photo.path)) changed = true
+        if (changed) Store.compactSkipped()
+        val at = if (reviewing) resumePath else current?.path
+        reviewing = false
+        undo.clear()
+        flash = null
+        showAlbum(at)
+        sync()
+    }
+
+    private fun reviewed(path: String) =
+        Store.pending.containsKey(path) || Store.skipState(path) != Store.SKIP_NONE
 
     /** First photo from [from] on that is neither queued nor skipped. */
     private fun firstUnsorted(from: Int = 0): Int {
@@ -273,16 +360,26 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         queued = Store.pending.size
         counts = Store.counts()
         canUndo = undo.isNotEmpty()
+        selections = Store.pending.size + Store.skipped.size
+        if (screen == Screen.Selections) loadSelections()
         var q = 0
         var s = 0
-        for (photo in photos) {
-            if (Store.pending.containsKey(photo.path)) q++ else if (photo.path in Store.skipped) s++
+        var h = 0
+        for (photo in all) {
+            when {
+                Store.pending.containsKey(photo.path) -> q++
+                photo.path in Store.skipped -> s++
+                photo.path in Store.hidden -> h++
+            }
         }
         queuedHere = q
         skippedHere = s
+        hiddenHere = h
+        total = all.size - h
+        leftHere = total - q - s
         val p = current
         assigned = p?.let { Store.pending[it.path] }
-        isSkipped = p != null && assigned == null && p.path in Store.skipped
+        isSkipped = p != null && assigned == null && Store.skipState(p.path) != Store.SKIP_NONE
         if (p == null) {
             showImage(null)
             // The end card can still be swiped back to the last photo
@@ -342,8 +439,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (now - lastAssignAt < 120) return
         lastAssignAt = now
         if (!reviewed(p.path)) {
-            Store.setSkipped(p.path, true)
-            pushUndo(UndoEntry(p.path, null, null, skippedBefore = false, skippedAfter = true))
+            Store.setSkip(p.path, Store.SKIP_FRESH)
+            pushUndo(UndoEntry(p.path, null, null, skipAfter = Store.SKIP_FRESH))
         }
         flash = null
         index = (index + 1).coerceAtMost(photos.size)
@@ -353,18 +450,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun clearSkip() {
         if (busy || scanning) return
         val p = current ?: return
-        if (p.path !in Store.skipped) return
-        Store.setSkipped(p.path, false)
-        pushUndo(UndoEntry(p.path, null, null, skippedBefore = true, skippedAfter = false))
-        sync()
-    }
-
-    /** Makes every skipped photo of this album count as not reviewed again. */
-    fun resetSkipped() {
-        var changed = false
-        for (photo in photos) if (Store.skipped.remove(photo.path)) changed = true
-        if (changed) Store.compactSkipped()
-        undo.clear()
+        val before = Store.skipState(p.path)
+        if (before == Store.SKIP_NONE) return
+        Store.setSkip(p.path, Store.SKIP_NONE)
+        pushUndo(UndoEntry(p.path, null, null, skipBefore = before))
         sync()
     }
 
@@ -387,14 +476,15 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val before = Store.pending[p.path]
         if (before != dest.path) {
             // Queued and skipped exclude each other, so filing a skipped photo drops its mark
-            val wasSkipped = p.path in Store.skipped
-            if (wasSkipped) Store.setSkipped(p.path, false)
+            val skip = Store.skipState(p.path)
+            if (skip != Store.SKIP_NONE) Store.setSkip(p.path, Store.SKIP_NONE)
             Store.setPending(p.path, dest.path)
-            pushUndo(UndoEntry(p.path, before, dest.path, skippedBefore = wasSkipped))
+            pushUndo(UndoEntry(p.path, before, dest.path, skipBefore = skip))
         }
         flash = Flash(++flashId, dest.label, Store.dests.indexOf(dest))
-        // Jumps past photos that already have a folder, so fixing an old choice returns to where you left off
-        index = firstUnsorted(index + 1)
+        // Jumps past photos that already have a folder, so fixing an old choice returns to where you left off.
+        // Among the hidden skips every photo counts as reviewed, so that jump would always hit the end
+        index = if (reviewing) (index + 1).coerceAtMost(photos.size) else firstUnsorted(index + 1)
         sync()
     }
 
@@ -420,7 +510,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (busy || scanning) return
         val e = undo.removeLastOrNull() ?: return
         if (e.before != e.after) Store.setPending(e.path, e.before)
-        if (e.skippedBefore != e.skippedAfter) Store.setSkipped(e.path, e.skippedBefore)
+        if (e.skipBefore != e.skipAfter) Store.setSkip(e.path, e.skipBefore)
         indexOf[e.path]?.let { index = it }
         sync()
     }
@@ -433,9 +523,31 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
-    fun clearQueue() {
+    private fun loadSelections() {
+        val buttons = Store.dests.map { it.path }
+        val byDest = Store.pending.entries.groupBy({ it.value }, { it.key })
+        val out = ArrayList<Selection>(Store.pending.size + Store.skipped.size)
+        for (dest in buttons + byDest.keys.filter { it !in buttons }) {
+            byDest[dest]?.forEach { out.add(Selection(File(it), dest)) }
+        }
+        for (path in Store.skipped) out.add(Selection(File(path), null))
+        selectionList = out
+    }
+
+    /** Takes one photo out of the selections, from the Selections screen. */
+    fun dropSelection(path: String) {
+        if (busy || scanning) return
+        if (Store.pending.containsKey(path)) Store.setPending(path, null) else Store.setSkip(path, Store.SKIP_NONE)
+        undo.clear()
+        sync()
+    }
+
+    /** Drops everything no Apply has committed: folder choices and the skips made since the last one. */
+    fun clearSelections() {
         Store.pending.clear()
         Store.compactPending()
+        Store.skipped.clear()
+        Store.compactSkipped()
         undo.clear()
         sync()
     }
@@ -447,42 +559,59 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         null
     }
 
+    /** Every Apply button leads to the Selections screen, whose own button does the moving. */
     fun askApply() {
-        if (busy || scanning || Store.pending.isEmpty()) return
-        dialog = Dialog.ConfirmApply
+        if (busy || scanning || (Store.pending.isEmpty() && Store.skipped.isEmpty())) return
+        dialog = null
+        if (screen != Screen.Selections) open(Screen.Selections)
     }
 
-    /** Folder label to queued count, in button order. */
-    fun applySummary(): List<Pair<String, Int>> {
-        val counts = Store.counts()
-        val known = Store.dests.map { it.path }
-        return (known + counts.keys.filter { it !in known }).mapNotNull { path ->
-            counts[path]?.let { Store.labelFor(path) to it }
-        }
+    private fun leaveSelections() {
+        if (screen == Screen.Selections) backStack.removeAt(backStack.lastIndex)
     }
 
     fun apply() {
-        if (busy) return
+        if (busy || scanning || (Store.pending.isEmpty() && Store.skipped.isEmpty())) return
         val entries = Store.pending.map { it.key to it.value }
+        // Where to land afterwards: the first photo from here on that is neither moved nor hidden as skipped
+        val landing = if (reviewing) {
+            resumePath
+        } else {
+            (index until photos.size).map { photos[it].path }.firstOrNull { !reviewed(it) }
+        }
+        if (entries.isEmpty()) {
+            // Skips alone: nothing moves on disk, so the list is rebuilt without a scan
+            Store.hideSkipped()
+            undo.clear()
+            reviewing = false
+            flash = null
+            dialog = null
+            leaveSelections()
+            showAlbum(landing)
+            sync()
+            return
+        }
         val journal = Store.newJournal()
         val stop = AtomicBoolean(false)
         cancel = stop
         progress = 0
         dialog = Dialog.Progress("Moving ${entries.size} photos", entries.size, cancellable = true)
         busy = true
-        // Where to land afterwards: the first photo from here on that isn't being moved
-        Store.lastPath = (index until photos.size).map { photos[it].path }.firstOrNull { !Store.pending.containsKey(it) }
+        Store.lastPath = landing
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 Mover.apply(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
             }
             for (path in result.settled) Store.pending.remove(path)
             Store.compactPending()
+            if (result.moved > 0) Store.hideSkipped()
             undo.clear()
             ImageLoader.clear()
             busy = false
             Store.scanVersion++
             dialog = Dialog.ApplyDone(result, Store.journals().firstOrNull().takeIf { result.moved > 0 })
+            // What failed or was stopped is still queued, and then the list stays up to show it
+            if (Store.pending.isEmpty()) leaveSelections()
             refresh()
         }
     }
@@ -522,6 +651,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         order = Store.order
         dests = Store.dests.toList()
         queued = Store.pending.size
+        selections = Store.pending.size + Store.skipped.size
         counts = Store.counts()
     }
 
@@ -531,7 +661,23 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         syncSettings()
     }
 
+    /**
+     * The album and its subfolder setting stay fixed while selections wait for Apply. Changing
+     * either would leave choices queued for photos that are no longer on screen.
+     */
+    private fun locked(): Boolean {
+        if (Store.pending.isEmpty() && Store.skipped.isEmpty()) return false
+        dialog = Dialog.SelectionsLocked
+        return true
+    }
+
+    fun askPickSource() {
+        if (Store.source != null && locked()) return
+        open(Screen.Picker(forSource = true))
+    }
+
     fun changeRecursive(on: Boolean) {
+        if (!on && locked()) return
         Store.recursive = on
         changed(rescan = true)
     }

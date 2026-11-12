@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
@@ -98,9 +99,22 @@ private fun Home(vm: SiftViewModel) {
             Spacer(Modifier.height(12.dp))
 
             val batch = vm.lastBatchInfo
+            val selections = vm.selections
+            val rows = 1 + (if (selections > 0) 1 else 0) + (if (batch != null) 1 else 0)
+            if (selections > 0) {
+                val skips = selections - vm.queued
+                SegmentedListItem(
+                    onClick = { vm.open(Screen.Selections) },
+                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = rows),
+                    colors = segmentColors(),
+                    leadingContent = { Icon(Icons.Rounded.Checklist, null) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
+                    supportingContent = { Text("${vm.queued} to move  ·  $skips skipped") },
+                ) { Text("View selections") }
+            }
             SegmentedListItem(
                 onClick = { vm.open(Screen.Setup) },
-                shapes = ListItemDefaults.segmentedShapes(index = 0, count = if (batch != null) 2 else 1),
+                shapes = ListItemDefaults.segmentedShapes(index = rows - 1 - (if (batch != null) 1 else 0), count = rows),
                 colors = segmentColors(),
                 leadingContent = { Icon(Icons.Rounded.Tune, null) },
                 trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
@@ -112,7 +126,7 @@ private fun Home(vm: SiftViewModel) {
             if (batch != null) {
                 SegmentedListItem(
                     onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second) },
-                    shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
+                    shapes = ListItemDefaults.segmentedShapes(index = rows - 1, count = rows),
                     colors = segmentColors(),
                     leadingContent = { Icon(Icons.Rounded.History, null) },
                     supportingContent = {
@@ -129,13 +143,14 @@ private fun Home(vm: SiftViewModel) {
 @Composable
 private fun AlbumCard(vm: SiftViewModel) {
     val source = vm.source ?: return
-    val total = vm.photos.size
+    val total = vm.total
+    val hidden = vm.hiddenHere
     val queuedHere = vm.queuedHere
     val skippedHere = vm.skippedHere
     Card(
         // Opens sorting like the button at the bottom. A tap does nothing while that button is
         // disabled, and the card stays enabled so it doesn't grey out during a folder read
-        onClick = { if (!vm.scanning && !vm.busy && vm.photos.isNotEmpty()) vm.open(Screen.Sort) },
+        onClick = { if (!vm.scanning && !vm.busy && total + hidden > 0) vm.open(Screen.Sort) },
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
@@ -168,10 +183,15 @@ private fun AlbumCard(vm: SiftViewModel) {
                         Text("Reading the album", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
-                total == 0 -> Text("No photos in this album", style = MaterialTheme.typography.bodyLarge)
+                total == 0 && hidden == 0 -> Text("No photos in this album", style = MaterialTheme.typography.bodyLarge)
+                total == 0 -> {
+                    Text("Nothing left to sort", style = MaterialTheme.typography.titleMedium)
+                    Text(hiddenLine(hidden), style = MaterialTheme.typography.bodyLarge)
+                }
+                // Skips an Apply has committed are out of the album, so they are out of the total too.
                 // Skipped photos were looked at and left in place, so they no longer count as left
                 else -> AlbumStats(
-                    if (total == 1) "1 photo" else "$total photos",
+                    (if (total == 1) "1 photo" else "$total photos") + if (hidden > 0) "  ·  ${hiddenLine(hidden)}" else "",
                     "$queuedHere queued  ·  $skippedHere skipped  ·  ${vm.leftHere} left",
                     (queuedHere + skippedHere) / total.toFloat(),
                 )
@@ -191,6 +211,8 @@ private fun AlbumStats(count: String, stats: String, progress: Float, modifier: 
         )
     }
 }
+
+private fun hiddenLine(n: Int) = if (n == 1) "1 skipped hidden" else "$n skipped hidden"
 
 /** Start and Apply sit at the bottom, in thumb reach. */
 @Composable
@@ -216,7 +238,7 @@ private fun Actions(vm: SiftViewModel) {
                 Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
                 Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                 Text(
-                    if (queued == 1) "Apply 1 move" else "Apply $queued moves",
+                    applyLabel(vm),
                     style = ButtonDefaults.textStyleFor(size),
                     maxLines = 1,
                 )
@@ -225,14 +247,14 @@ private fun Actions(vm: SiftViewModel) {
         val start = @Composable { modifier: Modifier ->
             Button(
                 onClick = { vm.open(Screen.Sort) },
-                enabled = ready && vm.photos.isNotEmpty(),
+                enabled = ready && vm.total + vm.hiddenHere > 0,
                 shapes = ButtonDefaults.shapes(),
                 modifier = modifier.height(size),
             ) {
                 Icon(Icons.Rounded.PlayArrow, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
                 Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                 Text(
-                    if (vm.index > 0 || vm.queuedHere > 0 || vm.skippedHere > 0) "Continue sorting" else "Start sorting",
+                    if (vm.index > 0 || vm.queuedHere > 0 || vm.skippedHere > 0 || vm.hiddenHere > 0) "Continue sorting" else "Start sorting",
                     style = ButtonDefaults.textStyleFor(size),
                     maxLines = 1,
                 )
@@ -249,11 +271,11 @@ private fun Actions(vm: SiftViewModel) {
         }
         if (landscape) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (queued > 0) apply(Modifier.weight(1f))
+                if (vm.selections > 0) apply(Modifier.weight(1f))
                 start(Modifier.weight(1f))
             }
         } else {
-            if (queued > 0) apply(Modifier.fillMaxWidth())
+            if (vm.selections > 0) apply(Modifier.fillMaxWidth())
             start(Modifier.fillMaxWidth())
         }
     }

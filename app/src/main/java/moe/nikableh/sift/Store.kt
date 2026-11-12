@@ -15,6 +15,11 @@ object Store {
     const val ORDER_OLDEST = 1
     const val ORDER_NAME = 2
 
+    // Values of the second field of a skipped.log line
+    const val SKIP_NONE = 0
+    const val SKIP_FRESH = 1
+    const val SKIP_HIDDEN = 2
+
     private const val MAX_JOURNALS = 20
 
     private lateinit var dir: File
@@ -32,10 +37,13 @@ object Store {
     val pending = LinkedHashMap<String, String>()
 
     /**
-     * Photos the user looked at and chose to leave where they are. Kept apart from [pending],
-     * so a photo is either queued, skipped or not reviewed yet. Survives Apply.
+     * Photos the user looked at and chose to leave where they are, since the last Apply. Kept
+     * apart from [pending], so a photo is either queued, skipped or not reviewed yet.
      */
     val skipped = LinkedHashSet<String>()
+
+    /** Skips an Apply has committed. These photos stay out of the album until they are unhidden. */
+    val hidden = LinkedHashSet<String>()
 
     /** Bumped whenever the photo list has to be scanned again. */
     var scanVersion = 0
@@ -127,12 +135,13 @@ object Store {
 
     private fun loadSkipped() {
         skipped.clear()
+        hidden.clear()
         try {
             skippedFile.forEachLine { line ->
                 if (line.isBlank()) return@forEachLine
                 try {
                     val a = JSONArray(line)
-                    if (a.optInt(1, 1) == 1) skipped.add(a.getString(0)) else skipped.remove(a.getString(0))
+                    putSkip(a.getString(0), a.optInt(1, SKIP_FRESH))
                 } catch (e: Exception) {
                     // A torn last line after a crash is expected, skip it
                 }
@@ -143,9 +152,24 @@ object Store {
         compactSkipped()
     }
 
-    fun setSkipped(path: String, on: Boolean) {
-        if (on) skipped.add(path) else skipped.remove(path)
-        val line = JSONArray().put(path).put(if (on) 1 else 0).toString() + "\n"
+    private fun putSkip(path: String, state: Int) {
+        skipped.remove(path)
+        hidden.remove(path)
+        when (state) {
+            SKIP_FRESH -> skipped.add(path)
+            SKIP_HIDDEN -> hidden.add(path)
+        }
+    }
+
+    fun skipState(path: String): Int = when (path) {
+        in skipped -> SKIP_FRESH
+        in hidden -> SKIP_HIDDEN
+        else -> SKIP_NONE
+    }
+
+    fun setSkip(path: String, state: Int) {
+        putSkip(path, state)
+        val line = JSONArray().put(path).put(state).toString() + "\n"
         io.execute {
             try {
                 FileOutputStream(skippedFile, true).use { it.write(line.toByteArray()) }
@@ -154,9 +178,18 @@ object Store {
         }
     }
 
+    /** Apply commits the skips made since the last one. */
+    fun hideSkipped() {
+        if (skipped.isEmpty()) return
+        hidden.addAll(skipped)
+        skipped.clear()
+        compactSkipped()
+    }
+
     fun compactSkipped() {
         val sb = StringBuilder()
-        for (path in skipped) sb.append(JSONArray().put(path).put(1).toString()).append('\n')
+        for (path in skipped) sb.append(JSONArray().put(path).put(SKIP_FRESH).toString()).append('\n')
+        for (path in hidden) sb.append(JSONArray().put(path).put(SKIP_HIDDEN).toString()).append('\n')
         val text = sb.toString()
         io.execute { writeAtomic(skippedFile, text) }
     }
