@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +34,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -182,7 +184,51 @@ fun Dialogs(vm: SiftViewModel) {
             },
             onDismiss = close,
         )
+
+        is Dialog.GoToPhoto -> NumberPrompt(
+            title = "Go to photo",
+            current = d.current,
+            max = d.total,
+            onConfirm = {
+                close()
+                vm.jumpTo(it - 1)
+            },
+            onDismiss = close,
+        )
     }
+}
+
+@Composable
+private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    // Starts with the current number selected, so typing replaces it
+    val initial = current.toString()
+    var value by remember { mutableStateOf(TextFieldValue(initial, TextRange(0, initial.length))) }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    val number = value.text.toIntOrNull()?.takeIf { it in 1..max }
+    val submit = { number?.let(onConfirm) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.Numbers, null) },
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { v -> if (v.text.all { it.isDigit() } && v.text.length <= 9) value = v },
+                singleLine = true,
+                suffix = { Text("/ $max") },
+                isError = value.text.isNotEmpty() && number == null,
+                supportingText = { Text("From 1 to $max") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { submit() }),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+            )
+        },
+        confirmButton = {
+            Button(onClick = { submit() }, enabled = number != null, shapes = ButtonDefaults.shapes()) { Text("Go") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 private fun failureLines(failed: List<Pair<String, String>>): String {

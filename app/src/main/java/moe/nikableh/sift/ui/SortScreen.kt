@@ -48,12 +48,12 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DoneAll
-import androidx.compose.material.icons.rounded.FirstPage
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RestartAlt
@@ -348,7 +348,11 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
                 item("Folders and settings", Icons.Rounded.Tune) { vm.open(Screen.Setup) }
                 item("Go to first unreviewed photo", Icons.Rounded.ImageSearch) { vm.jumpToFirstUnsorted() }
-                item("Go to the start", Icons.Rounded.FirstPage) { vm.jumpTo(0) }
+                if (vm.photos.isNotEmpty()) {
+                    item("Go to photo…", Icons.Rounded.Numbers) {
+                        vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
+                    }
+                }
                 item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
                 if (vm.queued > 0) {
                     item("Clear the queue (${vm.queued})", Icons.Rounded.ClearAll) { vm.dialog = Dialog.ConfirmClear }

@@ -40,6 +40,7 @@ sealed interface Dialog {
     data class ConfirmRemoveDest(val dest: Dest, val queued: Int) : Dialog
     data class RenameDest(val dest: Dest) : Dialog
     data class NewFolder(val parent: File, val forSource: Boolean, val album: Boolean = false) : Dialog
+    data class GoToPhoto(val current: Int, val total: Int) : Dialog
 }
 
 enum class Gate { Permission, Setup, Reading, Empty, End, None }
