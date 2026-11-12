@@ -51,14 +51,12 @@ import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -365,8 +363,6 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 } else {
                     item("Home", Icons.Rounded.Home) { vm.back() }
                     if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
-                    item("Folders and settings", Icons.Rounded.Tune) { vm.open(Screen.Setup) }
-                    item("Go to first unreviewed photo", Icons.Rounded.ImageSearch) { vm.jumpToFirstUnsorted() }
                     goToPhoto()
                     item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
                     if (vm.hiddenHere > 0) {

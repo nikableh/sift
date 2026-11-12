@@ -463,8 +463,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         sync()
     }
 
-    fun jumpToFirstUnsorted() = jumpTo(firstUnsorted())
-
     fun assign(dest: Dest) {
         val p = current ?: return
         if (busy || scanning) return
