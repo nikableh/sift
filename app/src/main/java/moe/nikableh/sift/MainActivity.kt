@@ -1,5 +1,6 @@
 package moe.nikableh.sift
 
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,14 +14,24 @@ class MainActivity : ComponentActivity() {
     private val vm: SiftViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // The app is light only, so bar icons stay dark even when the phone is in dark mode
-        val bars = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
-        enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
-        window.isNavigationBarContrastEnforced = false
+        styleSystemBars()
         super.onCreate(savedInstanceState)
         val bounds = windowManager.currentWindowMetrics.bounds
         ImageLoader.setScreen(bounds.width(), bounds.height())
         setContent { SiftApp(vm) }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // The manifest handles uiMode, so a theme switch doesn't recreate the activity
+        // and the bar icons have to be flipped by hand
+        styleSystemBars()
+    }
+
+    private fun styleSystemBars() {
+        val bars = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
+        enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
+        window.isNavigationBarContrastEnforced = false
     }
 
     override fun onResume() {

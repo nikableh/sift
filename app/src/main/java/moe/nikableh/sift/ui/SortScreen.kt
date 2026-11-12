@@ -273,6 +273,7 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
             Pill(
                 label = Store.labelFor(assigned),
                 color = if (i >= 0) folderColor(i).dimmed() else MaterialTheme.colorScheme.inverseSurface,
+                contentColor = if (i >= 0) Color.White else MaterialTheme.colorScheme.inverseOnSurface,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 onClear = { vm.clearAssignment() },
             )
@@ -281,6 +282,7 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
             Pill(
                 label = "Skipped",
                 color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 icon = Icons.Rounded.SkipNext,
                 onClear = { vm.clearSkip() },
@@ -437,6 +439,7 @@ private fun Pill(
     color: Color,
     modifier: Modifier,
     icon: ImageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+    contentColor: Color = Color.White,
     onClear: (() -> Unit)?,
 ) {
     Surface(
@@ -445,7 +448,7 @@ private fun Pill(
         modifier = modifier,
         shape = CircleShape,
         color = color,
-        contentColor = Color.White,
+        contentColor = contentColor,
     ) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 8.dp),

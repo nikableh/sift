@@ -1,11 +1,14 @@
 package moe.nikableh.sift.ui
 
 import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
@@ -13,15 +16,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 
-/** Light only for now, whatever the system setting. */
+/** Follows the system light or dark setting, there is no in-app switch. */
 @Composable
 fun SiftTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
+    val dark = isSystemInDarkTheme()
     // Wallpaper colours exist from Android 12, and minSdk is 30
     val colors = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        dynamicLightColorScheme(context)
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     } else {
-        expressiveLightColorScheme()
+        if (dark) darkColorScheme() else expressiveLightColorScheme()
     }
     MaterialExpressiveTheme(colorScheme = colors, motionScheme = MotionScheme.expressive(), content = content)
 }
