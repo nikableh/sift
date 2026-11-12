@@ -40,7 +40,6 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -201,63 +200,61 @@ private fun Actions(vm: SiftViewModel) {
     val elsewhere = queued - vm.queuedHere
     val ready = !vm.scanning && !vm.busy
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, contentColor = MaterialTheme.colorScheme.onSurface) {
-        Column(
-            Modifier.fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            val apply = @Composable { modifier: Modifier ->
-                FilledTonalButton(
-                    onClick = { vm.askApply() },
-                    enabled = ready,
-                    shapes = ButtonDefaults.shapes(),
-                    modifier = modifier.height(size),
-                ) {
-                    Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
-                    Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
-                    Text(
-                        if (queued == 1) "Apply 1 move" else "Apply $queued moves",
-                        style = ButtonDefaults.textStyleFor(size),
-                        maxLines = 1,
-                    )
-                }
-            }
-            val start = @Composable { modifier: Modifier ->
-                Button(
-                    onClick = { vm.open(Screen.Sort) },
-                    enabled = ready && vm.photos.isNotEmpty(),
-                    shapes = ButtonDefaults.shapes(),
-                    modifier = modifier.height(size),
-                ) {
-                    Icon(Icons.Rounded.PlayArrow, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
-                    Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
-                    Text(
-                        if (vm.index > 0 || vm.queuedHere > 0 || vm.skippedHere > 0) "Continue sorting" else "Start sorting",
-                        style = ButtonDefaults.textStyleFor(size),
-                        maxLines = 1,
-                    )
-                }
-            }
-            if (elsewhere > 0) {
-                // The queue spans albums, and Apply moves all of it
+    Column(
+        Modifier.fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        val apply = @Composable { modifier: Modifier ->
+            FilledTonalButton(
+                onClick = { vm.askApply() },
+                enabled = ready,
+                shapes = ButtonDefaults.shapes(),
+                modifier = modifier.height(size),
+            ) {
+                Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
+                Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                 Text(
-                    "Apply includes $elsewhere queued in other albums",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp),
+                    if (queued == 1) "Apply 1 move" else "Apply $queued moves",
+                    style = ButtonDefaults.textStyleFor(size),
+                    maxLines = 1,
                 )
             }
-            if (landscape) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (queued > 0) apply(Modifier.weight(1f))
-                    start(Modifier.weight(1f))
-                }
-            } else {
-                if (queued > 0) apply(Modifier.fillMaxWidth())
-                start(Modifier.fillMaxWidth())
+        }
+        val start = @Composable { modifier: Modifier ->
+            Button(
+                onClick = { vm.open(Screen.Sort) },
+                enabled = ready && vm.photos.isNotEmpty(),
+                shapes = ButtonDefaults.shapes(),
+                modifier = modifier.height(size),
+            ) {
+                Icon(Icons.Rounded.PlayArrow, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
+                Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
+                Text(
+                    if (vm.index > 0 || vm.queuedHere > 0 || vm.skippedHere > 0) "Continue sorting" else "Start sorting",
+                    style = ButtonDefaults.textStyleFor(size),
+                    maxLines = 1,
+                )
             }
+        }
+        if (elsewhere > 0) {
+            // The queue spans albums, and Apply moves all of it
+            Text(
+                "Apply includes $elsewhere queued in other albums",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+        }
+        if (landscape) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (queued > 0) apply(Modifier.weight(1f))
+                start(Modifier.weight(1f))
+            }
+        } else {
+            if (queued > 0) apply(Modifier.fillMaxWidth())
+            start(Modifier.fillMaxWidth())
         }
     }
 }
