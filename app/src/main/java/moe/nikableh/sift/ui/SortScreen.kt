@@ -49,7 +49,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.History
-import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -334,7 +333,6 @@ private fun Status(modifier: Modifier, title: String, body: String? = null, extr
 private fun TopBar(vm: SiftViewModel, folder: String) {
     val context = LocalContext.current
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
-    var menu by remember { mutableStateOf(false) }
     val photo = vm.current
     val idle = !vm.busy && !vm.scanning
 
@@ -342,65 +340,9 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
         Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box {
-            FilledTonalIconButton(onClick = { menu = true }, shapes = IconButtonDefaults.shapes(), enabled = idle) {
-                Icon(Icons.Rounded.MoreVert, "Menu")
-            }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                val batch = vm.lastBatchInfo
-
-                @Composable
-                fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
-                    text = { Text(label) },
-                    leadingIcon = { Icon(icon, null) },
-                    onClick = {
-                        menu = false
-                        action()
-                    },
-                )
-                @Composable
-                fun goToPhoto() {
-                    if (vm.photos.isNotEmpty()) {
-                        item("Go to photo…", Icons.Rounded.Numbers) {
-                            vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
-                        }
-                    }
-                }
-                @Composable
-                fun share() {
-                    if (photo != null) item("Share", Icons.Rounded.Share) { sharePhoto(context, photo.file) }
-                }
-                if (vm.reviewing) {
-                    item("Back to sorting", Icons.AutoMirrored.Rounded.ArrowBack) { vm.exitReview() }
-                    if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
-                    share()
-                    goToPhoto()
-                    if (vm.hiddenHere > 0) {
-                        item("Unhide all skipped (${vm.hiddenHere})", Icons.Rounded.RestartAlt) {
-                            vm.dialog = Dialog.ConfirmUnhide(vm.hiddenHere)
-                        }
-                    }
-                } else {
-                    item("Home", Icons.Rounded.Home) { vm.back() }
-                    if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
-                    share()
-                    goToPhoto()
-                    item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
-                    if (vm.hiddenHere > 0) {
-                        item("Review skipped (${vm.hiddenHere})", Icons.Rounded.SkipNext) { vm.enterReview() }
-                    }
-                    if (vm.selections > 0) {
-                        item("Clear selections (${vm.selections})", Icons.Rounded.ClearAll) {
-                            vm.dialog = Dialog.ConfirmClear
-                        }
-                    }
-                    if (batch != null) {
-                        item("Undo last applied batch (${batch.second})", Icons.Rounded.History) {
-                            vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second)
-                        }
-                    }
-                }
-            }
+        // Not tied to idle, because the system Back it mirrors works during a move too
+        FilledTonalIconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
+            Icon(Icons.AutoMirrored.Rounded.ArrowBack, if (vm.reviewing) "Back to sorting" else "Back")
         }
 
         if (photo == null) {
@@ -522,26 +464,107 @@ private fun Panel(vm: SiftViewModel, landscape: Boolean, modifier: Modifier) {
             Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(sides)).padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Controls(vm)
+            Controls(vm, landscape)
             FolderGrid(vm, landscape)
         }
     }
 }
 
 @Composable
-private fun Controls(vm: SiftViewModel) {
+private fun Controls(vm: SiftViewModel, landscape: Boolean) {
+    val idle = !vm.busy && !vm.scanning
     val canGoBack = vm.index > 0
     val canSkip = vm.current != null
-    ButtonGroup(
-        overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(it) },
-        modifier = Modifier.fillMaxWidth(),
+    val gap = Arrangement.spacedBy(8.dp)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
+        // More sits outside the group, so its overflow handling can never hide it
+        ButtonGroup(
+            overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(it) },
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = gap,
+        ) {
+            customItem({
+                if (landscape) {
+                    // The side panel has no room for two labelled buttons next to More
+                    ControlIconButton("Previous", Icons.AutoMirrored.Rounded.NavigateBefore, canGoBack) { vm.go(-1) }
+                } else {
+                    ControlButton(
+                        "Previous", Icons.AutoMirrored.Rounded.NavigateBefore, canGoBack, Modifier.weight(1f),
+                    ) { vm.go(-1) }
+                }
+            }, {})
+            customItem({
+                ControlButton("Skip", Icons.AutoMirrored.Rounded.NavigateNext, canSkip, Modifier.weight(1f)) { vm.skip() }
+            }, {})
+        }
+        MoreMenu(vm, idle)
+    }
+}
+
+@Composable
+private fun ControlIconButton(label: String, icon: ImageVector, enabled: Boolean, onClick: () -> Unit) {
+    FilledTonalIconButton(
+        onClick = onClick,
+        shapes = IconButtonDefaults.shapes(),
+        enabled = enabled,
+        modifier = Modifier.size(48.dp),
     ) {
-        customItem({
-            ControlButton("Back", Icons.AutoMirrored.Rounded.NavigateBefore, canGoBack, Modifier.weight(1f)) { vm.go(-1) }
-        }, {})
-        customItem({
-            ControlButton("Skip", Icons.AutoMirrored.Rounded.NavigateNext, canSkip, Modifier.weight(1f)) { vm.skip() }
-        }, {})
+        Icon(icon, label)
+    }
+}
+
+@Composable
+private fun MoreMenu(vm: SiftViewModel, idle: Boolean) {
+    val context = LocalContext.current
+    var menu by remember { mutableStateOf(false) }
+    val photo = vm.current
+    val batch = vm.lastBatchInfo
+    val hasPhotos = vm.photos.isNotEmpty()
+    // A review list can run out of things to offer, and an empty menu would open as a blank box
+    val hasItems = !vm.reviewing || hasPhotos || vm.hiddenHere > 0 || vm.canUndo
+
+    Box {
+        ControlIconButton("More", Icons.Rounded.MoreVert, idle && hasItems) { menu = true }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            @Composable
+            fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
+                text = { Text(label) },
+                leadingIcon = { Icon(icon, null) },
+                onClick = {
+                    menu = false
+                    action()
+                },
+            )
+            if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
+            if (photo != null) item("Share", Icons.Rounded.Share) { sharePhoto(context, photo.file) }
+            if (hasPhotos) {
+                item("Go to photo…", Icons.Rounded.Numbers) {
+                    vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
+                }
+            }
+            if (vm.reviewing) {
+                if (vm.hiddenHere > 0) {
+                    item("Unhide all skipped (${vm.hiddenHere})", Icons.Rounded.RestartAlt) {
+                        vm.dialog = Dialog.ConfirmUnhide(vm.hiddenHere)
+                    }
+                }
+            } else {
+                item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
+                if (vm.hiddenHere > 0) {
+                    item("Review skipped (${vm.hiddenHere})", Icons.Rounded.SkipNext) { vm.enterReview() }
+                }
+                if (vm.selections > 0) {
+                    item("Clear selections (${vm.selections})", Icons.Rounded.ClearAll) {
+                        vm.dialog = Dialog.ConfirmClear
+                    }
+                }
+                if (batch != null) {
+                    item("Undo last applied batch (${batch.second})", Icons.Rounded.History) {
+                        vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -557,7 +580,7 @@ private fun ControlButton(label: String, icon: ImageVector, enabled: Boolean, mo
     ) {
         Icon(icon, null, Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.width(6.dp))
-        Text(label, maxLines = 1)
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
