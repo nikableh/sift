@@ -1,5 +1,6 @@
 package moe.nikableh.sift.ui
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -7,6 +8,7 @@ import android.net.Uri
 import android.provider.Settings
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
+import android.webkit.MimeTypeMap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -53,6 +55,7 @@ import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.RestartAlt
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
@@ -96,6 +99,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
@@ -155,6 +159,19 @@ fun openAllFilesSettings(context: Context) {
     } catch (e: Exception) {
         context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
     }
+}
+
+fun sharePhoto(context: Context, file: File) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "image/*"
+    val send = Intent(Intent.ACTION_SEND).apply {
+        setType(type)
+        putExtra(Intent.EXTRA_STREAM, uri)
+        // ClipData carries the read grant through the chooser and lets it show a preview
+        clipData = ClipData.newRawUri(null, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(send, null))
 }
 
 @Composable
@@ -349,9 +366,14 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                         }
                     }
                 }
+                @Composable
+                fun share() {
+                    if (photo != null) item("Share", Icons.Rounded.Share) { sharePhoto(context, photo.file) }
+                }
                 if (vm.reviewing) {
                     item("Back to sorting", Icons.AutoMirrored.Rounded.ArrowBack) { vm.exitReview() }
                     if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
+                    share()
                     goToPhoto()
                     if (vm.hiddenHere > 0) {
                         item("Unhide all skipped (${vm.hiddenHere})", Icons.Rounded.RestartAlt) {
@@ -361,6 +383,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 } else {
                     item("Home", Icons.Rounded.Home) { vm.back() }
                     if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
+                    share()
                     goToPhoto()
                     item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
                     if (vm.hiddenHere > 0) {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- root-path rather than external-path, so photos on an SD card can be shared too -->
+    <root-path name="root" path="." />
+</paths>
