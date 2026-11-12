@@ -234,7 +234,14 @@ private fun Viewer(vm: SiftViewModel, chrome: Boolean, onToggleChrome: () -> Uni
                     onZoomIn = { vm.loadSharper() }
                 }
             },
-            update = { it.show(vm.bitmapPath, vm.bitmap) },
+            update = {
+                val pages = !vm.busy && (gate == Gate.None || gate == Gate.End)
+                it.show(
+                    vm.bitmapPath, vm.bitmap, vm.prevBitmap, vm.nextBitmap,
+                    canPrev = pages && vm.index > 0,
+                    canNext = pages && vm.index < vm.photos.size,
+                )
+            },
             modifier = Modifier.fillMaxSize(),
         )
 

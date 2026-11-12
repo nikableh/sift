@@ -104,6 +104,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var bitmapPath by mutableStateOf<String?>(null)
         private set
+
+    /** Decoded photos on either side of the one on screen, for the viewer to slide in. Null until decoded. */
+    var prevBitmap by mutableStateOf<Bitmap?>(null)
+        private set
+    var nextBitmap by mutableStateOf<Bitmap?>(null)
+        private set
     var decodeFailed by mutableStateOf(false)
         private set
     var flash by mutableStateOf<Flash?>(null)
@@ -251,7 +257,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun showImage(path: String?) {
-        if (path == null) ImageLoader.wanted = emptySet()
+        if (path == null) {
+            ImageLoader.wanted = emptySet()
+            prevBitmap = null
+            nextBitmap = null
+        }
         bitmapPath = path
         bitmap = null
         decodeFailed = false
@@ -274,6 +284,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         isSkipped = p != null && assigned == null && p.path in Store.skipped
         if (p == null) {
             showImage(null)
+            // The end card can still be swiped back to the last photo
+            prevBitmap = photos.getOrNull(index - 1)?.let { ImageLoader.cached(it.file) }
             return
         }
         val want = HashSet<String>()
@@ -289,7 +301,17 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        for (d in intArrayOf(1, 2, 3, -1)) photos.getOrNull(index + d)?.let { ImageLoader.prefetch(it.file) }
+        neighbour(1) { nextBitmap = it }
+        neighbour(-1) { prevBitmap = it }
+        for (d in intArrayOf(2, 3)) photos.getOrNull(index + d)?.let { ImageLoader.prefetch(it.file) }
+    }
+
+    private fun neighbour(delta: Int, set: (Bitmap?) -> Unit) {
+        val at = index
+        val photo = photos.getOrNull(at + delta)
+        set(photo?.let { ImageLoader.cached(it.file) })
+        if (photo == null) return
+        ImageLoader.load(photo.file) { bmp -> if (index == at && photos.getOrNull(at + delta) === photo) set(bmp) }
     }
 
     /** The viewer asks for a sharper bitmap the first time the user zooms into a photo. */
