@@ -1,6 +1,5 @@
 package moe.nikableh.sift.ui
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
@@ -77,7 +76,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,9 +98,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
@@ -122,7 +117,6 @@ fun SortScreen(vm: SiftViewModel) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var chrome by rememberSaveable { mutableStateOf(true) }
     val context = LocalContext.current
-    HideStatusBar()
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         when (vm.gate) {
@@ -163,18 +157,6 @@ fun openAllFilesSettings(context: Context) {
         )
     } catch (e: Exception) {
         context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-    }
-}
-
-@Composable
-private fun HideStatusBar() {
-    val view = LocalView.current
-    DisposableEffect(view) {
-        val window = (view.context as? Activity)?.window
-        val controller = window?.let { WindowCompat.getInsetsController(it, view) }
-        controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        controller?.hide(WindowInsetsCompat.Type.statusBars())
-        onDispose { controller?.show(WindowInsetsCompat.Type.statusBars()) }
     }
 }
 
@@ -225,7 +207,10 @@ private fun Viewer(vm: SiftViewModel, chrome: Boolean, onToggleChrome: () -> Uni
     val gate = vm.gate
     val folder = File(vm.source ?: "").name
 
-    Box(modifier.background(MaterialTheme.colorScheme.surface)) {
+    Box(
+        modifier.background(MaterialTheme.colorScheme.surface)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))
+    ) {
         AndroidView(
             factory = { context ->
                 ZoomImageView(context).apply {
@@ -324,7 +309,6 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
     Row(
         Modifier.fillMaxWidth()
             .background(scrim)
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))
             .padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
