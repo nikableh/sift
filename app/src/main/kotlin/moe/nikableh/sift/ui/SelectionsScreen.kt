@@ -16,8 +16,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -55,6 +59,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,12 +80,16 @@ fun SelectionsScreen(vm: SiftViewModel) {
     var collapsed by rememberSaveable(stateSaver = KeySetSaver) { mutableStateOf(emptySet<String>()) }
     val allCollapsed = groups.all { groupKey(it.dest) in collapsed }
     var preview by remember { mutableStateOf<File?>(null) }
+    val layoutDirection = LocalLayoutDirection.current
 
     preview?.let { PhotoPreview(it) { preview = null } }
 
+    // The defaults cover system bars only, so in landscape the list and app bar ran under the camera cutout
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
+                windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 title = { Text("Selections") },
                 navigationIcon = {
                     IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
@@ -113,8 +122,8 @@ fun SelectionsScreen(vm: SiftViewModel) {
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(
-                    start = 16.dp,
-                    end = 8.dp,
+                    start = padding.calculateStartPadding(layoutDirection) + 16.dp,
+                    end = padding.calculateEndPadding(layoutDirection) + 8.dp,
                     // The FAB floats over the list, so the last row needs room to scroll out from under it
                     bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
                 ),
