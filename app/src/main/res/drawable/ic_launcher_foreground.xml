@@ -20,8 +20,8 @@
             android:rotation="9">
             <path
                 android:fillColor="#FFFFFF"
-                android:strokeColor="#C9D3F5"
-                android:strokeWidth="0.9"
+                android:strokeColor="#8E9FD9"
+                android:strokeWidth="1.4"
                 android:strokeLineJoin="round"
                 android:pathData="M45.7,20.5 H68.3 A4.2,4.2 0 0 1 72.5,24.7 V51.3 A4.2,4.2 0 0 1 68.3,55.5 H45.7 A4.2,4.2 0 0 1 41.5,51.3 V24.7 A4.2,4.2 0 0 1 45.7,20.5 Z" />
             <group>

@@ -122,17 +122,13 @@ def folder_shape(points, colour, pad, alpha=None):
 picture = ('            <group>\n                <clip-path android:pathData="%s" />\n' % WINDOW
            + shape(WINDOW, '#CFE3FF', 16) + shape(SUN, '#FFAE1A', 16)
            + shape(HILL_BACK, '#6FCB8C', 16) + shape(HILL_FRONT, '#3FAE6A', 16) + '            </group>\n')
-print_ = shape(PRINT, '#FFFFFF', 12, stroke='#C9D3F5', stroke_width=0.9) + picture
+# The print is white on a white background, so this outline is all that separates the two
+print_ = shape(PRINT, '#FFFFFF', 12, stroke='#8E9FD9', stroke_width=1.4) + picture
 foreground = (HEAD + OPEN % '' + GROUP + folder_shape(BACK, BLUE, 8) + tilted(print_, 8)
               + folder_shape(MIDDLE, AMBER, 8) + folder_shape(FRONT, CORAL, 8) + '    </group>\n</vector>\n')
 
 # ---- background ----
-background = (HEAD + OPEN % '\n    xmlns:aapt="http://schemas.android.com/aapt"'
-              + '    <path android:pathData="M0,0h108v108h-108z">\n        <aapt:attr name="android:fillColor">\n'
-                '            <gradient\n                android:type="linear"\n                android:startX="54"\n'
-                '                android:startY="0"\n                android:endX="54"\n                android:endY="108"\n'
-                '                android:startColor="#FFFFFF"\n                android:endColor="#E3E9FF" />\n'
-                '        </aapt:attr>\n    </path>\n</vector>\n')
+background = HEAD + OPEN % '' + shape('M0,0h108v108h-108z', '#FFFFFF', 4) + '</vector>\n'
 
 # ---- themed (monochrome) version ----
 # Same geometry as the colour icon. A themed icon has one colour, so white becomes "empty", the
