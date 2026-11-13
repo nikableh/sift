@@ -32,7 +32,7 @@ sealed interface Screen {
 
 sealed interface Dialog {
     data class Progress(val title: String, val total: Int, val cancellable: Boolean) : Dialog
-    data class ApplyDone(val result: Mover.Result, val journal: File?) : Dialog
+    data class MoveDone(val result: Mover.Result, val journal: File?) : Dialog
     data class ConfirmUndoBatch(val journal: File, val count: Int) : Dialog
     data class UndoFailed(val restored: Int, val failed: List<Pair<String, String>>) : Dialog
     data object ConfirmClear : Dialog
@@ -53,7 +53,7 @@ class Folder(val dir: File, val title: String, val subtitle: String)
 
 class Flash(val id: Int, val label: String, val colorIndex: Int)
 
-/** One photo waiting for Apply. A null [dest] is a skip, which Apply hides. */
+/** One photo waiting for Move. A null [dest] is a skip, which Move hides. */
 class Selection(val file: File, val dest: String?)
 
 /** The Selections screen's rows for one folder, or for the skips when [dest] is null. */
@@ -189,11 +189,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var queuedHere by mutableIntStateOf(0)
         private set
 
-    /** Photos of this album skipped since the last Apply. They stay in the list until the next one. */
+    /** Photos of this album skipped since the last Move. They stay in the list until the next one. */
     var skippedHere by mutableIntStateOf(0)
         private set
 
-    /** Skipped photos of this album that an Apply took out of the list. */
+    /** Skipped photos of this album that a Move took out of the list. */
     var hiddenHere by mutableIntStateOf(0)
         private set
 
@@ -205,7 +205,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var leftHere by mutableIntStateOf(0)
         private set
 
-    /** Folder choices and skips no Apply has committed yet. The album can't change while there are any. */
+    /** Folder choices and skips no Move has committed yet. The album can't change while there are any. */
     var selections by mutableIntStateOf(0)
         private set
 
@@ -679,7 +679,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         syncPosition()
     }
 
-    /** Drops everything no Apply has committed: folder choices and the skips made since the last one. */
+    /** Drops everything no Move has committed: folder choices and the skips made since the last one. */
     fun clearSelections() {
         if (busy || scanning) return
         Store.pending.clear()
@@ -715,7 +715,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (screen == Screen.Selections) backStack.removeAt(backStack.lastIndex)
     }
 
-    fun apply() {
+    fun move() {
         if (busy || scanning || (Store.pending.isEmpty() && Store.skipped.isEmpty())) return
         val entries = Store.pending.map { it.key to it.value }
         // Where to land afterwards: the first photo from here on that is neither moved nor hidden as skipped
@@ -745,7 +745,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         Store.lastPath = landing
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                Mover.apply(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
+                Mover.move(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
             }
             for (path in result.settled) Store.pending.remove(path)
             Store.compactPending()
@@ -754,14 +754,14 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             ImageLoader.clear()
             busy = false
             Store.scanVersion++
-            dialog = Dialog.ApplyDone(result, Store.journals().firstOrNull().takeIf { result.moved > 0 })
+            dialog = Dialog.MoveDone(result, Store.journals().firstOrNull().takeIf { result.moved > 0 })
             // What failed or was stopped is still queued, and then the list stays up to show it
             if (Store.pending.isEmpty()) leaveSelections()
             refresh()
         }
     }
 
-    fun stopApply() {
+    fun stopMove() {
         cancel?.set(true)
     }
 
@@ -807,7 +807,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The album and its subfolder setting stay fixed while selections wait for Apply. Changing
+     * The album and its subfolder setting stay fixed while selections wait for Move. Changing
      * either would leave choices queued for photos that are no longer on screen.
      */
     private fun locked(): Boolean {

@@ -34,18 +34,18 @@ object Store {
     var lastPath: String? = null
     var lastPickerDir: String? = null
 
-    /** Photo path to destination folder path. Nothing on disk changes until Apply. */
+    /** Photo path to destination folder path. Nothing on disk changes until Move. */
     var pending = LinkedHashMap<String, String>()
         private set
 
     /**
-     * Photos the user looked at and chose to leave where they are, since the last Apply. Kept
+     * Photos the user looked at and chose to leave where they are, since the last Move. Kept
      * apart from [pending], so a photo is either queued, skipped or not reviewed yet.
      */
     var skipped = LinkedHashSet<String>()
         private set
 
-    /** Skips an Apply has committed. These photos stay out of the album until they are unhidden. */
+    /** Skips a Move has committed. These photos stay out of the album until they are unhidden. */
     var hidden = LinkedHashSet<String>()
         private set
 
@@ -213,7 +213,7 @@ object Store {
         }
     }
 
-    /** Apply commits the skips made since the last one. */
+    /** Move commits the skips made since the last one. */
     fun hideSkipped() {
         if (skipped.isEmpty()) return
         hidden.addAll(skipped)
@@ -242,7 +242,7 @@ object Store {
     fun labelFor(destPath: String): String =
         dests.firstOrNull { it.path == destPath }?.label ?: File(destPath).name
 
-    /** Newest first. Each file lists the moves of one Apply. */
+    /** Newest first. Each file lists the moves of one batch. */
     fun journals(): List<File> =
         (journalDir.listFiles { f -> f.name.endsWith(".log") } ?: emptyArray())
             .sortedByDescending { it.name }

@@ -121,7 +121,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             item {
                 Text(
                     "Each folder becomes a button under the photo. One tap queues the photo for that folder and shows " +
-                        "the next one. Nothing moves until you press Apply. For photos you want to delete, add a folder " +
+                        "the next one. Nothing moves until you press Move. For photos you want to delete, add a folder " +
                         "such as \"To delete\" and empty it later.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

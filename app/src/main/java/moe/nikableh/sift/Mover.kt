@@ -26,7 +26,7 @@ object Mover {
         val failed: List<Pair<String, String>>,
     )
 
-    fun apply(
+    fun move(
         ctx: Context,
         entries: List<Pair<String, String>>,
         journal: File,

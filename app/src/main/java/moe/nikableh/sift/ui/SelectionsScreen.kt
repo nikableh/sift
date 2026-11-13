@@ -67,7 +67,7 @@ import moe.nikableh.sift.Store
 import java.io.File
 import androidx.compose.ui.window.Dialog as WindowDialog
 
-/** Every photo waiting for Apply, with where it goes. A list, so long folder names have room. */
+/** Every queued photo and skip, with where it goes. A list, so long folder names have room. */
 @Composable
 fun SelectionsScreen(vm: SiftViewModel) {
     val groups = vm.selectionGroups
@@ -100,12 +100,12 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 },
             )
         },
-        floatingActionButton = { ApplyFab(vm, visible = vm.selections > 0 && ready) },
+        floatingActionButton = { MoveFab(vm, visible = vm.selections > 0 && ready) },
     ) { padding ->
         if (groups.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
-                    "Nothing is waiting for Apply",
+                    "Nothing is waiting to move",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -178,7 +178,7 @@ private fun GroupHeader(dest: String?, count: Int, color: Color?, collapsed: Boo
         }
         // The whole path wraps instead of being cut, it is what tells two folders apart
         Text(
-            dest ?: "These stay where they are. Apply takes them out of the album's list.",
+            dest ?: "These stay where they are and leave the album's list after Move or Hide.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -249,12 +249,15 @@ private val FabHeight = 56.dp
 
 /** FABs have no disabled state, so it steps away while a scan or a move is running. */
 @Composable
-private fun ApplyFab(vm: SiftViewModel, visible: Boolean) {
+private fun MoveFab(vm: SiftViewModel, visible: Boolean) {
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
         SmallExtendedFloatingActionButton(
-            text = { FitLabel(if (vm.queued > 0) "Apply ${vm.queued.grouped()}" else "Apply") },
+            text = {
+                // Skips alone move nothing on disk, so the button names what does happen to them
+                FitLabel(if (vm.queued > 0) "Move ${vm.queued.grouped()}" else "Hide ${(vm.selections - vm.queued).grouped()}")
+            },
             icon = { Icon(Icons.Rounded.DoneAll, null) },
-            onClick = { vm.apply() },
+            onClick = { vm.move() },
             containerColor = MaterialTheme.colorScheme.primary,
         )
     }

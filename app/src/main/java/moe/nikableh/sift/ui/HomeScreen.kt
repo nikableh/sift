@@ -193,7 +193,7 @@ private fun AlbumCard(vm: SiftViewModel) {
                     Text("Nothing left to sort", style = MaterialTheme.typography.titleMedium)
                     Text(hiddenLine(hidden), style = MaterialTheme.typography.bodyLarge)
                 }
-                // Skips an Apply has committed are out of the album, so they are out of the total too.
+                // Skips a Move has committed are out of the album, so they are out of the total too.
                 // Skipped photos were looked at and left in place, so they no longer count as left
                 else -> AlbumStats(
                     countParts(total, hidden), queuedHere, skippedHere, vm.leftHere,

@@ -61,11 +61,11 @@ fun Dialogs(vm: SiftViewModel) {
                 }
             },
             confirmButton = {
-                if (d.cancellable) TextButton(onClick = { vm.stopApply() }) { Text("Stop") }
+                if (d.cancellable) TextButton(onClick = { vm.stopMove() }) { Text("Stop") }
             },
         )
 
-        is Dialog.ApplyDone -> AlertDialog(
+        is Dialog.MoveDone -> AlertDialog(
             onDismissRequest = close,
             icon = { Icon(Icons.Rounded.DoneAll, null) },
             title = { Text("Moved ${d.result.moved.grouped()} photos") },
@@ -142,7 +142,7 @@ fun Dialogs(vm: SiftViewModel) {
                 val one = vm.selections == 1
                 Text(
                     "${selectionCounts(vm)} ${if (one) "is" else "are"} waiting. " +
-                        "Apply or clear ${if (one) "it" else "them"} before changing what is sorted."
+                        "${if (vm.queued > 0) "Move" else "Hide"} or clear ${if (one) "it" else "them"} before changing what is sorted."
                 )
             },
             confirmButton = {
