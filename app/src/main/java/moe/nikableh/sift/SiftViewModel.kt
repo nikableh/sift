@@ -704,8 +704,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         null
     }
 
-    /** Every Apply button leads to the Selections screen, whose own button does the moving. */
-    fun askApply() {
+    /** Opens the Selections screen, the only place with a button that moves files. */
+    fun reviewSelections() {
         if (busy || scanning || (Store.pending.isEmpty() && Store.skipped.isEmpty())) return
         dialog = null
         if (screen != Screen.Selections) open(Screen.Selections)

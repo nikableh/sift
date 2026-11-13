@@ -50,9 +50,9 @@ import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
 import androidx.compose.material.icons.automirrored.rounded.NavigateNext
 import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Numbers
@@ -295,7 +295,7 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
                     "That was the last photo",
                     "${vm.queuedHere.grouped()} queued to move, ${vm.skippedHere.grouped()} skipped, ${vm.leftHere.grouped()} not reviewed",
                 ) {
-                    if (vm.selections > 0) BigButton(applyLabel(vm)) { vm.askApply() }
+                    if (vm.selections > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
                 }
             }
             else -> if (vm.decodeFailed) {
@@ -435,22 +435,22 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             // The count drops out where it would take more than a fair share of the bar, which at large
             // font sizes would squeeze the photo details down to a few letters
             val style = MaterialTheme.typography.labelLarge
-            val withCount = "Apply ${vm.queued.grouped()}"
+            val withCount = "Review ${vm.selections.grouped()}"
             val maxButton = barWidth * 0.45f
             val padding = ButtonDefaults.ButtonWithIconContentPadding
             val room = maxButton - ButtonDefaults.IconSize - ButtonDefaults.IconSpacing -
                 padding.calculateLeftPadding(LayoutDirection.Ltr) - padding.calculateRightPadding(LayoutDirection.Ltr)
-            val fits = vm.queued > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
+            val fits = vm.selections > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
             Button(
-                onClick = { vm.askApply() },
+                onClick = { vm.reviewSelections() },
                 shapes = ButtonDefaults.shapes(),
                 enabled = vm.selections > 0 && idle,
                 contentPadding = padding,
                 modifier = Modifier.widthIn(max = maxButton),
             ) {
-                Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.IconSize))
+                Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                FitLabel(if (fits) withCount else "Apply", style)
+                FitLabel(if (fits) withCount else "Review", style)
             }
         }
     }

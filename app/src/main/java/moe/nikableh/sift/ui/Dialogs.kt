@@ -146,7 +146,7 @@ fun Dialogs(vm: SiftViewModel) {
                 )
             },
             confirmButton = {
-                Button(onClick = { vm.askApply() }, shapes = ButtonDefaults.shapes()) { Text("Apply") }
+                Button(onClick = { vm.reviewSelections() }, shapes = ButtonDefaults.shapes()) { Text("Review") }
             },
             dismissButton = {
                 Row {
@@ -237,15 +237,9 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
     )
 }
 
-/** Text of the big Apply buttons. With nothing queued, Apply only hides the skips. */
-fun applyLabel(vm: SiftViewModel): String {
-    val skips = vm.selections - vm.queued
-    return when {
-        vm.queued == 1 -> "Apply 1 move"
-        vm.queued > 0 -> "Apply ${vm.queued.grouped()} moves"
-        else -> "Hide ${skips.grouped()} skipped"
-    }
-}
+/** Text of the big buttons that open Selections. Moves and skips count together, since both are listed there. */
+fun reviewLabel(vm: SiftViewModel): String =
+    if (vm.selections == 1) "Review 1 selection" else "Review ${vm.selections.grouped()} selections"
 
 /** "80 folder choices and 15 skips", leaving out the part that is zero. */
 private fun selectionCounts(vm: SiftViewModel): String {

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -24,12 +25,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -37,12 +35,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,53 +92,71 @@ private fun Home(vm: SiftViewModel) {
             // Padding before the scroll ends the viewport above the buttons, which have no background
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
                 "Sift",
                 style = MaterialTheme.typography.displaySmallEmphasized,
-                modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 14.dp),
+                modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
             )
             AlbumCard(vm)
-            Spacer(Modifier.height(12.dp))
+            DestinationsCard(vm)
+            vm.lastBatchInfo?.let { (journal, count) ->
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (count == 1) "Last batch moved 1 photo" else "Last batch moved ${count.grouped()} photos",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(journal, count) }) { Text("Undo") }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+        }
+    }
+}
 
-            val batch = vm.lastBatchInfo
-            val selections = vm.selections
-            val rows = 1 + (if (selections > 0) 1 else 0) + (if (batch != null) 1 else 0)
-            if (selections > 0) {
-                val skips = selections - vm.queued
-                SegmentedListItem(
-                    onClick = { vm.open(Screen.Selections) },
-                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = rows),
-                    colors = segmentColors(),
-                    leadingContent = { Icon(Icons.Rounded.Checklist, null) },
-                    trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-                    supportingContent = { DotParts(listOf("${vm.queued.grouped()} to move", "${skips.grouped()} skipped")) },
-                ) { Text("View selections") }
+/** Past this many the names stop telling the folders apart at a glance, and the card outgrows the album's. */
+private const val SHOWN_DESTS = 8
+
+/** Where photos can go, in the colours of the sorting buttons. The way into folder setup. */
+@Composable
+private fun DestinationsCard(vm: SiftViewModel) {
+    val dests = vm.dests
+    Card(
+        onClick = { vm.open(Screen.Setup) },
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (dests.size == 1) "Sorting into 1 folder" else "Sorting into ${dests.size} folders",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
             }
-            SegmentedListItem(
-                onClick = { vm.open(Screen.Setup) },
-                shapes = ListItemDefaults.segmentedShapes(index = rows - 1 - (if (batch != null) 1 else 0), count = rows),
-                colors = segmentColors(),
-                leadingContent = { Icon(Icons.Rounded.Tune, null) },
-                trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-                supportingContent = {
-                    val n = vm.dests.size
-                    Text(if (n == 1) "1 destination folder" else "$n destination folders")
-                },
-            ) { Text("Folders and settings") }
-            if (batch != null) {
-                SegmentedListItem(
-                    onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second) },
-                    shapes = ListItemDefaults.segmentedShapes(index = rows - 1, count = rows),
-                    colors = segmentColors(),
-                    leadingContent = { Icon(Icons.Rounded.History, null) },
-                    supportingContent = {
-                        Text(if (batch.second == 1) "1 photo goes back" else "${batch.second.grouped()} photos go back")
-                    },
-                ) { Text("Undo last applied batch") }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                dests.take(SHOWN_DESTS).forEachIndexed { i, dest ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Dot(folderColor(i))
+                        Spacer(Modifier.width(6.dp))
+                        Text(dest.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+                if (dests.size > SHOWN_DESTS) {
+                    Text(
+                        "+${dests.size - SHOWN_DESTS} more",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -296,7 +311,7 @@ private fun countParts(total: Int, hidden: Int): List<String> = listOfNotNull(
 
 private fun hiddenLine(n: Int) = if (n == 1) "1 skipped hidden" else "${n.grouped()} skipped hidden"
 
-/** Start and Apply sit at the bottom, in thumb reach. */
+/** Start and Review sit at the bottom, in thumb reach. */
 @Composable
 private fun Actions(vm: SiftViewModel) {
     val size = ButtonDefaults.MediumContainerHeight
@@ -310,17 +325,17 @@ private fun Actions(vm: SiftViewModel) {
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        val apply = @Composable { modifier: Modifier ->
+        val review = @Composable { modifier: Modifier ->
             FilledTonalButton(
-                onClick = { vm.askApply() },
+                onClick = { vm.reviewSelections() },
                 enabled = ready,
                 shapes = ButtonDefaults.shapes(),
                 modifier = modifier.height(size),
             ) {
-                Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
+                Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
                 Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                 val style = ButtonDefaults.textStyleFor(size)
-                FitLabel(applyLabel(vm), style)
+                FitLabel(reviewLabel(vm), style)
             }
         }
         val start = @Composable { modifier: Modifier ->
@@ -340,9 +355,9 @@ private fun Actions(vm: SiftViewModel) {
             }
         }
         if (elsewhere > 0 && !vm.scanning) {
-            // The queue spans albums, and Apply moves all of it
+            // The queue spans albums, and the count on the button covers all of it
             Text(
-                "Apply includes ${elsewhere.grouped()} queued in other albums",
+                "Includes ${elsewhere.grouped()} queued in other albums",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp),
@@ -350,11 +365,11 @@ private fun Actions(vm: SiftViewModel) {
         }
         if (landscape) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (vm.selections > 0) apply(Modifier.weight(1f))
+                if (vm.selections > 0) review(Modifier.weight(1f))
                 start(Modifier.weight(1f))
             }
         } else {
-            if (vm.selections > 0) apply(Modifier.fillMaxWidth())
+            if (vm.selections > 0) review(Modifier.fillMaxWidth())
             start(Modifier.fillMaxWidth())
         }
     }
