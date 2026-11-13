@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -100,6 +101,7 @@ private fun Home(vm: SiftViewModel) {
                 modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
             )
             AlbumCard(vm)
+            if (!vm.scanning && vm.hiddenHere > 0) SkippedCard(vm)
             DestinationsCard(vm)
             vm.lastBatchInfo?.let { batch ->
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -161,6 +163,33 @@ private fun DestinationsCard(vm: SiftViewModel) {
                     )
                 }
             }
+        }
+    }
+}
+
+/** The skips a Move took out of the album. The way to look through them and bring some back. */
+@Composable
+private fun SkippedCard(vm: SiftViewModel) {
+    val hidden = vm.hiddenHere
+    Card(
+        onClick = { vm.open(Screen.Skipped) },
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.SkipNext, null)
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    if (hidden == 1) "1 skipped photo" else "${hidden.grouped()} skipped photos",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "Left in the album's folder and hidden from sorting",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
         }
     }
 }

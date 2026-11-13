@@ -58,7 +58,6 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.Badge
@@ -280,25 +279,19 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
                     "Nothing left to sort in $folder",
                     if (vm.hiddenHere == 1) "1 skipped photo is hidden" else "${vm.hiddenHere.grouped()} skipped photos are hidden",
                 ) {
-                    BigButton("Review skipped") { vm.enterReview() }
+                    BigButton("Show skipped") { vm.open(Screen.Skipped) }
                 }
             } else {
                 Status(Modifier.align(Alignment.Center), "No photos in $folder") {
                     BigButton("Change folders") { vm.open(Screen.Setup) }
                 }
             }
-            Gate.End -> if (vm.reviewing) {
-                Status(Modifier.align(Alignment.Center), "That was the last skipped photo") {
-                    BigButton("Back to sorting") { vm.exitReview() }
-                }
-            } else {
-                Status(
-                    Modifier.align(Alignment.Center),
-                    "That was the last photo",
-                    "${vm.queuedHere.grouped()} queued to move, ${vm.skippedHere.grouped()} skipped, ${vm.leftHere.grouped()} not reviewed",
-                ) {
-                    if (vm.selections > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
-                }
+            Gate.End -> Status(
+                Modifier.align(Alignment.Center),
+                "That was the last photo",
+                "${vm.queuedHere.grouped()} queued to move, ${vm.skippedHere.grouped()} skipped, ${vm.leftHere.grouped()} not reviewed",
+            ) {
+                if (vm.selections > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
             }
             else -> if (vm.decodeFailed) {
                 Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}") {}
@@ -365,12 +358,12 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // Not tied to idle, because the system Back it mirrors works during a move too
             FilledTonalIconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, if (vm.reviewing) "Back to sorting" else "Back")
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
             }
 
             if (photo == null) {
                 Text(
-                    if (vm.reviewing) "Skipped in $folder" else folder,
+                    folder,
                     Modifier.weight(1f).padding(horizontal = 12.dp),
                     style = MaterialTheme.typography.titleSmall,
                 )
@@ -414,11 +407,10 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                                 }
                                 .padding(horizontal = 12.dp, vertical = 4.dp),
                         ) {
-                            val list = if (vm.reviewing) "Skipped " else ""
                             // The position never gets cut. When even a line of its own is too narrow it breaks
                             // after the slash, which a no-break space keeps with the first number
                             Text(
-                                "$list${(vm.index + 1).grouped()}\u00A0/ ${vm.photos.size.grouped()}",
+                                "${(vm.index + 1).grouped()}\u00A0/ ${vm.photos.size.grouped()}",
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             val parent = if (vm.recursive) "${photo.file.parentFile?.name}  ·  " else ""
@@ -606,11 +598,9 @@ private fun MoreMenu(vm: SiftViewModel, idle: Boolean) {
     var menu by remember { mutableStateOf(false) }
     val photo = vm.current
     val hasPhotos = vm.photos.isNotEmpty()
-    // A review list can run out of things to offer, and an empty menu would open as a blank box
-    val hasItems = !vm.reviewing || hasPhotos || vm.hiddenHere > 0 || vm.canUndo
 
     Box {
-        ControlIconButton("More", Icons.Rounded.MoreVert, idle && hasItems) { menu = true }
+        ControlIconButton("More", Icons.Rounded.MoreVert, idle) { menu = true }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             @Composable
             fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
@@ -628,21 +618,10 @@ private fun MoreMenu(vm: SiftViewModel, idle: Boolean) {
                     vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
                 }
             }
-            if (vm.reviewing) {
-                if (vm.hiddenHere > 0) {
-                    item("Unhide all skipped (${vm.hiddenHere.grouped()})", Icons.Rounded.RestartAlt) {
-                        vm.dialog = Dialog.ConfirmUnhide(vm.hiddenHere)
-                    }
-                }
-            } else {
-                item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
-                if (vm.hiddenHere > 0) {
-                    item("Review skipped (${vm.hiddenHere.grouped()})", Icons.Rounded.SkipNext) { vm.enterReview() }
-                }
-                if (vm.selections > 0) {
-                    item("Clear selections (${vm.selections.grouped()})", Icons.Rounded.ClearAll) {
-                        vm.dialog = Dialog.ConfirmClear
-                    }
+            item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
+            if (vm.selections > 0) {
+                item("Clear selections (${vm.selections.grouped()})", Icons.Rounded.ClearAll) {
+                    vm.dialog = Dialog.ConfirmClear
                 }
             }
         }

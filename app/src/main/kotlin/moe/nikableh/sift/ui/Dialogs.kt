@@ -121,8 +121,8 @@ fun Dialogs(vm: SiftViewModel) {
         ) { Text(if (d.count == 1) "1 ticked folder has not been added." else "${d.count} ticked folders have not been added.") }
 
         is Dialog.ConfirmUnhide -> Confirm(
-            title = "Unhide skipped photos?",
-            confirm = "Unhide",
+            title = "Undo all skips?",
+            confirm = "Undo all",
             onConfirm = {
                 vm.unhideAll()
                 close()

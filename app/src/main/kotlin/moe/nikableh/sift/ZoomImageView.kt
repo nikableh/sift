@@ -1,5 +1,7 @@
 package moe.nikableh.sift
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -16,7 +18,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
-/** Fit-to-view image with pinch and double-tap zoom. A horizontal swipe at 1x pages to the neighbour and reports prev or next. */
+/** Fit-to-view image with pinch and double-tap zoom. A horizontal swipe at 1x pages to the neighbour and reports prev or next. A vertical one can close it. */
 @SuppressLint("ViewConstructor")
 class ZoomImageView(ctx: Context) : View(ctx) {
     /** +1 for next, -1 for previous. */
@@ -24,6 +26,12 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     /** Fired once per image when the user first zooms in, to fetch a sharper bitmap. */
     var onZoomIn: (() -> Unit)? = null
+
+    /** Set to let a swipe up or down at 1x close the photo. Without it a vertical drag does nothing. */
+    var onDismiss: (() -> Unit)? = null
+
+    /** How far the photo is on its way out, from 0 at rest to 1 when gone, for fading what is around it. */
+    var onLift: ((Float) -> Unit)? = null
 
     private var bitmap: Bitmap? = null
     private var prev: Bitmap? = null
@@ -40,6 +48,20 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private var downDragX = 0f
     private var flingDir = 0
     private var settle: ValueAnimator? = null
+
+    /** How far a vertical swipe has moved the current page off rest. Negative is up. */
+    private var liftY = 0f
+    private var lifting = false
+
+    /** Vertical speed of the fling that ended a lift, or 0 when it wasn't one. */
+    private var flungY = 0f
+
+    /** A drag keeps the direction it started in, so paging can't turn into closing half-way. */
+    private var axisChosen = false
+    private var drop: ValueAnimator? = null
+
+    /** Set while the page flies out. Touches wait, since the view is about to go. */
+    private var closing = false
     private var zoomReported = false
     private val drawMatrix = Matrix()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
@@ -70,10 +92,13 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         bitmap = b
         if (!keepView) {
             settle?.cancel()
+            closing = false
+            drop?.cancel()
             zoom = 1f
             panX = 0f
             panY = 0f
             dragX = 0f
+            lift(0f)
             zoomReported = false
         }
         invalidate()
@@ -82,7 +107,10 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     override fun onDraw(canvas: Canvas) {
         if (dragX > 0f) drawPage(canvas, prev, dragX - page)
         if (dragX < 0f) drawPage(canvas, next, dragX + page)
-        drawPage(canvas, bitmap, dragX, zoom, panX, panY)
+        // Fades as it lifts, in step with what [onLift] reports
+        paint.alpha = if (liftY != 0f && height > 0) (255 * (1f - abs(liftY) / height).coerceIn(0f, 1f)).toInt() else 255
+        drawPage(canvas, bitmap, dragX, zoom, panX, panY + liftY)
+        paint.alpha = 255
     }
 
     private fun drawPage(canvas: Canvas, b: Bitmap?, dx: Float, zoom: Float = 1f, panX: Float = 0f, panY: Float = 0f) {
@@ -131,8 +159,38 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         }
     }
 
+    private fun lift(y: Float) {
+        liftY = y
+        onLift?.invoke(if (height > 0) (abs(y) / height).coerceIn(0f, 1f) else 0f)
+        invalidate()
+    }
+
+    /** Lowers a page that wasn't lifted far enough, or slides it the rest of the way out and then closes. */
+    private fun release(close: Boolean) {
+        drop?.cancel()
+        closing = close
+        // Out through the edge it was heading for
+        val out = if (liftY < 0f || (liftY == 0f && flungY < 0f)) -height.toFloat() else height.toFloat()
+        drop = ValueAnimator.ofFloat(liftY, if (close) out else 0f).apply {
+            duration = SETTLE_MS.toLong()
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { lift(it.animatedValue as Float) }
+            if (close) {
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        // Also runs for a cancelled slide, which clears the flag first
+                        if (closing) onDismiss?.invoke()
+                    }
+                })
+            }
+            start()
+        }
+    }
+
     override fun onDetachedFromWindow() {
         settle?.cancel()
+        closing = false
+        drop?.cancel()
         super.onDetachedFromWindow()
     }
 
@@ -187,10 +245,17 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
             if (scaleDetector.isInProgress || e2.pointerCount > 1) return true
+            if (!axisChosen) {
+                axisChosen = true
+                // Only from rest: a page caught mid-slide stays a page turn
+                lifting = onDismiss != null && !isZoomed && dragX == 0f && abs(dy) > abs(dx)
+            }
             if (isZoomed) {
                 panX -= dx
                 panY -= dy
                 clampPan()
+            } else if (lifting) {
+                lift(liftY - dy)
             } else {
                 val to = dragX - dx
                 // Resists when there is no page on that side
@@ -202,7 +267,12 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         }
 
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-            if (!isZoomed && abs(vx) > 600 * resources.displayMetrics.density && abs(vx) > abs(vy) * 1.5f) flingDir = if (vx < 0) 1 else -1
+            val fast = 600 * resources.displayMetrics.density
+            if (lifting) {
+                flungY = if (abs(vy) > fast && abs(vy) > abs(vx) * 1.5f) vy else 0f
+            } else if (!isZoomed && abs(vx) > fast && abs(vx) > abs(vy) * 1.5f) {
+                flingDir = if (vx < 0) 1 else -1
+            }
             return true
         }
     })
@@ -214,13 +284,26 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (closing) return true
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             flingDir = 0
+            flungY = 0f
+            lifting = false
+            axisChosen = false
             settle?.cancel()
+            drop?.cancel()
             downDragX = dragX
         }
         scaleDetector.onTouchEvent(event)
         gestures.onTouchEvent(event)
+        if (lifting && (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL)) {
+            // Like paging: a flick back toward the middle keeps the photo, whatever the distance
+            val flungBack = flungY * liftY < 0f
+            val close = event.actionMasked == MotionEvent.ACTION_UP && !isZoomed && !flungBack &&
+                (flungY != 0f || abs(liftY) > height * 0.2f)
+            release(close)
+            return true
+        }
         if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
             // Measured from where the finger landed, so catching a slide mid-way and letting go doesn't turn back
             val moved = dragX - downDragX
@@ -234,6 +317,8 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             if ((dir > 0 && !canNext) || (dir < 0 && !canPrev)) dir = 0
             if (dir != 0) turn(dir)
             settle()
+            // A touch that caught the page on its way down and went elsewhere
+            if (liftY != 0f) release(close = false)
             // The index changes right away and only the picture trails, so a folder tap mid-slide files the new photo
             if (dir != 0) onSwipe?.invoke(dir)
         }
