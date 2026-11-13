@@ -1,6 +1,11 @@
 package moe.nikableh.sift.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -9,17 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -32,13 +31,11 @@ import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.UnfoldMore
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -91,7 +88,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 },
             )
         },
-        bottomBar = { if (vm.selections > 0) ApplyBar(vm, ready) },
+        floatingActionButton = { ApplyFab(vm, visible = vm.selections > 0 && ready) },
     ) { padding ->
         if (groups.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
@@ -107,7 +104,8 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     start = 16.dp,
                     end = 8.dp,
                     top = padding.calculateTopPadding(),
-                    bottom = padding.calculateBottomPadding() + 16.dp,
+                    // The FAB floats over the list, so the last row needs room to scroll out from under it
+                    bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
                 ),
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -174,7 +172,7 @@ private fun GroupHeader(dest: String?, count: Int, color: Color?, collapsed: Boo
 }
 
 @Composable
-private fun Dot(color: Color?) {
+fun Dot(color: Color?) {
     Box(Modifier.size(12.dp).clip(CircleShape).background(color ?: MaterialTheme.colorScheme.outline))
 }
 
@@ -210,25 +208,18 @@ private fun SelectionRow(row: Selection, color: Color?, enabled: Boolean, onRemo
     }
 }
 
+/** Height of the small extended FAB, which material3 doesn't expose. */
+private val FabHeight = 56.dp
+
+/** FABs have no disabled state, so it steps away while a scan or a move is running. */
 @Composable
-private fun ApplyBar(vm: SiftViewModel, ready: Boolean) {
-    val size = ButtonDefaults.MediumContainerHeight
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, contentColor = MaterialTheme.colorScheme.onSurface) {
-        Box(
-            Modifier.fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            Button(
-                onClick = { vm.apply() },
-                enabled = ready,
-                shapes = ButtonDefaults.shapes(),
-                modifier = Modifier.fillMaxWidth().height(size),
-            ) {
-                Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
-                Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
-                FitLabel(applyLabel(vm), ButtonDefaults.textStyleFor(size))
-            }
-        }
+private fun ApplyFab(vm: SiftViewModel, visible: Boolean) {
+    AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
+        SmallExtendedFloatingActionButton(
+            text = { FitLabel(if (vm.queued > 0) "Apply ${vm.queued.grouped()}" else "Apply") },
+            icon = { Icon(Icons.Rounded.DoneAll, null) },
+            onClick = { vm.apply() },
+            containerColor = MaterialTheme.colorScheme.primary,
+        )
     }
 }
