@@ -20,6 +20,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -93,6 +95,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -101,11 +104,17 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
@@ -122,6 +131,7 @@ import java.io.File
 import java.text.DateFormat
 import java.util.Date
 import kotlin.math.ceil
+import kotlin.math.pow
 
 /** The sorting screen: one photo, one tap on a folder button queues it and shows the next. */
 @Composable
@@ -267,7 +277,7 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
                 Status(
                     Modifier.align(Alignment.Center),
                     "Nothing left to sort in $folder",
-                    if (vm.hiddenHere == 1) "1 skipped photo is hidden" else "${vm.hiddenHere} skipped photos are hidden",
+                    if (vm.hiddenHere == 1) "1 skipped photo is hidden" else "${vm.hiddenHere.grouped()} skipped photos are hidden",
                 ) {
                     BigButton("Review skipped") { vm.enterReview() }
                 }
@@ -284,7 +294,7 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
                 Status(
                     Modifier.align(Alignment.Center),
                     "That was the last photo",
-                    "${vm.queuedHere} queued to move, ${vm.skippedHere} skipped, ${vm.leftHere} not reviewed",
+                    "${vm.queuedHere.grouped()} queued to move, ${vm.skippedHere.grouped()} skipped, ${vm.leftHere.grouped()} not reviewed",
                 ) {
                     if (vm.selections > 0) BigButton(applyLabel(vm)) { vm.askApply() }
                 }
@@ -347,90 +357,102 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
     val photo = vm.current
     val idle = !vm.busy && !vm.scanning
 
-    Row(
-        Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Not tied to idle, because the system Back it mirrors works during a move too
-        FilledTonalIconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, if (vm.reviewing) "Back to sorting" else "Back")
-        }
-
-        if (photo == null) {
-            Text(
-                if (vm.reviewing) "Skipped in $folder" else folder,
-                Modifier.weight(1f).padding(horizontal = 12.dp),
-                style = MaterialTheme.typography.titleSmall,
-            )
-        } else {
-            val date = dateFormat.format(Date(photo.mtime))
-            // Persistent, so a long name stays up until a tap outside instead of timing out mid-read
-            val tooltip = rememberTooltipState(isPersistent = true)
-            val scope = rememberCoroutineScope()
-            // The popup closes itself on any tap outside it, the header included, so a tap that just closed it must not
-            // reopen it. Which window sees the tap first is not fixed, so compare times instead of reading isVisible.
-            var pressedAt by remember { mutableLongStateOf(0L) }
-            var hiddenAt by remember { mutableLongStateOf(0L) }
-            LaunchedEffect(tooltip) {
-                snapshotFlow { tooltip.isVisible }.drop(1).collect { if (!it) hiddenAt = SystemClock.uptimeMillis() }
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)) {
+        val barWidth = maxWidth
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // Not tied to idle, because the system Back it mirrors works during a move too
+            FilledTonalIconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, if (vm.reviewing) "Back to sorting" else "Back")
             }
-            // TooltipBox does not pass its modifier to the node the Row measures, so the weight sits on a wrapper
-            Box(Modifier.weight(1f)) {
-                TooltipBox(
-                    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
-                    tooltip = {
-                        RichTooltip(title = { Text(photo.file.name) }) { Text(date) }
-                    },
-                    state = tooltip,
-                    // Its own input only reacts to a long press, and only over the text it measured
-                    enableUserInput = false,
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .pointerInput(Unit) {
-                                awaitEachGesture {
-                                    pressedAt = awaitFirstDown(false, PointerEventPass.Initial).uptimeMillis
-                                }
-                            }
-                            .clickable {
-                                when {
-                                    tooltip.isVisible -> tooltip.dismiss()
-                                    hiddenAt < pressedAt - 200 -> scope.launch { tooltip.show() }
-                                }
-                            }
-                            .padding(horizontal = 12.dp, vertical = 4.dp),
+
+            if (photo == null) {
+                Text(
+                    if (vm.reviewing) "Skipped in $folder" else folder,
+                    Modifier.weight(1f).padding(horizontal = 12.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            } else {
+                val date = dateFormat.format(Date(photo.mtime))
+                // Persistent, so a long name stays up until a tap outside instead of timing out mid-read
+                val tooltip = rememberTooltipState(isPersistent = true)
+                val scope = rememberCoroutineScope()
+                // The popup closes itself on any tap outside it, the header included, so a tap that just closed it must not
+                // reopen it. Which window sees the tap first is not fixed, so compare times instead of reading isVisible.
+                var pressedAt by remember { mutableLongStateOf(0L) }
+                var hiddenAt by remember { mutableLongStateOf(0L) }
+                LaunchedEffect(tooltip) {
+                    snapshotFlow { tooltip.isVisible }.drop(1).collect { if (!it) hiddenAt = SystemClock.uptimeMillis() }
+                }
+                // TooltipBox does not pass its modifier to the node the Row measures, so the weight sits on a wrapper
+                Box(Modifier.weight(1f)) {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+                        tooltip = {
+                            RichTooltip(title = { Text(photo.file.name) }) { Text(date) }
+                        },
+                        state = tooltip,
+                        // Its own input only reacts to a long press, and only over the text it measured
+                        enableUserInput = false,
                     ) {
-                        val parent = if (vm.recursive) "  ·  ${photo.file.parentFile?.name}" else ""
-                        val list = if (vm.reviewing) "Skipped " else ""
-                        Text(
-                            "$list${vm.index + 1} / ${vm.photos.size}$parent  ·  ${Formatter.formatShortFileSize(context, photo.size)}",
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            "${photo.file.name}  ·  $date",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        pressedAt = awaitFirstDown(false, PointerEventPass.Initial).uptimeMillis
+                                    }
+                                }
+                                .clickable {
+                                    when {
+                                        tooltip.isVisible -> tooltip.dismiss()
+                                        hiddenAt < pressedAt - 200 -> scope.launch { tooltip.show() }
+                                    }
+                                }
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                        ) {
+                            val list = if (vm.reviewing) "Skipped " else ""
+                            // The position never gets cut. When even a line of its own is too narrow it breaks
+                            // after the slash, which a no-break space keeps with the first number
+                            Text(
+                                "$list${(vm.index + 1).grouped()}\u00A0/ ${vm.photos.size.grouped()}",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            val parent = if (vm.recursive) "${photo.file.parentFile?.name}  ·  " else ""
+                            Text(
+                                "$parent${Formatter.formatShortFileSize(context, photo.size)}  ·  ${photo.file.name}  ·  $date",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Button(
-            onClick = { vm.askApply() },
-            shapes = ButtonDefaults.shapes(),
-            enabled = vm.selections > 0 && idle,
-            contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-        ) {
-            Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.IconSize))
-            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-            Text(if (vm.queued > 0) "Apply ${vm.queued}" else "Apply")
+            // The count drops out where it would take more than a fair share of the bar, which at large
+            // font sizes would squeeze the photo details down to a few letters
+            val style = MaterialTheme.typography.labelLarge
+            val withCount = "Apply ${vm.queued.grouped()}"
+            val maxButton = barWidth * 0.45f
+            val padding = ButtonDefaults.ButtonWithIconContentPadding
+            val room = maxButton - ButtonDefaults.IconSize - ButtonDefaults.IconSpacing -
+                padding.calculateLeftPadding(LayoutDirection.Ltr) - padding.calculateRightPadding(LayoutDirection.Ltr)
+            val fits = vm.queued > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
+            Button(
+                onClick = { vm.askApply() },
+                shapes = ButtonDefaults.shapes(),
+                enabled = vm.selections > 0 && idle,
+                contentPadding = padding,
+                modifier = Modifier.widthIn(max = maxButton),
+            ) {
+                Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                FitLabel(if (fits) withCount else "Apply", style)
+            }
         }
     }
 }
@@ -582,22 +604,22 @@ private fun MoreMenu(vm: SiftViewModel, idle: Boolean) {
             }
             if (vm.reviewing) {
                 if (vm.hiddenHere > 0) {
-                    item("Unhide all skipped (${vm.hiddenHere})", Icons.Rounded.RestartAlt) {
+                    item("Unhide all skipped (${vm.hiddenHere.grouped()})", Icons.Rounded.RestartAlt) {
                         vm.dialog = Dialog.ConfirmUnhide(vm.hiddenHere)
                     }
                 }
             } else {
                 item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
                 if (vm.hiddenHere > 0) {
-                    item("Review skipped (${vm.hiddenHere})", Icons.Rounded.SkipNext) { vm.enterReview() }
+                    item("Review skipped (${vm.hiddenHere.grouped()})", Icons.Rounded.SkipNext) { vm.enterReview() }
                 }
                 if (vm.selections > 0) {
-                    item("Clear selections (${vm.selections})", Icons.Rounded.ClearAll) {
+                    item("Clear selections (${vm.selections.grouped()})", Icons.Rounded.ClearAll) {
                         vm.dialog = Dialog.ConfirmClear
                     }
                 }
                 if (batch != null) {
-                    item("Undo last applied batch (${batch.second})", Icons.Rounded.History) {
+                    item("Undo last applied batch (${batch.second.grouped()})", Icons.Rounded.History) {
                         vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second)
                     }
                 }
@@ -618,7 +640,7 @@ private fun ControlButton(label: String, icon: ImageVector, enabled: Boolean, mo
     ) {
         Icon(icon, null, Modifier.size(ButtonDefaults.IconSize))
         Spacer(Modifier.width(6.dp))
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        FitLabel(label)
     }
 }
 
@@ -627,15 +649,20 @@ private fun ControlButton(label: String, icon: ImageVector, enabled: Boolean, mo
 private fun FolderGrid(vm: SiftViewModel, landscape: Boolean) {
     val dests = vm.dests
     val n = dests.size
+    val fontScale = LocalDensity.current.fontScale
     val cols = when {
         landscape -> if (n <= 5) 1 else 2
         n <= 3 -> n
         n == 4 -> 2
         n <= 6 || n == 9 -> 3
+        // A quarter of a phone holds about four letters at a large font size
+        fontScale >= 1.5f -> 3
         else -> 4
     }.coerceAtLeast(1)
     val rows = ceil(n / cols.toFloat()).toInt()
-    val rowHeight: Dp = if (landscape) 56.dp else if (rows == 1) 72.dp else 64.dp
+    // Rows grow with the font size, or a large font leaves no room for the label under the count
+    val grow = fontScale.coerceAtLeast(1f).pow(0.8f)
+    val rowHeight: Dp = (if (landscape) 56.dp else if (rows == 1) 72.dp else 64.dp) * grow
     val gap = 8.dp
 
     val grid = @Composable {
@@ -679,27 +706,40 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
             colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = Color.White),
             // A dark ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel
             border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
-            contentPadding = PaddingValues(horizontal = 10.dp),
+            contentPadding = PaddingValues(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            if (selected) {
-                Icon(Icons.Rounded.Check, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
+            Column(Modifier.fillMaxSize()) {
+                // The badge row is laid out even at zero, so a label never moves when its first count shows up,
+                // and the badge sits above the label instead of over it
+                val badge = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp)
+                Badge(
+                    Modifier.align(Alignment.End)
+                        .then(if (count > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ) { FitLabel(count.grouped(), badge) }
+                Row(
+                    Modifier.weight(1f).fillMaxWidth().padding(end = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (selected) {
+                        Icon(Icons.Rounded.Check, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    // A line height relative to the size, so two shrunk lines fit where two full ones would not
+                    val style = MaterialTheme.typography.titleMedium.copy(lineHeight = 1.25.em)
+                    Text(
+                        dest.label,
+                        style = style,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        autoSize = shrinkToFit(style, minRatio = 0.4f),
+                    )
+                }
             }
-            Text(
-                dest.label,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
-        }
-        if (count > 0) {
-            Badge(
-                Modifier.align(Alignment.TopEnd).padding(6.dp),
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) { Text(count.toString()) }
         }
     }
 }

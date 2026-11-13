@@ -57,7 +57,7 @@ fun Dialogs(vm: SiftViewModel) {
                         progress = { if (d.total == 0) 0f else vm.progress / d.total.toFloat() },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text("${vm.progress} of ${d.total}")
+                    Text("${vm.progress.grouped()} of ${d.total.grouped()}")
                 }
             },
             confirmButton = {
@@ -68,7 +68,7 @@ fun Dialogs(vm: SiftViewModel) {
         is Dialog.ApplyDone -> AlertDialog(
             onDismissRequest = close,
             icon = { Icon(Icons.Rounded.DoneAll, null) },
-            title = { Text("Moved ${d.result.moved} photos") },
+            title = { Text("Moved ${d.result.moved.grouped()} photos") },
             text = { applyDetails(d.result)?.let { Text(it) } },
             confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
             dismissButton = {
@@ -81,7 +81,7 @@ fun Dialogs(vm: SiftViewModel) {
 
         is Dialog.ConfirmUndoBatch -> Confirm(
             icon = Icons.Rounded.History,
-            title = "Move ${d.count} photos back?",
+            title = "Move ${d.count.grouped()} photos back?",
             confirm = "Move back",
             onConfirm = { vm.undoBatch(d.journal, d.count) },
             onDismiss = close,
@@ -91,8 +91,8 @@ fun Dialogs(vm: SiftViewModel) {
 
         is Dialog.UndoFailed -> AlertDialog(
             onDismissRequest = close,
-            title = { Text("Moved ${d.restored} back") },
-            text = { Text("${d.failed.size} could not be moved back:\n" + failureLines(d.failed)) },
+            title = { Text("Moved ${d.restored.grouped()} back") },
+            text = { Text("${d.failed.size.grouped()} could not be moved back:\n" + failureLines(d.failed)) },
             confirmButton = { TextButton(onClick = close) { Text("OK") } },
         )
 
@@ -117,7 +117,7 @@ fun Dialogs(vm: SiftViewModel) {
             onDismiss = close,
         ) {
             Text(
-                (if (d.count == 1) "1 skipped photo returns" else "${d.count} skipped photos return") +
+                (if (d.count == 1) "1 skipped photo returns" else "${d.count.grouped()} skipped photos return") +
                     " to this album as not reviewed. No files are touched."
             )
         }
@@ -164,7 +164,7 @@ fun Dialogs(vm: SiftViewModel) {
                 close()
             },
             onDismiss = close,
-        ) { Text("${d.queued} queued photos lose this choice and stay where they are.") }
+        ) { Text("${d.queued.grouped()} queued photos lose this choice and stay where they are.") }
 
         is Dialog.RenameDest -> TextPrompt(
             title = "Button label",
@@ -242,8 +242,8 @@ fun applyLabel(vm: SiftViewModel): String {
     val skips = vm.selections - vm.queued
     return when {
         vm.queued == 1 -> "Apply 1 move"
-        vm.queued > 0 -> "Apply ${vm.queued} moves"
-        else -> "Hide $skips skipped"
+        vm.queued > 0 -> "Apply ${vm.queued.grouped()} moves"
+        else -> "Hide ${skips.grouped()} skipped"
     }
 }
 
@@ -251,22 +251,22 @@ fun applyLabel(vm: SiftViewModel): String {
 private fun selectionCounts(vm: SiftViewModel): String {
     val skips = vm.selections - vm.queued
     val parts = ArrayList<String>()
-    if (vm.queued > 0) parts.add(if (vm.queued == 1) "1 folder choice" else "${vm.queued} folder choices")
-    if (skips > 0) parts.add(if (skips == 1) "1 skip" else "$skips skips")
+    if (vm.queued > 0) parts.add(if (vm.queued == 1) "1 folder choice" else "${vm.queued.grouped()} folder choices")
+    if (skips > 0) parts.add(if (skips == 1) "1 skip" else "${skips.grouped()} skips")
     return parts.joinToString(" and ")
 }
 
 private fun failureLines(failed: List<Pair<String, String>>): String {
     val lines = failed.take(8).joinToString("\n") { "${it.first}: ${it.second}" }
-    return if (failed.size > 8) "$lines\nand ${failed.size - 8} more" else lines
+    return if (failed.size > 8) "$lines\nand ${(failed.size - 8).grouped()} more" else lines
 }
 
 private fun applyDetails(r: Mover.Result): String? {
     val parts = ArrayList<String>()
-    if (r.missing > 0) parts.add("${r.missing} were already gone from the folder.")
+    if (r.missing > 0) parts.add("${r.missing.grouped()} were already gone from the folder.")
     if (r.cancelled) parts.add("Stopped early. The rest is still queued.")
     if (r.failed.isNotEmpty()) {
-        parts.add("${r.failed.size} could not be moved and are still queued:\n" + failureLines(r.failed))
+        parts.add("${r.failed.size.grouped()} could not be moved and are still queued:\n" + failureLines(r.failed))
     }
     return parts.joinToString("\n\n").ifEmpty { null }
 }

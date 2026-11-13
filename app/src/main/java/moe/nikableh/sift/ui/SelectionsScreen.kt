@@ -123,7 +123,7 @@ private fun GroupHeader(dest: String?, count: Int, color: Color?) {
                 style = MaterialTheme.typography.titleMediumEmphasized,
                 modifier = Modifier.weight(1f),
             )
-            Text(count.toString(), style = MaterialTheme.typography.titleMedium)
+            Text(count.grouped(), style = MaterialTheme.typography.titleMedium)
         }
         // The whole path wraps instead of being cut, it is what tells two folders apart
         Text(
@@ -158,7 +158,7 @@ private fun SelectionRow(row: Selection, color: Color?, enabled: Boolean, onRemo
                     style = MaterialTheme.typography.titleSmall,
                 )
             }
-            Text(row.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+            Text(row.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
             Text(
                 row.file.parent ?: "",
                 style = MaterialTheme.typography.bodySmall,
@@ -188,7 +188,7 @@ private fun ApplyBar(vm: SiftViewModel, ready: Boolean) {
             ) {
                 Icon(Icons.Rounded.DoneAll, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
                 Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
-                Text(applyLabel(vm), style = ButtonDefaults.textStyleFor(size), maxLines = 1)
+                FitLabel(applyLabel(vm), ButtonDefaults.textStyleFor(size))
             }
         }
     }

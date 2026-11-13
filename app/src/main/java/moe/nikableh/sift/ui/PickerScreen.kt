@@ -195,7 +195,7 @@ private fun AlbumCard(vm: SiftViewModel, album: Album, forSource: Boolean) {
         Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 14.dp)) {
             Text(album.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (album.count == 1) "1 photo" else "${album.count} photos",
+                if (album.count == 1) "1 photo" else "${album.count.grouped()} photos",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -245,7 +245,7 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                 Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp)) {
                     Text(dir.path, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        if (n == 1) "1 image in this folder" else "$n images in this folder",
+                        if (n == 1) "1 image in this folder" else "${n.grouped()} images in this folder",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

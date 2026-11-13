@@ -191,7 +191,7 @@ private fun OrderButtons(vm: SiftViewModel) {
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
-            ) { Text(label, maxLines = 1) }
+            ) { FitLabel(label) }
         }
     }
 }
