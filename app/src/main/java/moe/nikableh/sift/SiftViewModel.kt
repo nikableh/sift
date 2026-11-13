@@ -32,8 +32,8 @@ sealed interface Screen {
 
 sealed interface Dialog {
     data class Progress(val title: String, val total: Int, val cancellable: Boolean) : Dialog
-    data class MoveDone(val result: Mover.Result, val journal: File?) : Dialog
-    data class ConfirmUndoBatch(val journal: File, val count: Int) : Dialog
+    data class MoveDone(val result: Mover.Result, val batch: Batch?) : Dialog
+    data class ConfirmUndoBatch(val batch: Batch) : Dialog
     data class UndoFailed(val restored: Int, val failed: List<Pair<String, String>>) : Dialog
     data object ConfirmClear : Dialog
     data object SelectionsLocked : Dialog
@@ -58,6 +58,9 @@ class Selection(val file: File, val dest: String?)
 
 /** The Selections screen's rows for one folder, or for the skips when [dest] is null. */
 class SelectionGroup(val dest: String?, val rows: List<Selection>)
+
+/** One Move's journal: the photos it moved and the skips it hid. */
+data class Batch(val journal: File, val moved: Int, val skips: Int)
 
 /** Screen state in front of [Store], which Compose can't observe on its own. Main thread only. */
 class SiftViewModel(app: Application) : AndroidViewModel(app) {
@@ -171,7 +174,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private var cancel: AtomicBoolean? = null
     private var browseGeneration = 0
     private var batchKey: String? = null
-    private var batchSize = 0
+    private var batchMoved = 0
+    private var batchSkips = 0
 
     val current: Photo? get() = photos.getOrNull(index)
 
@@ -217,8 +221,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var isSkipped by mutableStateOf(false)
         private set
 
-    /** Journal and size of the last applied batch, for the undo entries. */
-    var lastBatchInfo by mutableStateOf<Pair<File, Int>?>(null)
+    /** The last applied batch, for the undo entries. */
+    var lastBatchInfo by mutableStateOf<Batch?>(null)
         private set
 
     init {
@@ -690,15 +694,24 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         sync()
     }
 
-    private fun lastBatch(): Pair<File, Int>? = try {
-        // One line per moved file. A big batch has 100,000 of them, so the count is kept until the file changes
+    private fun lastBatch(): Batch? = try {
+        // One line per moved file or hidden skip. A big batch has 100,000 of them, so the counts are kept until the file changes
         Store.journals().firstOrNull()?.let { file ->
             val key = "${file.name}:${file.length()}"
             if (key != batchKey) {
-                batchSize = file.useLines { lines -> lines.count { it.isNotBlank() } }
+                var moved = 0
+                var skips = 0
+                file.useLines { lines ->
+                    for (line in lines) {
+                        if (line.isBlank()) continue
+                        if (Mover.isMoveLine(line)) moved++ else skips++
+                    }
+                }
+                batchMoved = moved
+                batchSkips = skips
                 batchKey = key
             }
-            file to batchSize
+            Batch(file, batchMoved, batchSkips)
         }
     } catch (e: Exception) {
         null
@@ -718,25 +731,40 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun move() {
         if (busy || scanning || (Store.pending.isEmpty() && Store.skipped.isEmpty())) return
         val entries = Store.pending.map { it.key to it.value }
+        val skips = Store.skipped.toList()
         // Where to land afterwards: the first photo from here on that is neither moved nor hidden as skipped
         val landing = if (reviewing) {
             resumePath
         } else {
             photos.getOrNull(firstUnsorted(index))?.path
         }
+        val journal = Store.newJournal()
         if (entries.isEmpty()) {
             // Skips alone: nothing moves on disk, so the list is rebuilt without a scan
-            Store.hideSkipped()
-            undo.clear()
-            reviewing = false
-            flash = null
-            dialog = null
-            leaveSelections()
-            showAlbum(landing)
-            sync()
+            busy = true
+            viewModelScope.launch {
+                val logged = withContext(Dispatchers.IO) {
+                    try {
+                        Mover.logSkips(journal, skips)
+                        true
+                    } catch (e: Exception) {
+                        journal.delete()
+                        false
+                    }
+                }
+                busy = false
+                lastBatchInfo = if (logged) Batch(journal, 0, skips.size) else lastBatch()
+                Store.hideSkipped()
+                undo.clear()
+                reviewing = false
+                flash = null
+                dialog = null
+                leaveSelections()
+                showAlbum(landing)
+                sync()
+            }
             return
         }
-        val journal = Store.newJournal()
         val stop = AtomicBoolean(false)
         cancel = stop
         progress = 0
@@ -745,7 +773,15 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         Store.lastPath = landing
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                Mover.move(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
+                val r = Mover.move(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
+                // The skips get hidden only when something moved, so only then do they belong to the batch
+                if (r.moved > 0) {
+                    try {
+                        Mover.logSkips(journal, skips)
+                    } catch (e: Exception) {
+                    }
+                }
+                r
             }
             for (path in result.settled) Store.pending.remove(path)
             Store.compactPending()
@@ -754,7 +790,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             ImageLoader.clear()
             busy = false
             Store.scanVersion++
-            dialog = Dialog.MoveDone(result, Store.journals().firstOrNull().takeIf { result.moved > 0 })
+            dialog = Dialog.MoveDone(result, lastBatch().takeIf { result.moved > 0 })
             // What failed or was stopped is still queued, and then the list stays up to show it
             if (Store.pending.isEmpty()) leaveSelections()
             refresh()
@@ -765,24 +801,35 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         cancel?.set(true)
     }
 
-    fun undoBatch(journal: File, count: Int) {
+    fun undoBatch(batch: Batch) {
         // A folder read counts against the queue from another thread, so the queue holds still until it ends
         if (busy || scanning) return
         progress = 0
-        dialog = Dialog.Progress("Moving $count photos back", count, cancellable = false)
+        val title = if (batch.moved > 0) "Moving ${batch.moved} photos back" else "Bringing back ${batch.skips} skipped photos"
+        dialog = Dialog.Progress(title, batch.moved + batch.skips, cancellable = false)
         busy = true
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                Mover.undo(ctx, journal) { done -> if (done % 8 == 0) progress = done }
+                Mover.undo(ctx, batch.journal) { done -> if (done % 8 == 0) progress = done }
             }
             for ((path, dest) in result.restored) Store.pending[path] = dest
             Store.compactPending()
+            Store.reopenSkips(result.unskipped)
             undo.clear()
             ImageLoader.clear()
             busy = false
-            Store.lastPath = result.restored.lastOrNull()?.first
-            Store.scanVersion++
+            Store.lastPath = result.restored.lastOrNull()?.first ?: result.unskipped.lastOrNull()
+            if (result.restored.isNotEmpty() || result.failed.isNotEmpty()) {
+                Store.scanVersion++
+            } else if (scannedVersion == Store.scanVersion) {
+                // Skips alone, as in move: nothing moved on disk, so the list is rebuilt without a scan
+                reviewing = false
+                showAlbum(Store.lastPath)
+                sync()
+            }
             dialog = if (result.failed.isEmpty()) null else Dialog.UndoFailed(result.restored.size, result.failed)
+            val hasSelections = Store.pending.isNotEmpty() || Store.skipped.isNotEmpty()
+            if (hasSelections && screen != Screen.Selections) open(Screen.Selections)
             refresh()
         }
     }

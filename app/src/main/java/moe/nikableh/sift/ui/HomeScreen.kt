@@ -101,15 +101,19 @@ private fun Home(vm: SiftViewModel) {
             )
             AlbumCard(vm)
             DestinationsCard(vm)
-            vm.lastBatchInfo?.let { (journal, count) ->
+            vm.lastBatchInfo?.let { batch ->
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (count == 1) "Last batch moved 1 photo" else "Last batch moved ${count.grouped()} photos",
+                        when {
+                            batch.moved == 0 -> "Last batch hid ${skippedPhotos(batch.skips)}"
+                            batch.skips == 0 -> "Last batch moved ${photos(batch.moved)}"
+                            else -> "Last batch moved ${photos(batch.moved)} and hid ${batch.skips.grouped()} skipped"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(journal, count) }) { Text("Undo") }
+                    TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch) }) { Text("Undo") }
                 }
             }
             Spacer(Modifier.height(4.dp))

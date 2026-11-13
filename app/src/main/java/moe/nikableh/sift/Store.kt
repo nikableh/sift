@@ -221,6 +221,21 @@ object Store {
         compactSkipped()
     }
 
+    /**
+     * Undoing a Move makes the skips it hid wait for the next one again. A photo unhidden or
+     * filed since then keeps its new state, so queued and skipped still exclude each other
+     */
+    fun reopenSkips(paths: List<String>) {
+        var changed = false
+        for (path in paths) {
+            if (hidden.remove(path)) {
+                skipped.add(path)
+                changed = true
+            }
+        }
+        if (changed) compactSkipped()
+    }
+
     fun compactSkipped() {
         val text = skippedText(skipped, hidden)
         io.execute { writeAtomic(skippedFile, text) }
@@ -242,7 +257,7 @@ object Store {
     fun labelFor(destPath: String): String =
         dests.firstOrNull { it.path == destPath }?.label ?: File(destPath).name
 
-    /** Newest first. Each file lists the moves of one batch. */
+    /** Newest first. Each file lists the moves and hidden skips of one batch. */
     fun journals(): List<File> =
         (journalDir.listFiles { f -> f.name.endsWith(".log") } ?: emptyArray())
             .sortedByDescending { it.name }

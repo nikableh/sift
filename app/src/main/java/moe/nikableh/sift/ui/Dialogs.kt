@@ -72,21 +72,34 @@ fun Dialogs(vm: SiftViewModel) {
             text = { applyDetails(d.result)?.let { Text(it) } },
             confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
             dismissButton = {
-                val journal = d.journal
-                if (journal != null) {
-                    TextButton(onClick = { vm.undoBatch(journal, d.result.moved) }) { Text("Undo this batch") }
+                val batch = d.batch
+                if (batch != null) {
+                    TextButton(onClick = { vm.undoBatch(batch) }) { Text("Undo this batch") }
                 }
             },
         )
 
-        is Dialog.ConfirmUndoBatch -> Confirm(
-            icon = Icons.Rounded.History,
-            title = "Move ${d.count.grouped()} photos back?",
-            confirm = "Move back",
-            onConfirm = { vm.undoBatch(d.journal, d.count) },
-            onDismiss = close,
-        ) {
-            Text("They return to the folders they came from and go back into the queue, so you can change them and apply again.")
+        is Dialog.ConfirmUndoBatch -> {
+            val b = d.batch
+            Confirm(
+                icon = Icons.Rounded.History,
+                title = if (b.moved > 0) "Move ${photos(b.moved)} back?" else "Bring back ${skippedPhotos(b.skips)}?",
+                confirm = if (b.moved > 0) "Move back" else "Bring back",
+                onConfirm = { vm.undoBatch(b) },
+                onDismiss = close,
+            ) {
+                Text(
+                    when {
+                        b.moved == 0 ->
+                            "They return to the album as skipped and wait to be hidden again, so you can change them first."
+                        b.skips == 0 ->
+                            "They return to the folders they came from and go back into the queue, so you can change them and apply again."
+                        else ->
+                            "They return to the folders they came from and go back into the queue, so you can change them and apply again. " +
+                                "The ${skippedPhotos(b.skips)} it hid come back as skipped."
+                    },
+                )
+            }
         }
 
         is Dialog.UndoFailed -> AlertDialog(

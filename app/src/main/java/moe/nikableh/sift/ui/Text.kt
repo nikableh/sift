@@ -33,6 +33,10 @@ fun Int.grouped(): String {
     return format.format(this)
 }
 
+fun photos(n: Int) = if (n == 1) "1 photo" else "${n.grouped()} photos"
+
+fun skippedPhotos(n: Int) = if (n == 1) "1 skipped photo" else "${n.grouped()} skipped photos"
+
 /**
  * Short parts joined by dots. A part moves to the next line as a whole and only wraps inside when
  * it is wider than a line on its own, so "131,354 to move" never splits as "131,354 to / move"
