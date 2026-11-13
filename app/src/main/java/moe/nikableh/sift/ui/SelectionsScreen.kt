@@ -8,17 +8,21 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +45,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -50,13 +55,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Selection
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
+import java.io.File
+import androidx.compose.ui.window.Dialog as WindowDialog
 
 /** Every photo waiting for Apply, with where it goes. A list, so long folder names have room. */
 @Composable
@@ -65,6 +74,9 @@ fun SelectionsScreen(vm: SiftViewModel) {
     val ready = !vm.busy && !vm.scanning
     var collapsed by rememberSaveable(stateSaver = KeySetSaver) { mutableStateOf(emptySet<String>()) }
     val allCollapsed = groups.all { groupKey(it.dest) in collapsed }
+    var preview by remember { mutableStateOf<File?>(null) }
+
+    preview?.let { PhotoPreview(it) { preview = null } }
 
     Scaffold(
         topBar = {
@@ -121,7 +133,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                         }
                     }
                     if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
-                        SelectionRow(row, vm.source, ready) { vm.dropSelection(row) }
+                        SelectionRow(row, vm.source, ready, onPreview = { preview = row.file }) { vm.dropSelection(row) }
                     }
                 }
             }
@@ -179,14 +191,21 @@ fun Dot(color: Color?) {
 }
 
 @Composable
-private fun SelectionRow(row: Selection, source: String?, enabled: Boolean, onRemove: () -> Unit) {
+private fun SelectionRow(
+    row: Selection,
+    source: String?,
+    enabled: Boolean,
+    onPreview: () -> Unit,
+    onRemove: () -> Unit,
+) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             model = row.file,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .clickable(onClickLabel = "Preview photo", role = Role.Image, onClick = onPreview),
         )
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(row.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
@@ -201,6 +220,27 @@ private fun SelectionRow(row: Selection, source: String?, enabled: Boolean, onRe
             )
         }
         IconButton(onClick = onRemove, enabled = enabled) { Icon(Icons.Rounded.Close, "Remove from selections") }
+    }
+}
+
+/** The whole photo fitted to the screen, so a thumbnail's crop doesn't hide what is being moved. */
+@Composable
+private fun PhotoPreview(file: File, onDismiss: () -> Unit) {
+    WindowDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            Modifier.fillMaxSize()
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = file,
+                contentDescription = file.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
