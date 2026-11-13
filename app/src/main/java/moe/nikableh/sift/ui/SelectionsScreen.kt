@@ -1,6 +1,8 @@
 package moe.nikableh.sift.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +29,9 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.UnfoldLess
+import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -37,9 +42,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,6 +66,8 @@ import moe.nikableh.sift.Store
 fun SelectionsScreen(vm: SiftViewModel) {
     val groups = vm.selectionGroups
     val ready = !vm.busy && !vm.scanning
+    var collapsed by rememberSaveable(stateSaver = KeySetSaver) { mutableStateOf(emptySet<String>()) }
+    val allCollapsed = groups.all { groupKey(it.dest) in collapsed }
 
     Scaffold(
         topBar = {
@@ -65,6 +78,12 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 },
                 actions = {
                     if (groups.isNotEmpty()) {
+                        IconButton(onClick = {
+                            collapsed = if (allCollapsed) emptySet() else groups.mapTo(HashSet()) { groupKey(it.dest) }
+                        }) {
+                            if (allCollapsed) Icon(Icons.Rounded.UnfoldMore, "Expand all")
+                            else Icon(Icons.Rounded.UnfoldLess, "Collapse all")
+                        }
                         IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready) {
                             Icon(Icons.Rounded.ClearAll, "Clear selections")
                         }
@@ -96,8 +115,14 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     val dest = group.dest
                     val rows = group.rows
                     val color = destColor(vm, dest)
-                    item(key = "group:$dest", contentType = "group") { GroupHeader(dest, rows.size, color) }
-                    items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
+                    val key = groupKey(dest)
+                    val folded = key in collapsed
+                    item(key = "group:$dest", contentType = "group") {
+                        GroupHeader(dest, rows.size, color, folded) {
+                            collapsed = if (folded) collapsed - key else collapsed + key
+                        }
+                    }
+                    if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
                         SelectionRow(row, color, ready) { vm.dropSelection(row) }
                     }
                 }
@@ -112,9 +137,21 @@ private fun destColor(vm: SiftViewModel, dest: String?): Color? {
     return if (i >= 0) folderColor(i) else null
 }
 
+/** Folder paths are never empty, so the empty string can stand for the skipped group. */
+private fun groupKey(dest: String?) = dest ?: ""
+
+private val KeySetSaver = Saver<Set<String>, ArrayList<String>>(save = { ArrayList(it) }, restore = { it.toSet() })
+
 @Composable
-private fun GroupHeader(dest: String?, count: Int, color: Color?) {
-    Column(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp, end = 8.dp)) {
+private fun GroupHeader(dest: String?, count: Int, color: Color?, collapsed: Boolean, onToggle: () -> Unit) {
+    val turn by animateFloatAsState(if (collapsed) -90f else 0f, label = "chevron")
+    Column(
+        Modifier.fillMaxWidth()
+            .padding(top = 12.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", onClick = onToggle)
+            .padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Dot(color)
             Spacer(Modifier.width(8.dp))
@@ -124,6 +161,8 @@ private fun GroupHeader(dest: String?, count: Int, color: Color?) {
                 modifier = Modifier.weight(1f),
             )
             Text(count.grouped(), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.width(4.dp))
+            Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(turn))
         }
         // The whole path wraps instead of being cut, it is what tells two folders apart
         Text(
