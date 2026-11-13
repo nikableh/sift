@@ -37,7 +37,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,8 +53,7 @@ import moe.nikableh.sift.Store
 /** Every photo waiting for Apply, with where it goes. A list, so long folder names have room. */
 @Composable
 fun SelectionsScreen(vm: SiftViewModel) {
-    val list = vm.selectionList
-    val groups = remember(list) { list.groupBy { it.dest } }
+    val groups = vm.selectionGroups
     val ready = !vm.busy && !vm.scanning
 
     Scaffold(
@@ -66,7 +64,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                 },
                 actions = {
-                    if (list.isNotEmpty()) {
+                    if (groups.isNotEmpty()) {
                         IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready) {
                             Icon(Icons.Rounded.ClearAll, "Clear selections")
                         }
@@ -76,7 +74,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
         },
         bottomBar = { if (vm.selections > 0) ApplyBar(vm, ready) },
     ) { padding ->
-        if (list.isEmpty()) {
+        if (groups.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
                 Text(
                     "Nothing is waiting for Apply",
@@ -94,11 +92,13 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 ),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                for ((dest, rows) in groups) {
+                for (group in groups) {
+                    val dest = group.dest
+                    val rows = group.rows
                     val color = destColor(vm, dest)
                     item(key = "group:$dest", contentType = "group") { GroupHeader(dest, rows.size, color) }
                     items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
-                        SelectionRow(row, color, ready) { vm.dropSelection(row.file.path) }
+                        SelectionRow(row, color, ready) { vm.dropSelection(row) }
                     }
                 }
             }

@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.io.RandomAccessFile
 import java.util.concurrent.Executors
 
 class Dest(val path: String, var label: String)
@@ -23,7 +24,7 @@ object Store {
     private const val MAX_JOURNALS = 20
 
     private lateinit var dir: File
-    private var loaded = false
+    private var configLoaded = false
     private val io = Executors.newSingleThreadExecutor()
 
     var source: String? = null
@@ -34,16 +35,26 @@ object Store {
     var lastPickerDir: String? = null
 
     /** Photo path to destination folder path. Nothing on disk changes until Apply. */
-    val pending = LinkedHashMap<String, String>()
+    var pending = LinkedHashMap<String, String>()
+        private set
 
     /**
      * Photos the user looked at and chose to leave where they are, since the last Apply. Kept
      * apart from [pending], so a photo is either queued, skipped or not reviewed yet.
      */
-    val skipped = LinkedHashSet<String>()
+    var skipped = LinkedHashSet<String>()
+        private set
 
     /** Skips an Apply has committed. These photos stay out of the album until they are unhidden. */
-    val hidden = LinkedHashSet<String>()
+    var hidden = LinkedHashSet<String>()
+        private set
+
+    /**
+     * False until [useQueues] has the logs in. Until then the collections above are empty, and a
+     * change to them would be lost when the read ones replace them
+     */
+    var ready = false
+        private set
 
     /** Bumped whenever the photo list has to be scanned again. */
     var scanVersion = 0
@@ -53,13 +64,71 @@ object Store {
     private val skippedFile get() = File(dir, "skipped.log")
     private val journalDir get() = File(dir, "journals")
 
+    /** Reads the settings. The queue logs can hold 200,000 lines, so they come separately from [readQueues] */
     fun init(ctx: Context) {
-        if (loaded) return
+        if (configLoaded) return
         dir = ctx.applicationContext.filesDir
         loadConfig()
-        loadPending()
-        loadSkipped()
-        loaded = true
+        configLoaded = true
+    }
+
+    class Queues(
+        val pending: LinkedHashMap<String, String>,
+        val skipped: LinkedHashSet<String>,
+        val hidden: LinkedHashSet<String>,
+    )
+
+    /**
+     * Parses both logs into new collections and rewrites a log that holds removals, overrides or a
+     * torn line. It touches no shared state, so it can run off the main thread, where a big queue
+     * would take seconds
+     */
+    fun readQueues(): Queues {
+        val q = Queues(LinkedHashMap(), LinkedHashSet(), LinkedHashSet())
+        val pendingLines = readLines(pendingFile) { a ->
+            val dest = a.optString(1)
+            if (dest.isEmpty()) q.pending.remove(a.getString(0)) else q.pending[a.getString(0)] = dest
+        }
+        // One line per entry means nothing to drop, and rewriting a big queue anyway costs seconds.
+        // A file torn right before its last newline still parses, but the next append would join
+        // that line, so it gets rewritten too. Nothing else writes the logs before [useQueues]
+        if (pendingLines >= 0 && (pendingLines != q.pending.size || !endsWithNewline(pendingFile))) {
+            writeAtomic(pendingFile, pendingText(q.pending))
+        }
+        val skippedLines = readLines(skippedFile) { a ->
+            putSkip(q.skipped, q.hidden, a.getString(0), a.optInt(1, SKIP_FRESH))
+        }
+        if (skippedLines >= 0 && (skippedLines != q.skipped.size + q.hidden.size || !endsWithNewline(skippedFile))) {
+            writeAtomic(skippedFile, skippedText(q.skipped, q.hidden))
+        }
+        return q
+    }
+
+    /** Main thread: takes over what [readQueues] read. */
+    fun useQueues(q: Queues) {
+        pending = q.pending
+        skipped = q.skipped
+        hidden = q.hidden
+        ready = true
+    }
+
+    /** Counts the lines that aren't blank, or returns -1 when the file can't be read. */
+    private fun readLines(file: File, use: (JSONArray) -> Unit): Int {
+        var lines = 0
+        try {
+            file.forEachLine { line ->
+                if (line.isBlank()) return@forEachLine
+                lines++
+                try {
+                    use(JSONArray(line))
+                } catch (e: Exception) {
+                    // A torn last line after a crash is expected, skip it
+                }
+            }
+        } catch (e: Exception) {
+            return -1
+        }
+        return lines
     }
 
     private fun loadConfig() {
@@ -95,25 +164,6 @@ object Store {
         io.execute { writeAtomic(configFile, text) }
     }
 
-    private fun loadPending() {
-        pending.clear()
-        try {
-            pendingFile.forEachLine { line ->
-                if (line.isBlank()) return@forEachLine
-                try {
-                    val a = JSONArray(line)
-                    val dest = a.optString(1)
-                    if (dest.isEmpty()) pending.remove(a.getString(0)) else pending[a.getString(0)] = dest
-                } catch (e: Exception) {
-                    // A torn last line after a crash is expected, skip it
-                }
-            }
-        } catch (e: Exception) {
-            return
-        }
-        compactPending()
-    }
-
     /** Appends one decision to the log, so a tap costs the same at 10 or 10000 queued photos. */
     fun setPending(path: String, dest: String?) {
         if (dest == null) pending.remove(path) else pending[path] = dest
@@ -127,32 +177,17 @@ object Store {
     }
 
     fun compactPending() {
-        val sb = StringBuilder()
-        for ((path, dest) in pending) sb.append(JSONArray().put(path).put(dest).toString()).append('\n')
-        val text = sb.toString()
+        val text = pendingText(pending)
         io.execute { writeAtomic(pendingFile, text) }
     }
 
-    private fun loadSkipped() {
-        skipped.clear()
-        hidden.clear()
-        try {
-            skippedFile.forEachLine { line ->
-                if (line.isBlank()) return@forEachLine
-                try {
-                    val a = JSONArray(line)
-                    putSkip(a.getString(0), a.optInt(1, SKIP_FRESH))
-                } catch (e: Exception) {
-                    // A torn last line after a crash is expected, skip it
-                }
-            }
-        } catch (e: Exception) {
-            return
-        }
-        compactSkipped()
+    private fun pendingText(pending: Map<String, String>): String {
+        val sb = StringBuilder()
+        for ((path, dest) in pending) sb.append(JSONArray().put(path).put(dest).toString()).append('\n')
+        return sb.toString()
     }
 
-    private fun putSkip(path: String, state: Int) {
+    private fun putSkip(skipped: MutableSet<String>, hidden: MutableSet<String>, path: String, state: Int) {
         skipped.remove(path)
         hidden.remove(path)
         when (state) {
@@ -168,7 +203,7 @@ object Store {
     }
 
     fun setSkip(path: String, state: Int) {
-        putSkip(path, state)
+        putSkip(skipped, hidden, path, state)
         val line = JSONArray().put(path).put(state).toString() + "\n"
         io.execute {
             try {
@@ -187,11 +222,15 @@ object Store {
     }
 
     fun compactSkipped() {
+        val text = skippedText(skipped, hidden)
+        io.execute { writeAtomic(skippedFile, text) }
+    }
+
+    private fun skippedText(skipped: Set<String>, hidden: Set<String>): String {
         val sb = StringBuilder()
         for (path in skipped) sb.append(JSONArray().put(path).put(SKIP_FRESH).toString()).append('\n')
         for (path in hidden) sb.append(JSONArray().put(path).put(SKIP_HIDDEN).toString()).append('\n')
-        val text = sb.toString()
-        io.execute { writeAtomic(skippedFile, text) }
+        return sb.toString()
     }
 
     fun counts(): Map<String, Int> {
@@ -212,6 +251,15 @@ object Store {
         journalDir.mkdirs()
         journals().drop(MAX_JOURNALS - 1).forEach { it.delete() }
         return File(journalDir, "batch-${System.currentTimeMillis()}.log")
+    }
+
+    private fun endsWithNewline(f: File): Boolean = try {
+        f.length() == 0L || RandomAccessFile(f, "r").use {
+            it.seek(it.length() - 1)
+            it.read() == '\n'.code
+        }
+    } catch (e: Exception) {
+        false
     }
 
     private fun writeAtomic(target: File, text: String) {
