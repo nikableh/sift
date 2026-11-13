@@ -54,7 +54,6 @@ import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -578,7 +577,6 @@ private fun MoreMenu(vm: SiftViewModel, idle: Boolean) {
     val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     val photo = vm.current
-    val batch = vm.lastBatchInfo
     val hasPhotos = vm.photos.isNotEmpty()
     // A review list can run out of things to offer, and an empty menu would open as a blank box
     val hasItems = !vm.reviewing || hasPhotos || vm.hiddenHere > 0 || vm.canUndo
@@ -616,11 +614,6 @@ private fun MoreMenu(vm: SiftViewModel, idle: Boolean) {
                 if (vm.selections > 0) {
                     item("Clear selections (${vm.selections.grouped()})", Icons.Rounded.ClearAll) {
                         vm.dialog = Dialog.ConfirmClear
-                    }
-                }
-                if (batch != null) {
-                    item("Undo last applied batch (${batch.second.grouped()})", Icons.Rounded.History) {
-                        vm.dialog = Dialog.ConfirmUndoBatch(batch.first, batch.second)
                     }
                 }
             }
