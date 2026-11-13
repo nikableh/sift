@@ -35,7 +35,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -205,7 +205,7 @@ private fun AlbumStats(count: String, stats: String, progress: Float, modifier: 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(count, style = MaterialTheme.typography.bodyLarge)
         Text(stats, style = MaterialTheme.typography.titleMedium)
-        LinearWavyProgressIndicator(
+        LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
         )
