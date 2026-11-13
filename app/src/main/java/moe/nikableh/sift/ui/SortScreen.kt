@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.Settings
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
@@ -13,6 +14,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,15 +85,20 @@ import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -100,6 +109,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Gate
@@ -353,6 +364,16 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             )
         } else {
             val date = dateFormat.format(Date(photo.mtime))
+            // Persistent, so a long name stays up until a tap outside instead of timing out mid-read
+            val tooltip = rememberTooltipState(isPersistent = true)
+            val scope = rememberCoroutineScope()
+            // The popup closes itself on any tap outside it, the header included, so a tap that just closed it must not
+            // reopen it. Which window sees the tap first is not fixed, so compare times instead of reading isVisible.
+            var pressedAt by remember { mutableLongStateOf(0L) }
+            var hiddenAt by remember { mutableLongStateOf(0L) }
+            LaunchedEffect(tooltip) {
+                snapshotFlow { tooltip.isVisible }.drop(1).collect { if (!it) hiddenAt = SystemClock.uptimeMillis() }
+            }
             // TooltipBox does not pass its modifier to the node the Row measures, so the weight sits on a wrapper
             Box(Modifier.weight(1f)) {
                 TooltipBox(
@@ -360,10 +381,27 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                     tooltip = {
                         RichTooltip(title = { Text(photo.file.name) }) { Text(date) }
                     },
-                    // Persistent, so a long name stays up until a tap outside instead of timing out mid-read
-                    state = rememberTooltipState(isPersistent = true),
+                    state = tooltip,
+                    // Its own input only reacts to a long press, and only over the text it measured
+                    enableUserInput = false,
                 ) {
-                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .pointerInput(Unit) {
+                                awaitEachGesture {
+                                    pressedAt = awaitFirstDown(false, PointerEventPass.Initial).uptimeMillis
+                                }
+                            }
+                            .clickable {
+                                when {
+                                    tooltip.isVisible -> tooltip.dismiss()
+                                    hiddenAt < pressedAt - 200 -> scope.launch { tooltip.show() }
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                    ) {
                         val parent = if (vm.recursive) "  ·  ${photo.file.parentFile?.name}" else ""
                         val list = if (vm.reviewing) "Skipped " else ""
                         Text(
