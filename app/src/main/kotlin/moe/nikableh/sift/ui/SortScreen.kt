@@ -78,9 +78,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
@@ -110,6 +108,10 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -387,7 +389,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 // TooltipBox does not pass its modifier to the node the Row measures, so the weight sits on a wrapper
                 Box(Modifier.weight(1f)) {
                     TooltipBox(
-                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
+                        positionProvider = rememberCenteredBelowPositionProvider(),
                         tooltip = {
                             RichTooltip(title = { Text(photo.file.name) }) { Text(date) }
                         },
@@ -451,6 +453,32 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
                 FitLabel(if (fits) withCount else "Review", style)
+            }
+        }
+    }
+}
+
+// The Material provider pins a rich tooltip to the anchor's start edge, which under a full-width header leaves it
+// flush against the back button. Centering keeps it under the text it explains.
+@Composable
+private fun rememberCenteredBelowPositionProvider(spacing: Dp = 4.dp, margin: Dp = 16.dp): PopupPositionProvider {
+    val density = LocalDensity.current
+    return remember(density, spacing, margin) {
+        val gap = with(density) { spacing.roundToPx() }
+        val edge = with(density) { margin.roundToPx() }
+        object : PopupPositionProvider {
+            override fun calculatePosition(
+                anchorBounds: IntRect,
+                windowSize: IntSize,
+                layoutDirection: LayoutDirection,
+                popupContentSize: IntSize,
+            ): IntOffset {
+                val centered = anchorBounds.center.x - popupContentSize.width / 2
+                val x = centered.coerceIn(edge, maxOf(edge, windowSize.width - edge - popupContentSize.width))
+                val below = anchorBounds.bottom + gap
+                val y = if (below + popupContentSize.height <= windowSize.height) below
+                else maxOf(0, anchorBounds.top - gap - popupContentSize.height)
+                return IntOffset(x, y)
             }
         }
     }
