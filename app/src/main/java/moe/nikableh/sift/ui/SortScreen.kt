@@ -702,11 +702,12 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                 view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                 vm.assign(dest)
             },
-            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(22.dp), pressedShape = RoundedCornerShape(10.dp)),
+            // Past about 16dp the corner curve reaches the badge and the selection ring cuts through it
+            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp), pressedShape = RoundedCornerShape(6.dp)),
             colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = Color.White),
             // A dark ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel
             border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
-            contentPadding = PaddingValues(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            contentPadding = PaddingValues(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             Column(Modifier.fillMaxSize()) {
