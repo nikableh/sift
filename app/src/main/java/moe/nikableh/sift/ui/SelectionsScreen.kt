@@ -103,11 +103,11 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 8.dp,
-                    top = padding.calculateTopPadding(),
                     // The FAB floats over the list, so the last row needs room to scroll out from under it
                     bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
                 ),
-                modifier = Modifier.fillMaxSize(),
+                // Not content padding: a sticky header pins to the viewport's edge, which would be under the app bar
+                modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
             ) {
                 for (group in groups) {
                     val dest = group.dest
@@ -115,13 +115,13 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     val color = destColor(vm, dest)
                     val key = groupKey(dest)
                     val folded = key in collapsed
-                    item(key = "group:$dest", contentType = "group") {
+                    stickyHeader(key = "group:$dest", contentType = "group") {
                         GroupHeader(dest, rows.size, color, folded) {
                             collapsed = if (folded) collapsed - key else collapsed + key
                         }
                     }
                     if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
-                        SelectionRow(row, color, ready) { vm.dropSelection(row) }
+                        SelectionRow(row, vm.source, ready) { vm.dropSelection(row) }
                     }
                 }
             }
@@ -145,6 +145,8 @@ private fun GroupHeader(dest: String?, count: Int, color: Color?, collapsed: Boo
     val turn by animateFloatAsState(if (collapsed) -90f else 0f, label = "chevron")
     Column(
         Modifier.fillMaxWidth()
+            // Opaque, so rows don't show through while the header is pinned
+            .background(MaterialTheme.colorScheme.background)
             .padding(top = 12.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", onClick = onToggle)
@@ -177,7 +179,7 @@ fun Dot(color: Color?) {
 }
 
 @Composable
-private fun SelectionRow(row: Selection, color: Color?, enabled: Boolean, onRemove: () -> Unit) {
+private fun SelectionRow(row: Selection, source: String?, enabled: Boolean, onRemove: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             model = row.file,
@@ -187,17 +189,11 @@ private fun SelectionRow(row: Selection, color: Color?, enabled: Boolean, onRemo
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         )
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Dot(color)
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    row.dest?.let { "To ${Store.labelFor(it)}" } ?: "Skipped, gets hidden",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
             Text(row.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            Text(
-                row.file.parent ?: "",
+            // Only a recursive scan puts photos outside the album's own folder
+            val parent = row.file.parent
+            if (parent != null && parent != source) Text(
+                if (source != null && parent.startsWith("$source/")) parent.substring(source.length + 1) else parent,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
