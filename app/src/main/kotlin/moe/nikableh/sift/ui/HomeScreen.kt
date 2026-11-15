@@ -180,7 +180,7 @@ private fun DestinationsCard(vm: SiftViewModel) {
 }
 
 /** Past this many, the albums after them are summed up in one line that a tap unfolds. */
-private const val SHOWN_ALBUMS = 4
+private const val SHOWN_ALBUMS = 3
 
 /** The albums being sorted, with how far along they are. */
 @Composable
