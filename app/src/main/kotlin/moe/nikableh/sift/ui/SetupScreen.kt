@@ -116,7 +116,10 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                             // Paths wrap instead of being cut, the whole path matters here
                             Text(path)
                             // An album added a moment ago has no counts until it has been read
-                            if (stat != null && !vm.scanning) Text("${photos(stat.total)}  ·  ${stat.left.grouped()} left")
+                            if (stat != null && !vm.scanning) {
+                                // What is queued only gets a mention when there is something, or the line says one number twice
+                                Text(if (stat.queued > 0) "${photos(stat.total)}  ·  ${stat.queued.grouped()} queued" else photos(stat.total))
+                            }
                         }
                     },
                     trailingContent = {
