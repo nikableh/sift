@@ -64,8 +64,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.layout.SubcomposeLayout
-import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -107,57 +105,33 @@ fun HomeScreen(vm: SiftViewModel) {
 
 @Composable
 private fun Home(vm: SiftViewModel) {
-    // Whether the album list is unfolded. Kept above the layouts that get tried out for size, so they share it
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    val listed = if (vm.sources.size > 1) vm.sources.size else 0
     Scaffold(bottomBar = { Actions(vm) }) { padding ->
-        // Padding before the scroll ends the viewport above the buttons, which have no background
-        BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
-            val viewport = constraints.maxHeight
-            // Folded, the page is meant to fit the screen without scrolling. How many album rows that
-            // leaves room for depends on the font size, the folder names and whether Review is showing,
-            // so the page is measured with fewer and fewer rows until it fits
-            SubcomposeLayout(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { outer ->
-                val width = Constraints.fixedWidth(outer.maxWidth)
-                var rows = minOf(SHOWN_ALBUMS, listed)
-                var page: Placeable
-                while (true) {
-                    val shown = rows
-                    page = subcompose(if (expanded) "all" else shown) {
-                        HomePage(vm, shown, expanded) { expanded = !expanded }
-                    }.single().measure(width)
-                    if (expanded || rows == 0 || page.height <= viewport) break
-                    rows--
+        Column(
+            // Padding before the scroll ends the viewport above the buttons, which have no background
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "Sift",
+                style = MaterialTheme.typography.displaySmallEmphasized,
+                modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
+            )
+            AlbumCard(vm)
+            DestinationsCard(vm)
+            vm.lastBatchInfo?.let { batch ->
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Last batch moved ${photos(batch.moved)}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch) }) { Text("Undo") }
                 }
-                layout(page.width, page.height) { page.place(0, 0) }
             }
+            Spacer(Modifier.height(4.dp))
         }
-    }
-}
-
-/** Home's content with at most [albumRows] albums listed while their list is folded. */
-@Composable
-private fun HomePage(vm: SiftViewModel, albumRows: Int, expanded: Boolean, onToggle: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            "Sift",
-            style = MaterialTheme.typography.displaySmallEmphasized,
-            modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
-        )
-        AlbumCard(vm, albumRows, expanded, onToggle)
-        DestinationsCard(vm)
-        vm.lastBatchInfo?.let { batch ->
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Last batch moved ${photos(batch.moved)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch) }) { Text("Undo") }
-            }
-        }
-        Spacer(Modifier.height(4.dp))
     }
 }
 
@@ -205,12 +179,9 @@ private fun DestinationsCard(vm: SiftViewModel) {
     }
 }
 
-/** The most albums listed while the list is folded. Fewer are when the screen has no room for them. */
-private const val SHOWN_ALBUMS = 3
-
 /** The albums being sorted, with how far along they are. */
 @Composable
-private fun AlbumCard(vm: SiftViewModel, albumRows: Int, expanded: Boolean, onToggle: () -> Unit) {
+private fun AlbumCard(vm: SiftViewModel) {
     val sources = vm.sources
     if (sources.isEmpty()) return
     val albums = vm.albumStats
@@ -245,9 +216,7 @@ private fun AlbumCard(vm: SiftViewModel, albumRows: Int, expanded: Boolean, onTo
                 else -> AlbumStats(total, queuedHere, vm.leftHere)
             }
             // One album is the whole card already. The rows match the albums only once those have been read
-            if (!vm.scanning && sources.size > 1 && albums.map { it.path } == sources) {
-                AlbumRows(albums, albumRows, expanded, onToggle)
-            }
+            if (!vm.scanning && sources.size > 1 && albums.map { it.path } == sources) AlbumRows(albums)
         }
     }
 }
@@ -365,38 +334,26 @@ private fun Cover(file: File?, placeholder: Boolean, modifier: Modifier, shape: 
     }
 }
 
-/** What is left in each album. Folded, it lists [maxRows] of them and counts the rest in a line that a tap unfolds. */
+/**
+ * What is left in each album, behind a line that unfolds it. Folded is how it starts, so the card is
+ * the same height at any number of albums and Home fits a screen. Whether it is unfolded is kept
+ */
 @Composable
-private fun AlbumRows(albums: List<AlbumStat>, maxRows: Int, expanded: Boolean, onToggle: () -> Unit) {
-    val shown = if (expanded) albums.size else minOf(maxRows, albums.size)
-    val hidden = albums.size - shown
+private fun AlbumRows(albums: List<AlbumStat>) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-        for (album in albums.take(shown)) AlbumRow(album)
-        if (expanded || hidden > 0) {
-            Row(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable(onClickLabel = if (expanded) "Show fewer albums" else "Show all albums", onClick = onToggle)
-                    .heightIn(min = 48.dp)
-                    // Lines up with the album names
-                    .padding(start = 48.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    when {
-                        expanded -> "Show fewer"
-                        // Not even one row fits, so the line stands for the whole list
-                        shown == 0 -> "${albums.size} albums"
-                        hidden == 1 -> "+1 more album"
-                        else -> "+$hidden more albums"
-                    },
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(20.dp))
-            }
+        Row(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable(onClickLabel = if (expanded) "Hide the albums" else "Show each album") { expanded = !expanded }
+                .heightIn(min = 48.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("By album", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+            Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(20.dp))
         }
+        if (expanded) for (album in albums) AlbumRow(album)
     }
 }
 
