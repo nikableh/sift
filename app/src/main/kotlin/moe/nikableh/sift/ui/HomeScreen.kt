@@ -253,7 +253,14 @@ private fun AlbumHeader(vm: SiftViewModel) {
         }
         // The card itself opens sorting, so the way to change what is sorted sits on it as its own button
         val edit = @Composable {
-            FilledTonalIconButton(onClick = { vm.open(Screen.Setup) }, shapes = IconButtonDefaults.shapes()) {
+            FilledTonalIconButton(
+                onClick = { vm.open(Screen.Setup) },
+                shapes = IconButtonDefaults.shapes(),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = cardInsetColor(),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
                 Icon(Icons.Rounded.Edit, "Change albums")
             }
         }
@@ -388,18 +395,19 @@ private fun AlbumRow(album: AlbumStat) {
             LinearProgressIndicator(
                 progress = { if (album.total == 0) 0f else album.queued / album.total.toFloat() },
                 modifier = Modifier.fillMaxWidth(),
-                trackColor = cardTrackColor(),
+                trackColor = cardInsetColor(),
             )
         }
     }
 }
 
 /**
- * The default track is a container tone, which all but vanishes on the album card's own container
- * tone. A tint of the card's text colour shows in light and dark alike
+ * What sits on the album card as a quiet shape of its own: the empty part of a progress bar and the
+ * edit button. Their default container tones all but vanish on the card's container tone, and a
+ * tint of the card's text reads as a bar that is already full. The page's own colour does neither
  */
 @Composable
-private fun cardTrackColor(): Color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.24f)
+private fun cardInsetColor(): Color = MaterialTheme.colorScheme.surface
 
 @Composable
 private fun AlbumStats(total: Int, queued: Int, left: Int, modifier: Modifier = Modifier) {
@@ -412,7 +420,7 @@ private fun AlbumStats(total: Int, queued: Int, left: Int, modifier: Modifier = 
         LinearProgressIndicator(
             progress = { if (total == 0) 0f else queued / total.toFloat() },
             modifier = Modifier.fillMaxWidth(),
-            trackColor = cardTrackColor(),
+            trackColor = cardInsetColor(),
         )
     }
 }
