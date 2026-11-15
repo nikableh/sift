@@ -320,7 +320,8 @@ private fun Covers(files: List<File?>, placeholder: Boolean) {
 @Composable
 private fun Cover(file: File?, placeholder: Boolean, modifier: Modifier, shape: Shape) {
     Box(
-        modifier.clip(shape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        // An album without a photo to show gets a blank cover, which needs to stand off the card like the bars do
+        modifier.clip(shape).background(cardInsetColor()),
         contentAlignment = Alignment.Center,
     ) {
         if (file != null) {
@@ -397,8 +398,8 @@ private fun AlbumRow(album: AlbumStat) {
 }
 
 /**
- * What sits on the album card as a quiet shape of its own: the empty part of a progress bar and the
- * edit button. Their default container tones all but vanish on the card's container tone, and a
+ * What sits on the album card as a quiet shape of its own: the empty part of a progress bar, a
+ * blank cover and the edit button. Their default container tones all but vanish on the card's container tone, and a
  * tint of the card's text reads as a bar that is already full. The page's own colour does neither
  */
 @Composable
