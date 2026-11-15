@@ -81,13 +81,16 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = padding.calculateBottomPadding() + 24.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = padding.calculateTopPadding(),
+                bottom = padding.calculateBottomPadding() + 24.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
-            // Not content padding: a sticky header pins to the viewport's edge, which would be under the app bar
-            modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
         ) {
-            // Each header carries its list's Add button and stays pinned, so adding is in reach at any list length
-            stickyHeader(key = "header:albums") {
+            // Each header carries the button that adds to its list
+            item(key = "header:albums") {
                 SectionHeader("Albums to sort", "Add albums") { vm.pickAlbums() }
             }
             if (sources.isEmpty()) {
@@ -150,7 +153,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 ) { Text("Order") }
             }
 
-            stickyHeader(key = "header:destinations") {
+            item(key = "header:destinations") {
                 SectionHeader("Destination folders", "Add destinations") { vm.open(Screen.Picker(forSource = false)) }
             }
             item(key = "destinations:about") {
@@ -196,10 +199,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
 @Composable
 private fun SectionHeader(text: String, addLabel: String, onAdd: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth()
-            // Opaque, so rows don't show through while the header is pinned
-            .background(MaterialTheme.colorScheme.background)
-            .padding(start = 4.dp, top = 12.dp, bottom = 6.dp),
+        Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
