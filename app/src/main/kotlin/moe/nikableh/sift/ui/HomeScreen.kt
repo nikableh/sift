@@ -28,7 +28,6 @@ import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -101,16 +100,11 @@ private fun Home(vm: SiftViewModel) {
                 modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
             )
             AlbumCard(vm)
-            if (!vm.scanning && vm.hiddenHere > 0) SkippedCard(vm)
             DestinationsCard(vm)
             vm.lastBatchInfo?.let { batch ->
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        when {
-                            batch.moved == 0 -> "Last batch hid ${skippedPhotos(batch.skips)}"
-                            batch.skips == 0 -> "Last batch moved ${photos(batch.moved)}"
-                            else -> "Last batch moved ${photos(batch.moved)} and hid ${batch.skips.grouped()} skipped"
-                        },
+                        "Last batch moved ${photos(batch.moved)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -167,45 +161,16 @@ private fun DestinationsCard(vm: SiftViewModel) {
     }
 }
 
-/** The skips a Move took out of the album. The way to look through them and bring some back. */
-@Composable
-private fun SkippedCard(vm: SiftViewModel) {
-    val hidden = vm.hiddenHere
-    Card(
-        onClick = { vm.open(Screen.Skipped) },
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.SkipNext, null)
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    if (hidden == 1) "1 skipped photo" else "${hidden.grouped()} skipped photos",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    "Left in the album's folder and hidden from sorting",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
-        }
-    }
-}
-
 /** The album being sorted, with how far along it is. */
 @Composable
 private fun AlbumCard(vm: SiftViewModel) {
     val source = vm.source ?: return
-    val total = vm.total
-    val hidden = vm.hiddenHere
+    val total = vm.photos.size
     val queuedHere = vm.queuedHere
-    val skippedHere = vm.skippedHere
     Card(
         // Opens sorting like the button at the bottom. A tap does nothing while that button is
         // disabled, and the card stays enabled so it doesn't grey out during a folder read
-        onClick = { if (!vm.scanning && !vm.busy && total + hidden > 0) vm.open(Screen.Sort) },
+        onClick = { if (!vm.scanning && !vm.busy && total > 0) vm.open(Screen.Sort) },
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
@@ -214,24 +179,15 @@ private fun AlbumCard(vm: SiftViewModel) {
             when {
                 vm.scanning -> Box(contentAlignment = Alignment.CenterStart) {
                     // An invisible copy of the loaded stats gives the indicator the same height at any font scale
-                    AlbumStats(countParts(0, 0), 0, 0, 0, 0f, Modifier.alpha(0f).clearAndSetSemantics {})
+                    AlbumStats(0, 0, 0, Modifier.alpha(0f).clearAndSetSemantics {})
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         LoadingIndicator(Modifier.size(28.dp))
                         Spacer(Modifier.width(10.dp))
                         Text("Reading the album", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
-                total == 0 && hidden == 0 -> Text("No photos in this album", style = MaterialTheme.typography.bodyLarge)
-                total == 0 -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Nothing left to sort", style = MaterialTheme.typography.titleMedium)
-                    Text(hiddenLine(hidden), style = MaterialTheme.typography.bodyLarge)
-                }
-                // Skips a Move has committed are out of the album, so they are out of the total too.
-                // Skipped photos were looked at and left in place, so they no longer count as left
-                else -> AlbumStats(
-                    countParts(total, hidden), queuedHere, skippedHere, vm.leftHere,
-                    (queuedHere + skippedHere) / total.toFloat(),
-                )
+                total == 0 -> Text("No photos in this album", style = MaterialTheme.typography.bodyLarge)
+                else -> AlbumStats(total, queuedHere, vm.leftHere)
             }
         }
     }
@@ -292,15 +248,17 @@ private fun Cover(file: File?, placeholder: Boolean) {
 }
 
 @Composable
-private fun AlbumStats(count: List<String>, queued: Int, skipped: Int, left: Int, progress: Float, modifier: Modifier = Modifier) {
+private fun AlbumStats(total: Int, queued: Int, left: Int, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        DotParts(count, style = MaterialTheme.typography.bodyMedium)
+        Text(photos(total), style = MaterialTheme.typography.bodyMedium)
         StatGrid {
             Stat(queued, "queued")
-            Stat(skipped, "skipped")
             Stat(left, "left")
         }
-        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(
+            progress = { if (total == 0) 0f else queued / total.toFloat() },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
@@ -337,13 +295,6 @@ private fun Stat(value: Int, label: String) {
     }
 }
 
-private fun countParts(total: Int, hidden: Int): List<String> = listOfNotNull(
-    if (total == 1) "1 photo" else "${total.grouped()} photos",
-    hiddenLine(hidden).takeIf { hidden > 0 },
-)
-
-private fun hiddenLine(n: Int) = if (n == 1) "1 skipped hidden" else "${n.grouped()} skipped hidden"
-
 /** Start and Review sit at the bottom, in thumb reach. */
 @Composable
 private fun Actions(vm: SiftViewModel) {
@@ -374,7 +325,7 @@ private fun Actions(vm: SiftViewModel) {
         val start = @Composable { modifier: Modifier ->
             Button(
                 onClick = { vm.open(Screen.Sort) },
-                enabled = ready && vm.total + vm.hiddenHere > 0,
+                enabled = ready && vm.photos.isNotEmpty(),
                 shapes = ButtonDefaults.shapes(),
                 modifier = modifier.height(size),
             ) {
@@ -382,7 +333,7 @@ private fun Actions(vm: SiftViewModel) {
                 Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                 val style = ButtonDefaults.textStyleFor(size)
                 FitLabel(
-                    if (vm.index > 0 || vm.queuedHere > 0 || vm.skippedHere > 0 || vm.hiddenHere > 0) "Continue sorting" else "Start sorting",
+                    if (vm.index > 0 || vm.queuedHere > 0) "Continue sorting" else "Start sorting",
                     style,
                 )
             }
@@ -398,11 +349,11 @@ private fun Actions(vm: SiftViewModel) {
         }
         if (landscape) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (vm.selections > 0) review(Modifier.weight(1f))
+                if (queued > 0) review(Modifier.weight(1f))
                 start(Modifier.weight(1f))
             }
         } else {
-            if (vm.selections > 0) review(Modifier.fillMaxWidth())
+            if (queued > 0) review(Modifier.fillMaxWidth())
             start(Modifier.fillMaxWidth())
         }
     }

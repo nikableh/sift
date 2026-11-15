@@ -27,7 +27,6 @@ sealed interface Screen {
     data object Sort : Screen
     data object Setup : Screen
     data object Selections : Screen
-    data object Skipped : Screen
     data class Picker(val forSource: Boolean) : Screen
 }
 
@@ -38,7 +37,6 @@ sealed interface Dialog {
     data class UndoFailed(val restored: Int, val failed: List<Pair<String, String>>) : Dialog
     data object ConfirmClear : Dialog
     data object SelectionsLocked : Dialog
-    data class ConfirmUnhide(val count: Int) : Dialog
     data class ConfirmDiscardPicks(val count: Int) : Dialog
     data class ConfirmRemoveDest(val dest: Dest, val queued: Int) : Dialog
     data class RenameDest(val dest: Dest) : Dialog
@@ -54,31 +52,17 @@ class Folder(val dir: File, val title: String, val subtitle: String)
 
 class Flash(val id: Int, val label: String, val colorIndex: Int)
 
-/** One photo waiting for Move. A null [dest] is a skip, which Move hides. */
-class Selection(val file: File, val dest: String?)
+/** One photo waiting for Move. */
+class Selection(val file: File, val dest: String)
 
-/** The Selections screen's rows for one folder, or for the skips when [dest] is null. */
-class SelectionGroup(val dest: String?, val rows: List<Selection>)
+/** The Selections screen's rows for one folder. */
+class SelectionGroup(val dest: String, val rows: List<Selection>)
 
-/** One Move's journal: the photos it moved and the skips it hid. */
-data class Batch(val journal: File, val moved: Int, val skips: Int)
+/** One Move's journal. */
+data class Batch(val journal: File, val moved: Int)
 
 /** Screen state in front of [Store], which Compose can't observe on its own. Main thread only. */
 class SiftViewModel(app: Application) : AndroidViewModel(app) {
-    private companion object {
-        /** Sits next to Store's SKIP_ values, which [stateOf] passes through for photos that aren't queued */
-        const val QUEUED = 3
-    }
-
-    /** One reversible step. A photo is queued for a folder, marked skipped, or neither. */
-    private class UndoEntry(
-        val path: String,
-        val before: String?,
-        val after: String?,
-        val skipBefore: Int = Store.SKIP_NONE,
-        val skipAfter: Int = Store.SKIP_NONE,
-    )
-
     private val ctx get() = getApplication<Application>()
 
     val backStack = mutableStateListOf<Screen>(Screen.Home)
@@ -98,12 +82,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     var allowed by mutableStateOf(false)
         private set
-    /** The photos to sort: the album without its hidden skips. */
     var photos by mutableStateOf<List<Photo>>(emptyList())
-        private set
-
-    /** What the Skipped screen shows: this album's hidden skips, in album order. */
-    var hiddenPhotos by mutableStateOf<List<Photo>>(emptyList())
         private set
 
     /** Equal to photos.size on the end card. */
@@ -120,8 +99,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Destination folder queued for the photo on screen. */
     var assigned by mutableStateOf<String?>(null)
-        private set
-    var canUndo by mutableStateOf(false)
         private set
     var bitmap by mutableStateOf<Bitmap?>(null)
         private set
@@ -158,17 +135,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var imagesHere by mutableIntStateOf(0)
         private set
 
-    /** The whole scan, hidden skips included. */
-    private var all: List<Photo> = emptyList()
-    private var inAll: Set<String> = emptySet()
     private var indexOf: Map<String, Int> = emptyMap()
 
-    /** Positions in [photos] that are neither queued nor skipped, so finding the next one skips 64 at a time. */
+    /** Positions in [photos] that aren't queued, so finding the next one skips 64 at a time. */
     private var unsorted = BitSet()
-
-    /** Set when a skip was undone, which leaves [photos] one photo short until the Skipped screen closes. */
-    private var albumStale = false
-    private val undo = ArrayDeque<UndoEntry>()
     private var scannedVersion = -1
     private var lastAssignAt = 0L
     private var flashId = 0
@@ -176,7 +146,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private var browseGeneration = 0
     private var batchKey: String? = null
     private var batchMoved = 0
-    private var batchSkips = 0
 
     val current: Photo? get() = photos.getOrNull(index)
 
@@ -194,32 +163,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var queuedHere by mutableIntStateOf(0)
         private set
 
-    /** Photos of this album skipped since the last Move. They stay in the list until the next one. */
-    var skippedHere by mutableIntStateOf(0)
-        private set
+    val leftHere: Int get() = photos.size - queuedHere
 
-    /** Skipped photos of this album that a Move took out of the list. */
-    var hiddenHere by mutableIntStateOf(0)
-        private set
-
-    /** Size of the album without its hidden skips. */
-    var total by mutableIntStateOf(0)
-        private set
-
-    /** Photos of this album that are neither queued nor skipped. */
-    var leftHere by mutableIntStateOf(0)
-        private set
-
-    /** Folder choices and skips no Move has committed yet. The album can't change while there are any. */
-    var selections by mutableIntStateOf(0)
-        private set
-
-    /** What the Selections screen lists: folder choices in button order, then skips. */
+    /** What the Selections screen lists, in button order. */
     var selectionGroups by mutableStateOf<List<SelectionGroup>>(emptyList())
-        private set
-
-    /** True when the photo on screen carries a skip mark. */
-    var isSkipped by mutableStateOf(false)
         private set
 
     /** The last applied batch, for the undo entries. */
@@ -233,12 +180,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             // Reads the queue like a folder: everything that would change it waits until it is in
             scanning = true
             viewModelScope.launch {
-                val queues = withContext(Dispatchers.IO) {
+                val queue = withContext(Dispatchers.IO) {
                     // A big batch's journal has 100,000 lines, so its count is read here too
                     lastBatch()
-                    Store.readQueues()
+                    Store.readQueue()
                 }
-                Store.useQueues(queues)
+                Store.useQueue(queue)
                 scanning = false
                 refresh()
             }
@@ -253,7 +200,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         backStack.add(target)
         if (target == Screen.Sort) refresh()
         if (target == Screen.Selections) loadSelections()
-        if (target == Screen.Skipped) loadHidden()
         if (target is Screen.Picker) {
             browsing = false
             picked.clear()
@@ -264,8 +210,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun back() {
         keepPosition()
         if (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
-        // Lands on the first unsorted photo, which a restored skip can be, anywhere in the album
-        if (albumStale) showAlbum(null)
         if (screen == Screen.Sort || screen == Screen.Home) refresh()
     }
 
@@ -313,101 +257,38 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             // changes the queue while scanning is set, so reading it from here is safe
             val result = withContext(Dispatchers.IO) { prepare(Scanner.scan(File(root), recursive, exclude, order)) }
             scanning = false
-            all = result.all
-            inAll = result.inAll
-            albumStale = false
             scannedVersion = version
-            show(result.visible, result.indexed)
-            land(Store.lastPath)
-            useTally(result.tally)
+            photos = result.photos
+            indexOf = result.indexOf
+            unsorted = result.unsorted
+            index = Store.lastPath?.let { indexOf[it] } ?: firstUnsorted()
+            queuedHere = result.queued
             counts = result.counts
             if (screen == Screen.Selections) loadSelections()
-            if (screen == Screen.Skipped) loadHidden()
             refresh()
         }
     }
 
     /** What a folder read hands to the main thread, worked out on the read's own thread. */
     private class ScanResult(
-        val all: List<Photo>,
-        val inAll: Set<String>,
-        val visible: List<Photo>,
-        val indexed: Indexed,
-        val tally: Tally,
+        val photos: List<Photo>,
+        val indexOf: Map<String, Int>,
+        val unsorted: BitSet,
+        val queued: Int,
         val counts: Map<String, Int>,
     )
 
     private fun prepare(list: List<Photo>): ScanResult {
-        val visible = list.filter { it.path !in Store.hidden }
-        return ScanResult(
-            list, list.mapTo(HashSet(list.size * 2)) { it.path }, visible, index(visible), tally(list), Store.counts(),
-        )
-    }
-
-    private class Indexed(val indexOf: Map<String, Int>, val unsorted: BitSet)
-
-    private fun index(list: List<Photo>): Indexed {
         val indexOf = HashMap<String, Int>(list.size * 2)
         val unsorted = BitSet(list.size)
         list.forEachIndexed { i, p ->
             indexOf[p.path] = i
-            if (!reviewed(p.path)) unsorted.set(i)
+            if (p.path !in Store.pending) unsorted.set(i)
         }
-        return Indexed(indexOf, unsorted)
+        return ScanResult(list, indexOf, unsorted, list.size - unsorted.cardinality(), Store.counts())
     }
 
-    private fun show(list: List<Photo>, indexed: Indexed = index(list)) {
-        photos = list
-        indexOf = indexed.indexOf
-        unsorted = indexed.unsorted
-    }
-
-    /** Lands on [at], or on the first unsorted photo. */
-    private fun land(at: String?) {
-        index = at?.let { indexOf[it] } ?: firstUnsorted()
-    }
-
-    /** Lists the album without its hidden skips and lands on [at]. */
-    private fun showAlbum(at: String?) {
-        albumStale = false
-        show(all.filter { it.path !in Store.hidden })
-        land(at)
-    }
-
-    private fun loadHidden() {
-        hiddenPhotos = all.filter { it.path in Store.hidden }
-    }
-
-    /** Puts one hidden skip back into the album as not reviewed. */
-    fun unhide(photo: Photo) {
-        if (busy || scanning || Store.skipState(photo.path) != Store.SKIP_HIDDEN) return
-        // The next photo takes this one's place, so a bounced tap would undo a skip nobody looked at
-        val now = SystemClock.uptimeMillis()
-        if (now - lastAssignAt < 120) return
-        lastAssignAt = now
-        changePhoto(photo.path) { Store.setSkip(photo.path, Store.SKIP_NONE) }
-        hiddenPhotos = hiddenPhotos.filter { it !== photo }
-        // Listing and indexing a 200,000-photo album again on every tap would stutter, so it waits for Back
-        albumStale = true
-        syncPosition()
-        if (hiddenPhotos.isEmpty()) back()
-    }
-
-    /** Puts every hidden skip of this album back into the list as not reviewed. */
-    fun unhideAll() {
-        if (busy || scanning) return
-        var changed = false
-        for (photo in all) if (Store.hidden.remove(photo.path)) changed = true
-        if (changed) Store.compactSkipped()
-        hiddenPhotos = emptyList()
-        showAlbum(current?.path)
-        sync()
-        if (screen == Screen.Skipped) back()
-    }
-
-    private fun reviewed(path: String) = stateOf(path) != Store.SKIP_NONE
-
-    /** First photo from [from] on that is neither queued nor skipped. */
+    /** First unqueued photo from [from] on. */
     private fun firstUnsorted(from: Int = 0): Int = unsorted.nextSetBit(from).takeIf { it >= 0 } ?: photos.size
 
     private fun showImage(path: String?) {
@@ -431,77 +312,34 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** Counts the whole album and queue again. Anything that changes more than one photo goes through here. */
     private fun recount() {
         counts = Store.counts()
-        useTally(tally(all))
+        queuedHere = photos.count { it.path in Store.pending }
+        for (i in photos.indices) unsorted.set(i, photos[i].path !in Store.pending)
     }
-
-    private class Tally(var queued: Int = 0, var skipped: Int = 0, var hidden: Int = 0)
-
-    /** The one full count, shared by a folder read and [recount], so the per-tap differences have a single source to match. */
-    private fun tally(list: List<Photo>): Tally {
-        val t = Tally()
-        for (photo in list) {
-            when (stateOf(photo.path)) {
-                QUEUED -> t.queued++
-                Store.SKIP_FRESH -> t.skipped++
-                Store.SKIP_HIDDEN -> t.hidden++
-            }
-        }
-        return t
-    }
-
-    private fun useTally(t: Tally) {
-        queuedHere = t.queued
-        skippedHere = t.skipped
-        hiddenHere = t.hidden
-    }
-
-    /** Queued wins over a skip mark, as in [assign], which drops the mark. */
-    private fun stateOf(path: String) = if (Store.pending.containsKey(path)) QUEUED else Store.skipState(path)
 
     /**
-     * Runs a change to one photo and moves the counts by the difference, where a [recount] of a
-     * 200,000-photo album takes a noticeable part of a second.
+     * Sets or clears one photo's folder and moves the counts by the difference, where a [recount]
+     * of a 200,000-photo album takes a noticeable part of a second.
      */
-    private inline fun changePhoto(path: String, change: () -> Unit) {
-        val before = stateOf(path)
-        val destBefore = Store.pending[path]
-        change()
-        val after = stateOf(path)
-        val destAfter = Store.pending[path]
-        if (before != after && path in inAll) {
-            bump(before, -1)
-            bump(after, 1)
+    private fun setPending(path: String, dest: String?) {
+        val before = Store.pending[path]
+        if (before == dest) return
+        Store.setPending(path, dest)
+        indexOf[path]?.let { i ->
+            unsorted.set(i, dest == null)
+            if (before == null) queuedHere++ else if (dest == null) queuedHere--
         }
-        indexOf[path]?.let { unsorted.set(it, !reviewed(path)) }
-        if (destBefore != destAfter) {
-            // A new map, so the folder badges see the change
-            counts = HashMap(counts).also { m ->
-                destBefore?.let { m[it] = (m[it] ?: 1) - 1 }
-                destAfter?.let { m[it] = (m[it] ?: 0) + 1 }
-            }
-        }
-    }
-
-    private fun bump(state: Int, by: Int) {
-        when (state) {
-            QUEUED -> queuedHere += by
-            Store.SKIP_FRESH -> skippedHere += by
-            Store.SKIP_HIDDEN -> hiddenHere += by
+        // A new map, so the folder badges see the change
+        counts = HashMap(counts).also { m ->
+            before?.let { m[it] = (m[it] ?: 1) - 1 }
+            dest?.let { m[it] = (m[it] ?: 0) + 1 }
         }
     }
 
     /** The cheap part of [sync]: totals from the counts, and the photo on screen. */
     private fun syncPosition() {
         queued = Store.pending.size
-        canUndo = undo.isNotEmpty()
-        selections = Store.pending.size + Store.skipped.size
-        total = all.size - hiddenHere
-        leftHere = total - queuedHere - skippedHere
-        // The viewer there decides which photos get decoded, and this would take that over
-        if (screen == Screen.Skipped) return
         val p = current
         assigned = p?.let { Store.pending[it.path] }
-        isSkipped = p != null && assigned == null && Store.skipState(p.path) != Store.SKIP_NONE
         if (p == null) {
             showImage(null)
             // The end card can still be swiped back to the last photo
@@ -549,36 +387,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         syncPosition()
     }
 
-    /**
-     * The Skip button: marks the photo as looked at and left in place, then shows the next one.
-     * A swipe only navigates and leaves no mark.
-     */
-    fun skip() {
-        if (busy || scanning) return
-        val p = current ?: return
-        // Same guard as assign, or a bounced tap would mark a photo nobody looked at
-        val now = SystemClock.uptimeMillis()
-        if (now - lastAssignAt < 120) return
-        lastAssignAt = now
-        if (!reviewed(p.path)) {
-            changePhoto(p.path) { Store.setSkip(p.path, Store.SKIP_FRESH) }
-            pushUndo(UndoEntry(p.path, null, null, skipAfter = Store.SKIP_FRESH))
-        }
-        flash = null
-        index = (index + 1).coerceAtMost(photos.size)
-        syncPosition()
-    }
-
-    fun clearSkip() {
-        if (busy || scanning) return
-        val p = current ?: return
-        val before = Store.skipState(p.path)
-        if (before == Store.SKIP_NONE) return
-        changePhoto(p.path) { Store.setSkip(p.path, Store.SKIP_NONE) }
-        pushUndo(UndoEntry(p.path, null, null, skipBefore = before))
-        syncPosition()
-    }
-
     fun jumpTo(target: Int) {
         if (busy || scanning) return
         index = target.coerceIn(0, photos.size)
@@ -593,16 +401,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (now - lastAssignAt < 120) return
         lastAssignAt = now
 
-        val before = Store.pending[p.path]
-        if (before != dest.path) {
-            // Queued and skipped exclude each other, so filing a skipped photo drops its mark
-            val skip = Store.skipState(p.path)
-            changePhoto(p.path) {
-                if (skip != Store.SKIP_NONE) Store.setSkip(p.path, Store.SKIP_NONE)
-                Store.setPending(p.path, dest.path)
-            }
-            pushUndo(UndoEntry(p.path, before, dest.path, skipBefore = skip))
-        }
+        setPending(p.path, dest.path)
         flash = Flash(++flashId, dest.label, Store.dests.indexOf(dest))
         // Jumps past photos that already have a folder, so fixing an old choice returns to where you left off
         index = firstUnsorted(index + 1)
@@ -616,25 +415,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun clearAssignment() {
         if (busy || scanning) return
         val p = current ?: return
-        val before = Store.pending[p.path] ?: return
-        changePhoto(p.path) { Store.setPending(p.path, null) }
-        pushUndo(UndoEntry(p.path, before, null))
-        syncPosition()
-    }
-
-    private fun pushUndo(e: UndoEntry) {
-        undo.addLast(e)
-        if (undo.size > 1000) undo.removeFirst()
-    }
-
-    fun undoLast() {
-        if (busy || scanning) return
-        val e = undo.removeLastOrNull() ?: return
-        changePhoto(e.path) {
-            if (e.before != e.after) Store.setPending(e.path, e.before)
-            if (e.skipBefore != e.skipAfter) Store.setSkip(e.path, e.skipBefore)
-        }
-        indexOf[e.path]?.let { index = it }
+        setPending(p.path, null)
         syncPosition()
     }
 
@@ -651,7 +432,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val byDest = Store.pending.entries.groupBy({ it.value }, { Selection(File(it.key), it.value) })
         val out = ArrayList<SelectionGroup>()
         for (dest in buttons + byDest.keys.filter { it !in buttons }) byDest[dest]?.let { out.add(SelectionGroup(dest, it)) }
-        if (Store.skipped.isNotEmpty()) out.add(SelectionGroup(null, Store.skipped.map { Selection(File(it), null) }))
         selectionGroups = out
     }
 
@@ -659,11 +439,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun dropSelection(row: Selection) {
         if (busy || scanning) return
         val path = row.file.path
-        val dest = Store.pending[path]
-        changePhoto(path) {
-            if (dest != null) Store.setPending(path, null) else Store.setSkip(path, Store.SKIP_NONE)
-        }
-        undo.clear()
+        val dest = Store.pending[path] ?: return
+        setPending(path, null)
         // Only the row's own group changes, and the row is found by identity, so one removal costs
         // a copy of one group instead of regrouping 100,000 queued photos
         selectionGroups = selectionGroups.mapNotNull { g ->
@@ -677,35 +454,30 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         syncPosition()
     }
 
-    /** Drops everything no Move has committed: folder choices and the skips made since the last one. */
+    /** Drops every folder choice no Move has committed. */
     fun clearSelections() {
         if (busy || scanning) return
         Store.pending.clear()
         Store.compactPending()
-        Store.skipped.clear()
-        Store.compactSkipped()
-        undo.clear()
         sync()
     }
 
     private fun lastBatch(): Batch? = try {
-        // One line per moved file or hidden skip. A big batch has 100,000 of them, so the counts are kept until the file changes
-        Store.journals().firstOrNull()?.let { file ->
+        // One line per moved file. A big batch has 100,000 of them, so the count is kept until the file changes
+        Store.journals().firstNotNullOfOrNull { file ->
             val key = "${file.name}:${file.length()}"
             if (key != batchKey) {
-                var moved = 0
-                var skips = 0
-                file.useLines { lines ->
-                    for (line in lines) {
-                        if (line.isBlank()) continue
-                        if (Mover.isMoveLine(line)) moved++ else skips++
-                    }
-                }
-                batchMoved = moved
-                batchSkips = skips
+                batchMoved = file.useLines { lines -> lines.count { Mover.isMoveLine(it) } }
                 batchKey = key
             }
-            Batch(file, batchMoved, batchSkips)
+            if (batchMoved > 0) {
+                Batch(file, batchMoved)
+            } else {
+                // Hid skips and moved nothing, so there is nothing left to undo. A running Move's
+                // journal is empty until its first file lands, so that one stays
+                if (!busy) file.delete()
+                null
+            }
         }
     } catch (e: Exception) {
         null
@@ -713,7 +485,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opens the Selections screen, the only place with a button that moves files. */
     fun reviewSelections() {
-        if (busy || scanning || (Store.pending.isEmpty() && Store.skipped.isEmpty())) return
+        if (busy || scanning || Store.pending.isEmpty()) return
         dialog = null
         if (screen != Screen.Selections) open(Screen.Selections)
     }
@@ -723,37 +495,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun move() {
-        if (busy || scanning || (Store.pending.isEmpty() && Store.skipped.isEmpty())) return
+        if (busy || scanning || Store.pending.isEmpty()) return
         val entries = Store.pending.map { it.key to it.value }
-        val skips = Store.skipped.toList()
-        // Where to land afterwards: the first photo from here on that is neither moved nor hidden as skipped
+        // Where to land afterwards: the first photo from here on that isn't moved
         val landing = photos.getOrNull(firstUnsorted(index))?.path
         val journal = Store.newJournal()
-        if (entries.isEmpty()) {
-            // Skips alone: nothing moves on disk, so the list is rebuilt without a scan
-            busy = true
-            viewModelScope.launch {
-                val logged = withContext(Dispatchers.IO) {
-                    try {
-                        Mover.logSkips(journal, skips)
-                        true
-                    } catch (e: Exception) {
-                        journal.delete()
-                        false
-                    }
-                }
-                busy = false
-                lastBatchInfo = if (logged) Batch(journal, 0, skips.size) else lastBatch()
-                Store.hideSkipped()
-                undo.clear()
-                flash = null
-                dialog = null
-                leaveSelections()
-                showAlbum(landing)
-                sync()
-            }
-            return
-        }
         val stop = AtomicBoolean(false)
         cancel = stop
         progress = 0
@@ -762,20 +508,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         Store.lastPath = landing
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                val r = Mover.move(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
-                // The skips get hidden only when something moved, so only then do they belong to the batch
-                if (r.moved > 0) {
-                    try {
-                        Mover.logSkips(journal, skips)
-                    } catch (e: Exception) {
-                    }
-                }
-                r
+                Mover.move(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
             }
             for (path in result.settled) Store.pending.remove(path)
             Store.compactPending()
-            if (result.moved > 0) Store.hideSkipped()
-            undo.clear()
             ImageLoader.clear()
             busy = false
             Store.scanVersion++
@@ -794,8 +530,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         // A folder read counts against the queue from another thread, so the queue holds still until it ends
         if (busy || scanning) return
         progress = 0
-        val title = if (batch.moved > 0) "Moving ${batch.moved} photos back" else "Bringing back ${batch.skips} skipped photos"
-        dialog = Dialog.Progress(title, batch.moved + batch.skips, cancellable = false)
+        dialog = Dialog.Progress("Moving ${batch.moved} photos back", batch.moved, cancellable = false)
         busy = true
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -803,21 +538,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             }
             for ((path, dest) in result.restored) Store.pending[path] = dest
             Store.compactPending()
-            Store.reopenSkips(result.unskipped)
-            undo.clear()
             ImageLoader.clear()
             busy = false
-            Store.lastPath = result.restored.lastOrNull()?.first ?: result.unskipped.lastOrNull()
-            if (result.restored.isNotEmpty() || result.failed.isNotEmpty()) {
-                Store.scanVersion++
-            } else if (scannedVersion == Store.scanVersion) {
-                // Skips alone, as in move: nothing moved on disk, so the list is rebuilt without a scan
-                showAlbum(Store.lastPath)
-                sync()
-            }
+            Store.lastPath = result.restored.lastOrNull()?.first
+            Store.scanVersion++
             dialog = if (result.failed.isEmpty()) null else Dialog.UndoFailed(result.restored.size, result.failed)
-            val hasSelections = Store.pending.isNotEmpty() || Store.skipped.isNotEmpty()
-            if (hasSelections && screen != Screen.Selections) open(Screen.Selections)
+            if (Store.pending.isNotEmpty() && screen != Screen.Selections) open(Screen.Selections)
             refresh()
         }
     }
@@ -832,7 +558,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         order = Store.order
         dests = Store.dests.toList()
         queued = Store.pending.size
-        selections = Store.pending.size + Store.skipped.size
     }
 
     private fun changed(rescan: Boolean) {
@@ -848,7 +573,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private fun locked(): Boolean {
         // An empty queue that hasn't been read yet would look unlocked
         if (!Store.ready) return true
-        if (Store.pending.isEmpty() && Store.skipped.isEmpty()) return false
+        if (Store.pending.isEmpty()) return false
         dialog = Dialog.SelectionsLocked
         return true
     }
@@ -871,9 +596,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun pickSource(path: String) {
-        if (Store.dests.any { it.path == path }) {
-            messages.tryEmit("That folder is already a destination")
-            return
+        // A folder can't be sorted into itself
+        Store.dests.firstOrNull { it.path == path }?.let { dest ->
+            Store.dests.remove(dest)
+            if (Store.pending.values.removeAll { it == path }) Store.compactPending()
+            messages.tryEmit("Removed the ${dest.label} button")
         }
         Store.source = path
         Store.lastPath = null
@@ -882,8 +609,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         back()
     }
 
-    /** True for the folder being sorted and for folders that already are destinations. */
-    fun isTaken(path: String): Boolean = path == source || dests.any { it.path == path }
+    /** True for the folder being sorted, and when adding destinations, for folders that already are ones. */
+    fun isTaken(path: String, forSource: Boolean): Boolean =
+        path == source || (!forSource && dests.any { it.path == path })
 
     fun togglePicked(path: String) {
         if (picked.remove(path)) return

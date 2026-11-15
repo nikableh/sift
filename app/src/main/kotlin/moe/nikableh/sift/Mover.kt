@@ -24,8 +24,6 @@ object Mover {
         /** Original path to the destination folder it had been moved to. */
         val restored: List<Pair<String, String>>,
         val failed: List<Pair<String, String>>,
-        /** Photos the batch hid as skipped. Nothing on disk changed for them. */
-        val unskipped: List<String>,
     )
 
     fun move(
@@ -79,37 +77,19 @@ object Mover {
     }
 
     /**
-     * Adds the skips a Move hides to its journal. A skip line carries a number as its second
-     * field, as in skipped.log, where a move line carries the new path.
+     * Tells a move line without parsing it, for counting a 100,000-line journal. Journals from
+     * versions that could skip photos also hold skip lines, which end in a number
      */
-    fun logSkips(journal: File, paths: Collection<String>) {
-        if (paths.isEmpty()) return
-        val sb = StringBuilder()
-        for (path in paths) sb.append(JSONArray().put(path).put(Store.SKIP_HIDDEN).toString()).append('\n')
-        FileOutputStream(journal, true).use {
-            it.write(sb.toString().toByteArray())
-            it.fd.sync()
-        }
-    }
-
-    /** Tells a move line from a skip line without parsing it, for counting a 100,000-line journal. */
     fun isMoveLine(line: String) = line.endsWith("\"]")
 
     fun undo(ctx: Context, journal: File, progress: (Int) -> Unit): UndoResult {
         val lines = readJournal(journal)
         val restored = ArrayList<Pair<String, String>>()
         val failed = ArrayList<Pair<String, String>>()
-        val unskipped = ArrayList<String>()
         val touched = ArrayList<String>()
         for ((i, m) in lines.asReversed().withIndex()) {
-            val target = m.second
-            if (target == null) {
-                unskipped.add(m.first)
-                progress(i + 1)
-                continue
-            }
             val original = File(m.first)
-            val current = File(target)
+            val current = File(m.second)
             try {
                 if (!current.exists()) throw IOException("no longer in ${current.parentFile?.name}")
                 val back = move(current, original.parentFile!!, original.name)
@@ -123,17 +103,17 @@ object Mover {
         }
         journal.delete()
         rescan(ctx, touched)
-        return UndoResult(restored, failed, unskipped)
+        return UndoResult(restored, failed)
     }
 
-    /** Original path to new path for a move, or to null for a skip. */
-    fun readJournal(journal: File): List<Pair<String, String?>> {
-        val out = ArrayList<Pair<String, String?>>()
+    /** Original path to new path, one pair per moved photo. */
+    fun readJournal(journal: File): List<Pair<String, String>> {
+        val out = ArrayList<Pair<String, String>>()
         try {
             journal.forEachLine { line ->
                 try {
                     val a = JSONArray(line)
-                    out.add(a.getString(0) to (a.get(1) as? String))
+                    (a.get(1) as? String)?.let { out.add(a.getString(0) to it) }
                 } catch (e: Exception) {
                 }
             }

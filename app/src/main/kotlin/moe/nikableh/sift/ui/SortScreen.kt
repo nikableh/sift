@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
-import android.os.SystemClock
 import android.provider.Settings
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
@@ -15,9 +14,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -46,49 +42,36 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.automirrored.rounded.NavigateBefore
-import androidx.compose.material.icons.automirrored.rounded.NavigateNext
-import androidx.compose.material.icons.automirrored.rounded.Undo
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.ClearAll
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroup
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -96,8 +79,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -107,10 +88,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -118,8 +95,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.launch
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Gate
@@ -273,25 +248,15 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
 
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
-            Gate.Empty -> if (vm.hiddenHere > 0) {
-                Status(
-                    Modifier.align(Alignment.Center),
-                    "Nothing left to sort in $folder",
-                    if (vm.hiddenHere == 1) "1 skipped photo is hidden" else "${vm.hiddenHere.grouped()} skipped photos are hidden",
-                ) {
-                    BigButton("Show skipped") { vm.open(Screen.Skipped) }
-                }
-            } else {
-                Status(Modifier.align(Alignment.Center), "No photos in $folder") {
-                    BigButton("Change folder") { vm.askPickSource() }
-                }
+            Gate.Empty -> Status(Modifier.align(Alignment.Center), "No photos in $folder") {
+                BigButton("Change folder") { vm.askPickSource() }
             }
             Gate.End -> Status(
                 Modifier.align(Alignment.Center),
                 "That was the last photo",
-                "${vm.queuedHere.grouped()} queued to move, ${vm.skippedHere.grouped()} skipped, ${vm.leftHere.grouped()} not reviewed",
+                "${vm.queuedHere.grouped()} queued to move, ${vm.leftHere.grouped()} left",
             ) {
-                if (vm.selections > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
+                if (vm.queued > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
             }
             else -> if (vm.decodeFailed) {
                 Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}") {}
@@ -307,16 +272,6 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
                 contentColor = if (i >= 0) Color.White else MaterialTheme.colorScheme.inverseOnSurface,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 onClear = { vm.clearAssignment() },
-            )
-        } else if (vm.isSkipped) {
-            // Seen and left in place. Tapping it makes the photo count as not reviewed again
-            Pill(
-                label = "Skipped",
-                color = MaterialTheme.colorScheme.inverseSurface,
-                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
-                icon = Icons.Rounded.SkipNext,
-                onClear = { vm.clearSkip() },
             )
         } else {
             FlashPill(vm, Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp))
@@ -349,7 +304,9 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
     val context = LocalContext.current
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
     val photo = vm.current
+    val date = photo?.let { dateFormat.format(Date(it.mtime)) }
     val idle = !vm.busy && !vm.scanning
+    var menu by remember { mutableStateOf(false) }
 
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -361,84 +318,52 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
             }
 
-            if (photo == null) {
-                Text(
-                    folder,
-                    Modifier.weight(1f).padding(horizontal = 12.dp),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            } else {
-                val date = dateFormat.format(Date(photo.mtime))
-                // Persistent, so a long name stays up until a tap outside instead of timing out mid-read
-                val tooltip = rememberTooltipState(isPersistent = true)
-                val scope = rememberCoroutineScope()
-                // The popup closes itself on any tap outside it, the header included, so a tap that just closed it must not
-                // reopen it. Which window sees the tap first is not fixed, so compare times instead of reading isVisible.
-                var pressedAt by remember { mutableLongStateOf(0L) }
-                var hiddenAt by remember { mutableLongStateOf(0L) }
-                LaunchedEffect(tooltip) {
-                    snapshotFlow { tooltip.isVisible }.drop(1).collect { if (!it) hiddenAt = SystemClock.uptimeMillis() }
-                }
-                // TooltipBox does not pass its modifier to the node the Row measures, so the weight sits on a wrapper
-                Box(Modifier.weight(1f)) {
-                    TooltipBox(
-                        positionProvider = rememberCenteredBelowPositionProvider(),
-                        tooltip = {
-                            RichTooltip(title = { Text(photo.file.name) }) { Text(date) }
-                        },
-                        state = tooltip,
-                        // Its own input only reacts to a long press, and only over the text it measured
-                        enableUserInput = false,
-                    ) {
-                        Column(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .pointerInput(Unit) {
-                                    awaitEachGesture {
-                                        pressedAt = awaitFirstDown(false, PointerEventPass.Initial).uptimeMillis
-                                    }
-                                }
-                                .clickable {
-                                    when {
-                                        tooltip.isVisible -> tooltip.dismiss()
-                                        hiddenAt < pressedAt - 200 -> scope.launch { tooltip.show() }
-                                    }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                        ) {
-                            // The position never gets cut. When even a line of its own is too narrow it breaks
-                            // after the slash, which a no-break space keeps with the first number
-                            Text(
-                                "${(vm.index + 1).grouped()}\u00A0/ ${vm.photos.size.grouped()}",
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            val parent = if (vm.recursive) "${photo.file.parentFile?.name}  ·  " else ""
-                            Text(
-                                "$parent${Formatter.formatShortFileSize(context, photo.size)}  ·  ${photo.file.name}  ·  $date",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+            // The menu hangs off the details, so the panel under the photo holds nothing but folder buttons
+            Box(Modifier.weight(1f)) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(enabled = idle, onClickLabel = "Open menu") { menu = true }
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // The position never gets cut. When even a line of its own is too narrow it breaks
+                        // after the slash, which a no-break space keeps with the first number
+                        Text(
+                            if (photo == null) folder else "${(vm.index + 1).grouped()} / ${vm.photos.size.grouped()}",
+                            Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(20.dp))
+                    }
+                    if (photo != null) {
+                        val parent = if (vm.recursive) "${photo.file.parentFile?.name}  ·  " else ""
+                        Text(
+                            "$parent${Formatter.formatShortFileSize(context, photo.size)}  ·  ${photo.file.name}  ·  $date",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
+                SortMenu(vm, photo?.file, date, expanded = menu) { menu = false }
             }
 
             // The count drops out where it would take more than a fair share of the bar, which at large
             // font sizes would squeeze the photo details down to a few letters
             val style = MaterialTheme.typography.labelLarge
-            val withCount = "Review ${vm.selections.grouped()}"
+            val withCount = "Review ${vm.queued.grouped()}"
             val maxButton = barWidth * 0.45f
             val padding = ButtonDefaults.ButtonWithIconContentPadding
             val room = maxButton - ButtonDefaults.IconSize - ButtonDefaults.IconSpacing -
                 padding.calculateLeftPadding(LayoutDirection.Ltr) - padding.calculateRightPadding(LayoutDirection.Ltr)
-            val fits = vm.selections > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
+            val fits = vm.queued > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
             Button(
                 onClick = { vm.reviewSelections() },
                 shapes = ButtonDefaults.shapes(),
-                enabled = vm.selections > 0 && idle,
+                enabled = vm.queued > 0 && idle,
                 contentPadding = padding,
                 modifier = Modifier.widthIn(max = maxButton),
             ) {
@@ -450,29 +375,39 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
     }
 }
 
-// The Material provider pins a rich tooltip to the anchor's start edge, which under a full-width header leaves it
-// flush against the back button. Centering keeps it under the text it explains.
+/** Opens from the header. A photo's name and date lead it, since the line under the counter cuts them off. */
 @Composable
-private fun rememberCenteredBelowPositionProvider(spacing: Dp = 4.dp, margin: Dp = 16.dp): PopupPositionProvider {
-    val density = LocalDensity.current
-    return remember(density, spacing, margin) {
-        val gap = with(density) { spacing.roundToPx() }
-        val edge = with(density) { margin.roundToPx() }
-        object : PopupPositionProvider {
-            override fun calculatePosition(
-                anchorBounds: IntRect,
-                windowSize: IntSize,
-                layoutDirection: LayoutDirection,
-                popupContentSize: IntSize,
-            ): IntOffset {
-                val centered = anchorBounds.center.x - popupContentSize.width / 2
-                val x = centered.coerceIn(edge, maxOf(edge, windowSize.width - edge - popupContentSize.width))
-                val below = anchorBounds.bottom + gap
-                val y = if (below + popupContentSize.height <= windowSize.height) below
-                else maxOf(0, anchorBounds.top - gap - popupContentSize.height)
-                return IntOffset(x, y)
+private fun SortMenu(vm: SiftViewModel, file: File?, date: String?, expanded: Boolean, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        @Composable
+        fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
+            text = { Text(label) },
+            leadingIcon = { Icon(icon, null) },
+            onClick = {
+                onDismiss()
+                action()
+            },
+        )
+        if (file != null) {
+            Column(
+                Modifier.widthIn(max = 280.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(file.name, style = MaterialTheme.typography.titleSmall)
+                if (date != null) {
+                    Text(date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            HorizontalDivider(Modifier.padding(vertical = 4.dp))
+            item("Share", Icons.Rounded.Share) { sharePhoto(context, file) }
+        }
+        if (vm.photos.isNotEmpty()) {
+            item("Go to photo…", Icons.Rounded.Numbers) {
+                vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
             }
         }
+        item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
     }
 }
 
@@ -482,7 +417,6 @@ private fun Pill(
     label: String,
     color: Color,
     modifier: Modifier,
-    icon: ImageVector = Icons.AutoMirrored.Rounded.ArrowForward,
     contentColor: Color = Color.White,
     onClear: (() -> Unit)?,
 ) {
@@ -499,7 +433,7 @@ private fun Pill(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(icon, null, Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, Modifier.size(18.dp))
             Text(label, style = MaterialTheme.typography.labelLarge)
             if (onClear != null) Icon(Icons.Rounded.Close, "Remove", Modifier.size(18.dp))
         }
@@ -539,108 +473,9 @@ private fun Panel(vm: SiftViewModel, landscape: Boolean, modifier: Modifier) {
         WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom
     }
     Surface(modifier, shape = shape, color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(
-            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(sides)).padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Controls(vm, landscape)
+        Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(sides)).padding(10.dp)) {
             FolderGrid(vm, landscape)
         }
-    }
-}
-
-@Composable
-private fun Controls(vm: SiftViewModel, landscape: Boolean) {
-    val idle = !vm.busy && !vm.scanning
-    val canGoBack = vm.index > 0
-    val canSkip = vm.current != null
-    val gap = Arrangement.spacedBy(8.dp)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = gap) {
-        // More sits outside the group, so its overflow handling can never hide it
-        ButtonGroup(
-            overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(it) },
-            modifier = Modifier.weight(1f),
-            horizontalArrangement = gap,
-        ) {
-            customItem({
-                if (landscape) {
-                    // The side panel has no room for two labelled buttons next to More
-                    ControlIconButton("Previous", Icons.AutoMirrored.Rounded.NavigateBefore, canGoBack) { vm.go(-1) }
-                } else {
-                    ControlButton(
-                        "Previous", Icons.AutoMirrored.Rounded.NavigateBefore, canGoBack, Modifier.weight(1f),
-                    ) { vm.go(-1) }
-                }
-            }, {})
-            customItem({
-                ControlButton("Skip", Icons.AutoMirrored.Rounded.NavigateNext, canSkip, Modifier.weight(1f)) { vm.skip() }
-            }, {})
-        }
-        MoreMenu(vm, idle)
-    }
-}
-
-@Composable
-private fun ControlIconButton(label: String, icon: ImageVector, enabled: Boolean, onClick: () -> Unit) {
-    FilledTonalIconButton(
-        onClick = onClick,
-        shapes = IconButtonDefaults.shapes(),
-        enabled = enabled,
-        modifier = Modifier.size(48.dp),
-    ) {
-        Icon(icon, label)
-    }
-}
-
-@Composable
-private fun MoreMenu(vm: SiftViewModel, idle: Boolean) {
-    val context = LocalContext.current
-    var menu by remember { mutableStateOf(false) }
-    val photo = vm.current
-    val hasPhotos = vm.photos.isNotEmpty()
-
-    Box {
-        ControlIconButton("More", Icons.Rounded.MoreVert, idle) { menu = true }
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-            @Composable
-            fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
-                text = { Text(label) },
-                leadingIcon = { Icon(icon, null) },
-                onClick = {
-                    menu = false
-                    action()
-                },
-            )
-            if (vm.canUndo) item("Undo last step", Icons.AutoMirrored.Rounded.Undo) { vm.undoLast() }
-            if (photo != null) item("Share", Icons.Rounded.Share) { sharePhoto(context, photo.file) }
-            if (hasPhotos) {
-                item("Go to photo…", Icons.Rounded.Numbers) {
-                    vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
-                }
-            }
-            item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
-            if (vm.selections > 0) {
-                item("Clear selections (${vm.selections.grouped()})", Icons.Rounded.ClearAll) {
-                    vm.dialog = Dialog.ConfirmClear
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ControlButton(label: String, icon: ImageVector, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    FilledTonalButton(
-        onClick = onClick,
-        shapes = ButtonDefaults.shapes(),
-        enabled = enabled,
-        modifier = modifier.height(48.dp),
-        contentPadding = PaddingValues(horizontal = 8.dp),
-        interactionSource = remember { MutableInteractionSource() },
-    ) {
-        Icon(icon, null, Modifier.size(ButtonDefaults.IconSize))
-        Spacer(Modifier.width(6.dp))
-        FitLabel(label)
     }
 }
 

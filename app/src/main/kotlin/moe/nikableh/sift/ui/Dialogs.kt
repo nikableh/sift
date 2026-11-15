@@ -83,22 +83,12 @@ fun Dialogs(vm: SiftViewModel) {
             val b = d.batch
             Confirm(
                 icon = Icons.Rounded.History,
-                title = if (b.moved > 0) "Move ${photos(b.moved)} back?" else "Bring back ${skippedPhotos(b.skips)}?",
-                confirm = if (b.moved > 0) "Move back" else "Bring back",
+                title = "Move ${photos(b.moved)} back?",
+                confirm = "Move back",
                 onConfirm = { vm.undoBatch(b) },
                 onDismiss = close,
             ) {
-                Text(
-                    when {
-                        b.moved == 0 ->
-                            "They return to the album as skipped and wait to be hidden again, so you can change them first."
-                        b.skips == 0 ->
-                            "They return to the folders they came from and go back into the queue, so you can change them and apply again."
-                        else ->
-                            "They return to the folders they came from and go back into the queue, so you can change them and apply again. " +
-                                "The ${skippedPhotos(b.skips)} it hid come back as skipped."
-                    },
-                )
+                Text("They return to the folders they came from and go back into the queue, so you can change them and apply again.")
             }
         }
 
@@ -120,21 +110,6 @@ fun Dialogs(vm: SiftViewModel) {
             onDismiss = close,
         ) { Text(if (d.count == 1) "1 ticked folder has not been added." else "${d.count} ticked folders have not been added.") }
 
-        is Dialog.ConfirmUnhide -> Confirm(
-            title = "Undo all skips?",
-            confirm = "Undo all",
-            onConfirm = {
-                vm.unhideAll()
-                close()
-            },
-            onDismiss = close,
-        ) {
-            Text(
-                (if (d.count == 1) "1 skipped photo returns" else "${d.count.grouped()} skipped photos return") +
-                    " to this album as not reviewed. No files are touched."
-            )
-        }
-
         Dialog.ConfirmClear -> Confirm(
             title = "Clear selections?",
             confirm = "Clear",
@@ -144,18 +119,18 @@ fun Dialogs(vm: SiftViewModel) {
             },
             onDismiss = close,
         ) {
-            val one = vm.selections == 1
-            Text("${selectionCounts(vm)} ${if (one) "is" else "are"} dropped. No files are touched.")
+            val one = vm.queued == 1
+            Text("${selections(vm.queued)} ${if (one) "is" else "are"} dropped. No files are touched.")
         }
 
         Dialog.SelectionsLocked -> AlertDialog(
             onDismissRequest = close,
             title = { Text("Finish this album first") },
             text = {
-                val one = vm.selections == 1
+                val one = vm.queued == 1
                 Text(
-                    "${selectionCounts(vm)} ${if (one) "is" else "are"} waiting. " +
-                        "${if (vm.queued > 0) "Move" else "Hide"} or clear ${if (one) "it" else "them"} before changing what is sorted."
+                    "${selections(vm.queued)} ${if (one) "is" else "are"} waiting. " +
+                        "Move or clear ${if (one) "it" else "them"} before changing what is sorted."
                 )
             },
             confirmButton = {
@@ -250,18 +225,8 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
     )
 }
 
-/** Text of the big buttons that open Selections. Moves and skips count together, since both are listed there. */
-fun reviewLabel(vm: SiftViewModel): String =
-    if (vm.selections == 1) "Review 1 selection" else "Review ${vm.selections.grouped()} selections"
-
-/** "80 folder choices and 15 skips", leaving out the part that is zero. */
-private fun selectionCounts(vm: SiftViewModel): String {
-    val skips = vm.selections - vm.queued
-    val parts = ArrayList<String>()
-    if (vm.queued > 0) parts.add(if (vm.queued == 1) "1 folder choice" else "${vm.queued.grouped()} folder choices")
-    if (skips > 0) parts.add(if (skips == 1) "1 skip" else "${skips.grouped()} skips")
-    return parts.joinToString(" and ")
-}
+/** Text of the big buttons that open Selections. */
+fun reviewLabel(vm: SiftViewModel): String = "Review ${selections(vm.queued)}"
 
 private fun failureLines(failed: List<Pair<String, String>>): String {
     val lines = failed.take(8).joinToString("\n") { "${it.first}: ${it.second}" }

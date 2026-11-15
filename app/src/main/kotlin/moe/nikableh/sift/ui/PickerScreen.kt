@@ -149,7 +149,7 @@ private fun AlbumGrid(vm: SiftViewModel, forSource: Boolean, padding: PaddingVal
 
 @Composable
 private fun AlbumCard(vm: SiftViewModel, album: Album, forSource: Boolean) {
-    val inUse = vm.isTaken(album.path)
+    val inUse = vm.isTaken(album.path, forSource)
     // Tap order, because it becomes the order of the buttons on the sorting screen
     val order = vm.picked.indexOf(album.path)
     val selected = order >= 0
@@ -254,7 +254,7 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
         }
         if (dir != null && !forSource) {
             item {
-                val taken = vm.isTaken(dir.path)
+                val taken = vm.isTaken(dir.path, forSource)
                 SegmentedListItem(
                     checked = dir.path in vm.picked,
                     onCheckedChange = { vm.togglePicked(dir.path) },
@@ -280,7 +280,7 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                         Checkbox(
                             checked = path in vm.picked,
                             onCheckedChange = { vm.togglePicked(path) },
-                            enabled = !vm.isTaken(path),
+                            enabled = !vm.isTaken(path, forSource),
                         )
                     } else {
                         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)

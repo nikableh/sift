@@ -72,13 +72,13 @@ import moe.nikableh.sift.Store
 import java.io.File
 import androidx.compose.ui.window.Dialog as WindowDialog
 
-/** Every queued photo and skip, with where it goes. A list, so long folder names have room. */
+/** Every queued photo, with where it goes. A list, so long folder names have room. */
 @Composable
 fun SelectionsScreen(vm: SiftViewModel) {
     val groups = vm.selectionGroups
     val ready = !vm.busy && !vm.scanning
     var collapsed by rememberSaveable(stateSaver = KeySetSaver) { mutableStateOf(emptySet<String>()) }
-    val allCollapsed = groups.all { groupKey(it.dest) in collapsed }
+    val allCollapsed = groups.all { it.dest in collapsed }
     var preview by remember { mutableStateOf<File?>(null) }
     val layoutDirection = LocalLayoutDirection.current
 
@@ -97,7 +97,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 actions = {
                     if (groups.isNotEmpty()) {
                         IconButton(onClick = {
-                            collapsed = if (allCollapsed) emptySet() else groups.mapTo(HashSet()) { groupKey(it.dest) }
+                            collapsed = if (allCollapsed) emptySet() else groups.mapTo(HashSet()) { it.dest }
                         }) {
                             if (allCollapsed) Icon(Icons.Rounded.UnfoldMore, "Expand all")
                             else Icon(Icons.Rounded.UnfoldLess, "Collapse all")
@@ -109,7 +109,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 },
             )
         },
-        floatingActionButton = { MoveFab(vm, visible = vm.selections > 0 && ready) },
+        floatingActionButton = { MoveFab(vm, visible = vm.queued > 0 && ready) },
     ) { padding ->
         if (groups.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
@@ -134,11 +134,10 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     val dest = group.dest
                     val rows = group.rows
                     val color = destColor(vm, dest)
-                    val key = groupKey(dest)
-                    val folded = key in collapsed
+                    val folded = dest in collapsed
                     stickyHeader(key = "group:$dest", contentType = "group") {
                         GroupHeader(dest, rows.size, color, folded) {
-                            collapsed = if (folded) collapsed - key else collapsed + key
+                            collapsed = if (folded) collapsed - dest else collapsed + dest
                         }
                     }
                     if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
@@ -150,19 +149,16 @@ fun SelectionsScreen(vm: SiftViewModel) {
     }
 }
 
-/** Skips and folders that are no longer buttons get no colour. */
-private fun destColor(vm: SiftViewModel, dest: String?): Color? {
+/** Folders that are no longer buttons get no colour. */
+private fun destColor(vm: SiftViewModel, dest: String): Color? {
     val i = vm.dests.indexOfFirst { it.path == dest }
     return if (i >= 0) folderColor(i) else null
 }
 
-/** Folder paths are never empty, so the empty string can stand for the skipped group. */
-private fun groupKey(dest: String?) = dest ?: ""
-
 private val KeySetSaver = Saver<Set<String>, ArrayList<String>>(save = { ArrayList(it) }, restore = { it.toSet() })
 
 @Composable
-private fun GroupHeader(dest: String?, count: Int, color: Color?, collapsed: Boolean, onToggle: () -> Unit) {
+private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Boolean, onToggle: () -> Unit) {
     val turn by animateFloatAsState(if (collapsed) -90f else 0f, label = "chevron")
     Column(
         Modifier.fillMaxWidth()
@@ -177,7 +173,7 @@ private fun GroupHeader(dest: String?, count: Int, color: Color?, collapsed: Boo
             Dot(color)
             Spacer(Modifier.width(8.dp))
             Text(
-                if (dest == null) "Skipped" else Store.labelFor(dest),
+                Store.labelFor(dest),
                 style = MaterialTheme.typography.titleMediumEmphasized,
                 modifier = Modifier.weight(1f),
             )
@@ -187,7 +183,7 @@ private fun GroupHeader(dest: String?, count: Int, color: Color?, collapsed: Boo
         }
         // The whole path wraps instead of being cut, it is what tells two folders apart
         Text(
-            dest ?: "These stay where they are and leave the album's list after Move or Hide.",
+            dest,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -261,10 +257,7 @@ private val FabHeight = 56.dp
 private fun MoveFab(vm: SiftViewModel, visible: Boolean) {
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
         SmallExtendedFloatingActionButton(
-            text = {
-                // Skips alone move nothing on disk, so the button names what does happen to them
-                FitLabel(if (vm.queued > 0) "Move ${vm.queued.grouped()}" else "Hide ${(vm.selections - vm.queued).grouped()}")
-            },
+            text = { FitLabel("Move ${vm.queued.grouped()}") },
             icon = { Icon(Icons.Rounded.DoneAll, null) },
             onClick = { vm.move() },
             containerColor = MaterialTheme.colorScheme.primary,

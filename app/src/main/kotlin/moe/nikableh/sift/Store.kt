@@ -16,11 +16,6 @@ object Store {
     const val ORDER_OLDEST = 1
     const val ORDER_NAME = 2
 
-    // Values of the second field of a skipped.log line
-    const val SKIP_NONE = 0
-    const val SKIP_FRESH = 1
-    const val SKIP_HIDDEN = 2
-
     private const val MAX_JOURNALS = 20
 
     private lateinit var dir: File
@@ -39,19 +34,8 @@ object Store {
         private set
 
     /**
-     * Photos the user looked at and chose to leave where they are, since the last Move. Kept
-     * apart from [pending], so a photo is either queued, skipped or not reviewed yet.
-     */
-    var skipped = LinkedHashSet<String>()
-        private set
-
-    /** Skips a Move has committed. These photos stay out of the album until they are unhidden. */
-    var hidden = LinkedHashSet<String>()
-        private set
-
-    /**
-     * False until [useQueues] has the logs in. Until then the collections above are empty, and a
-     * change to them would be lost when the read ones replace them
+     * False until [useQueue] has the log in. Until then [pending] is empty, and a change to it
+     * would be lost when the read one replaces it
      */
     var ready = false
         private set
@@ -61,10 +45,9 @@ object Store {
 
     private val configFile get() = File(dir, "config.json")
     private val pendingFile get() = File(dir, "pending.log")
-    private val skippedFile get() = File(dir, "skipped.log")
     private val journalDir get() = File(dir, "journals")
 
-    /** Reads the settings. The queue logs can hold 200,000 lines, so they come separately from [readQueues] */
+    /** Reads the settings. The queue log can hold 200,000 lines, so it comes separately from [readQueue] */
     fun init(ctx: Context) {
         if (configLoaded) return
         dir = ctx.applicationContext.filesDir
@@ -72,43 +55,31 @@ object Store {
         configLoaded = true
     }
 
-    class Queues(
-        val pending: LinkedHashMap<String, String>,
-        val skipped: LinkedHashSet<String>,
-        val hidden: LinkedHashSet<String>,
-    )
-
     /**
-     * Parses both logs into new collections and rewrites a log that holds removals, overrides or a
-     * torn line. It touches no shared state, so it can run off the main thread, where a big queue
-     * would take seconds
+     * Parses the log into a new map and rewrites it when it holds removals, overrides or a torn
+     * line. It touches no shared state, so it can run off the main thread, where a big queue would
+     * take seconds
      */
-    fun readQueues(): Queues {
-        val q = Queues(LinkedHashMap(), LinkedHashSet(), LinkedHashSet())
-        val pendingLines = readLines(pendingFile) { a ->
+    fun readQueue(): LinkedHashMap<String, String> {
+        val pending = LinkedHashMap<String, String>()
+        val lines = readLines(pendingFile) { a ->
             val dest = a.optString(1)
-            if (dest.isEmpty()) q.pending.remove(a.getString(0)) else q.pending[a.getString(0)] = dest
+            if (dest.isEmpty()) pending.remove(a.getString(0)) else pending[a.getString(0)] = dest
         }
         // One line per entry means nothing to drop, and rewriting a big queue anyway costs seconds.
         // A file torn right before its last newline still parses, but the next append would join
-        // that line, so it gets rewritten too. Nothing else writes the logs before [useQueues]
-        if (pendingLines >= 0 && (pendingLines != q.pending.size || !endsWithNewline(pendingFile))) {
-            writeAtomic(pendingFile, pendingText(q.pending))
+        // that line, so it gets rewritten too. Nothing else writes the log before [useQueue]
+        if (lines >= 0 && (lines != pending.size || !endsWithNewline(pendingFile))) {
+            writeAtomic(pendingFile, pendingText(pending))
         }
-        val skippedLines = readLines(skippedFile) { a ->
-            putSkip(q.skipped, q.hidden, a.getString(0), a.optInt(1, SKIP_FRESH))
-        }
-        if (skippedLines >= 0 && (skippedLines != q.skipped.size + q.hidden.size || !endsWithNewline(skippedFile))) {
-            writeAtomic(skippedFile, skippedText(q.skipped, q.hidden))
-        }
-        return q
+        // Left by versions that could skip photos
+        File(dir, "skipped.log").delete()
+        return pending
     }
 
-    /** Main thread: takes over what [readQueues] read. */
-    fun useQueues(q: Queues) {
-        pending = q.pending
-        skipped = q.skipped
-        hidden = q.hidden
+    /** Main thread: takes over what [readQueue] read. */
+    fun useQueue(pending: LinkedHashMap<String, String>) {
+        this.pending = pending
         ready = true
     }
 
@@ -187,67 +158,6 @@ object Store {
         return sb.toString()
     }
 
-    private fun putSkip(skipped: MutableSet<String>, hidden: MutableSet<String>, path: String, state: Int) {
-        skipped.remove(path)
-        hidden.remove(path)
-        when (state) {
-            SKIP_FRESH -> skipped.add(path)
-            SKIP_HIDDEN -> hidden.add(path)
-        }
-    }
-
-    fun skipState(path: String): Int = when (path) {
-        in skipped -> SKIP_FRESH
-        in hidden -> SKIP_HIDDEN
-        else -> SKIP_NONE
-    }
-
-    fun setSkip(path: String, state: Int) {
-        putSkip(skipped, hidden, path, state)
-        val line = JSONArray().put(path).put(state).toString() + "\n"
-        io.execute {
-            try {
-                FileOutputStream(skippedFile, true).use { it.write(line.toByteArray()) }
-            } catch (e: Exception) {
-            }
-        }
-    }
-
-    /** Move commits the skips made since the last one. */
-    fun hideSkipped() {
-        if (skipped.isEmpty()) return
-        hidden.addAll(skipped)
-        skipped.clear()
-        compactSkipped()
-    }
-
-    /**
-     * Undoing a Move makes the skips it hid wait for the next one again. A photo unhidden or
-     * filed since then keeps its new state, so queued and skipped still exclude each other
-     */
-    fun reopenSkips(paths: List<String>) {
-        var changed = false
-        for (path in paths) {
-            if (hidden.remove(path)) {
-                skipped.add(path)
-                changed = true
-            }
-        }
-        if (changed) compactSkipped()
-    }
-
-    fun compactSkipped() {
-        val text = skippedText(skipped, hidden)
-        io.execute { writeAtomic(skippedFile, text) }
-    }
-
-    private fun skippedText(skipped: Set<String>, hidden: Set<String>): String {
-        val sb = StringBuilder()
-        for (path in skipped) sb.append(JSONArray().put(path).put(SKIP_FRESH).toString()).append('\n')
-        for (path in hidden) sb.append(JSONArray().put(path).put(SKIP_HIDDEN).toString()).append('\n')
-        return sb.toString()
-    }
-
     fun counts(): Map<String, Int> {
         val out = HashMap<String, Int>()
         for (dest in pending.values) out[dest] = (out[dest] ?: 0) + 1
@@ -257,7 +167,7 @@ object Store {
     fun labelFor(destPath: String): String =
         dests.firstOrNull { it.path == destPath }?.label ?: File(destPath).name
 
-    /** Newest first. Each file lists the moves and hidden skips of one batch. */
+    /** Newest first. Each file lists the moves of one batch. */
     fun journals(): List<File> =
         (journalDir.listFiles { f -> f.name.endsWith(".log") } ?: emptyArray())
             .sortedByDescending { it.name }
