@@ -3,29 +3,35 @@ package moe.nikableh.sift.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SnackbarHost
@@ -40,20 +46,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
 import java.io.File
 
-/** Source album, scan options and the list of destination folders. */
+/** The albums to sort, the scan options and the list of destination folders. */
 @Composable
 fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val sources = vm.sources
     val dests = vm.dests
 
     Scaffold(
@@ -68,57 +78,82 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 scrollBehavior = scroll,
             )
         },
-        floatingActionButton = {
-            SmallExtendedFloatingActionButton(
-                text = { Text("Add folders") },
-                icon = { Icon(Icons.Rounded.Add, null) },
-                onClick = { vm.open(Screen.Picker(forSource = false)) },
-            )
-        },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = padding.calculateTopPadding(),
-                bottom = padding.calculateBottomPadding() + 104.dp,
-            ),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = padding.calculateBottomPadding() + 24.dp),
             verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            // Not content padding: a sticky header pins to the viewport's edge, which would be under the app bar
+            modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
         ) {
-            item { SectionLabel("Photos to sort") }
-            item {
-                val source = vm.source
-                SegmentedListItem(
-                    onClick = { vm.askPickSource() },
-                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
-                    colors = segmentColors(),
-                    leadingContent = { Icon(Icons.Rounded.PhotoLibrary, null) },
-                    trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-                    // Paths wrap instead of being cut, the whole path matters here
-                    supportingContent = { Text(source ?: "Tap to choose an album") },
-                ) { Text(source?.let { File(it).name } ?: "No album chosen") }
+            // Each header carries its list's Add button and stays pinned, so adding is in reach at any list length
+            stickyHeader(key = "header:albums") {
+                SectionHeader("Albums to sort", "Add albums") { vm.pickAlbums() }
             }
-            item {
+            if (sources.isEmpty()) {
+                item(key = "albums:none") {
+                    SegmentedListItem(
+                        onClick = { vm.pickAlbums() },
+                        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                        colors = segmentColors(),
+                        leadingContent = { Icon(Icons.Rounded.PhotoLibrary, null) },
+                        supportingContent = { Text("Tap to choose what to sort") },
+                    ) { Text("No album chosen") }
+                }
+            }
+            itemsIndexed(sources, key = { _, path -> "album:$path" }) { i, path ->
+                val stat = vm.statOf(path)
+                SegmentedListItem(
+                    shapes = ListItemDefaults.segmentedShapes(index = i, count = sources.size),
+                    colors = segmentColors(),
+                    modifier = Modifier.animateItem(),
+                    leadingContent = { AlbumThumb(stat?.cover) },
+                    supportingContent = {
+                        Column {
+                            // Paths wrap instead of being cut, the whole path matters here
+                            Text(path)
+                            // An album added a moment ago has no counts until it has been read
+                            if (stat != null && !vm.scanning) Text("${photos(stat.total)}  ·  ${stat.left.grouped()} left")
+                        }
+                    },
+                    trailingContent = {
+                        IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove") }
+                    },
+                ) { Text(File(path).name) }
+            }
+            item(key = "options:gap") { Spacer(Modifier.height(8.dp)) }
+            item(key = "options:subfolders") {
                 SegmentedListItem(
                     checked = vm.recursive,
                     onCheckedChange = { vm.changeRecursive(it) },
-                    shapes = ListItemDefaults.segmentedShapes(index = 1, count = 3),
+                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
                     colors = segmentColors(),
                     trailingContent = { Switch(checked = vm.recursive, onCheckedChange = null) },
-                    supportingContent = { Text("Destination folders inside it are left out") },
+                    supportingContent = {
+                        Text(
+                            if (sources.size > 1) "Of every album. Destination folders inside them are left out"
+                            else "Destination folders inside it are left out"
+                        )
+                    },
                 ) { Text("Include subfolders") }
             }
-            item {
+            item(key = "options:order") {
                 SegmentedListItem(
-                    shapes = ListItemDefaults.segmentedShapes(index = 2, count = 3),
+                    shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
                     colors = segmentColors(),
-                    supportingContent = { OrderButtons(vm) },
+                    supportingContent = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OrderButtons(vm)
+                            if (sources.size > 1) Text("All albums are sorted as one list")
+                        }
+                    },
                 ) { Text("Order") }
             }
 
-            item { SectionLabel("Destination folders") }
-            item {
+            stickyHeader(key = "header:destinations") {
+                SectionHeader("Destination folders", "Add destinations") { vm.open(Screen.Picker(forSource = false)) }
+            }
+            item(key = "destinations:about") {
                 Text(
                     "Each folder becomes a button under the photo. One tap queues the photo for that folder and shows " +
                         "the next one. Nothing moves until you press Move. For photos you want to delete, add a folder " +
@@ -157,14 +192,53 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     }
 }
 
+/** A section's name with the button that adds to its list. [addLabel] is what a screen reader says for the button. */
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmallEmphasized,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp),
-    )
+private fun SectionHeader(text: String, addLabel: String, onAdd: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            // Opaque, so rows don't show through while the header is pinned
+            .background(MaterialTheme.colorScheme.background)
+            .padding(start = 4.dp, top = 12.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleSmallEmphasized,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f),
+        )
+        FilledTonalButton(
+            onClick = onAdd,
+            shapes = ButtonDefaults.shapes(),
+            contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            modifier = Modifier.semantics { contentDescription = addLabel },
+        ) {
+            Icon(Icons.Rounded.Add, null, Modifier.size(ButtonDefaults.IconSize))
+            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+            Text("Add")
+        }
+    }
+}
+
+/** The album's first photo, or a placeholder until the album has been read. */
+@Composable
+private fun AlbumThumb(cover: File?) {
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (cover != null) {
+            AsyncImage(
+                model = cover,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Icon(Icons.Rounded.PhotoLibrary, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 /** Connected toggle buttons, the Expressive replacement for a segmented control. */

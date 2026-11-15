@@ -39,6 +39,9 @@ sealed interface Dialog {
     data object SelectionsLocked : Dialog
     data class ConfirmDiscardPicks(val count: Int) : Dialog
     data class ConfirmRemoveDest(val dest: Dest, val queued: Int) : Dialog
+
+    /** [queued] selections wait in the album, [elsewhere] in the other albums. */
+    data class ConfirmRemoveSource(val path: String, val queued: Int, val elsewhere: Int) : Dialog
     data class RenameDest(val dest: Dest) : Dialog
     data class NewFolder(val parent: File, val forSource: Boolean, val album: Boolean = false) : Dialog
     data class GoToPhoto(val current: Int, val total: Int) : Dialog
@@ -47,6 +50,11 @@ sealed interface Dialog {
 enum class Gate { Permission, Setup, Reading, Empty, End, None }
 
 class Album(val path: String, val name: String, val count: Int, val cover: String)
+
+/** One album being sorted, with how far along it is. [cover] is its first photo in sorting order. */
+class AlbumStat(val path: String, val name: String, val total: Int, val queued: Int, val cover: File?) {
+    val left: Int get() = total - queued
+}
 
 class Folder(val dir: File, val title: String, val subtitle: String)
 
@@ -69,7 +77,15 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     val screen: Screen get() = backStack.last()
     val messages = MutableSharedFlow<String>(extraBufferCapacity = 4)
 
-    var source by mutableStateOf<String?>(null)
+    /** Albums to sort, in the order they were added. */
+    var sources by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /**
+     * The albums of the last folder read, in the order they had then. An album added since has no
+     * entry yet, and one removed since keeps its entry until the next read, so look them up by path
+     */
+    var albumStats by mutableStateOf<List<AlbumStat>>(emptyList())
         private set
     var recursive by mutableStateOf(false)
         private set
@@ -124,7 +140,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var browsing by mutableStateOf(false)
         private set
 
-    /** Folders ticked in the destination picker. Tap order, because it becomes button order. */
+    /** Folders ticked in the picker. Tap order, because for destinations it becomes button order. */
     val picked = mutableStateListOf<String>()
 
     /** Null at the list of storage volumes. */
@@ -136,6 +152,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     private var indexOf: Map<String, Int> = emptyMap()
+
+    /** What [Photo.album] points into: the albums as they were when [photos] was read. */
+    private var scannedSources: List<String> = emptyList()
+    private var albumTotals = IntArray(0)
+    private var albumQueued = IntArray(0)
+    private var albumCovers = arrayOfNulls<File>(0)
 
     /** Positions in [photos] that aren't queued, so finding the next one skips 64 at a time. */
     private var unsorted = BitSet()
@@ -152,14 +174,14 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     val gate: Gate
         get() = when {
             !allowed -> Gate.Permission
-            source == null || dests.isEmpty() -> Gate.Setup
+            sources.isEmpty() || dests.isEmpty() -> Gate.Setup
             scanning -> Gate.Reading
             photos.isEmpty() -> Gate.Empty
             index >= photos.size -> Gate.End
             else -> Gate.None
         }
 
-    /** Queued photos of the album on screen. The queue itself can also hold other albums. */
+    /** Queued photos of the albums on screen. The queue itself can also hold photos from elsewhere. */
     var queuedHere by mutableIntStateOf(0)
         private set
 
@@ -230,7 +252,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         syncSettings()
         // Before the queue is in, the start-up read above owns the journal count
         if (Store.ready) lastBatchInfo = lastBatch()
-        if (!allowed || source == null || dests.isEmpty()) {
+        if (!allowed || sources.isEmpty() || dests.isEmpty()) {
             showImage(null)
             return
         }
@@ -245,7 +267,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun rescan() {
-        val root = Store.source ?: return
+        val roots = Store.sources.toList()
+        if (roots.isEmpty()) return
         val version = Store.scanVersion
         val recursive = Store.recursive
         val order = Store.order
@@ -255,7 +278,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             // Indexing and counting a big album would freeze the screen on the main thread. Nothing
             // changes the queue while scanning is set, so reading it from here is safe
-            val result = withContext(Dispatchers.IO) { prepare(Scanner.scan(File(root), recursive, exclude, order)) }
+            val result = withContext(Dispatchers.IO) {
+                prepare(Scanner.scan(roots.map { File(it) }, recursive, exclude, order), roots.size)
+            }
             scanning = false
             scannedVersion = version
             photos = result.photos
@@ -264,6 +289,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             index = Store.lastPath?.let { indexOf[it] } ?: firstUnsorted()
             queuedHere = result.queued
             counts = result.counts
+            scannedSources = roots
+            albumTotals = result.albumTotals
+            albumQueued = result.albumQueued
+            albumCovers = result.albumCovers
+            publishAlbums()
             if (screen == Screen.Selections) loadSelections()
             refresh()
         }
@@ -276,16 +306,61 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val unsorted: BitSet,
         val queued: Int,
         val counts: Map<String, Int>,
+        val albumTotals: IntArray,
+        val albumQueued: IntArray,
+        val albumCovers: Array<File?>,
     )
 
-    private fun prepare(list: List<Photo>): ScanResult {
+    private fun prepare(list: List<Photo>, albums: Int): ScanResult {
         val indexOf = HashMap<String, Int>(list.size * 2)
         val unsorted = BitSet(list.size)
+        val totals = IntArray(albums)
+        val queuedIn = IntArray(albums)
+        val covers = arrayOfNulls<File>(albums)
         list.forEachIndexed { i, p ->
             indexOf[p.path] = i
-            if (p.path !in Store.pending) unsorted.set(i)
+            totals[p.album]++
+            if (covers[p.album] == null) covers[p.album] = p.file
+            if (p.path in Store.pending) queuedIn[p.album]++ else unsorted.set(i)
         }
-        return ScanResult(list, indexOf, unsorted, list.size - unsorted.cardinality(), Store.counts())
+        return ScanResult(list, indexOf, unsorted, list.size - unsorted.cardinality(), Store.counts(), totals, queuedIn, covers)
+    }
+
+    /** Pushes the per-album counts into observable state. An album list is short, so a tap can afford it. */
+    private fun publishAlbums() {
+        albumStats = scannedSources.mapIndexed { i, path ->
+            AlbumStat(path, File(path).name, albumTotals[i], albumQueued[i], albumCovers[i])
+        }
+    }
+
+    /** Counts of one album, or null when it hasn't been read since it was added. */
+    fun statOf(path: String): AlbumStat? = albumStats.firstOrNull { it.path == path }
+
+    /** "Camera" for one album, "3 albums" for more. */
+    val albumsLabel: String
+        get() = sources.singleOrNull()?.let { File(it).name } ?: "${sources.size} albums"
+
+    /** The album a photo of the list was read from, with the folders under it: "Camera" or "Camera/Trip". */
+    fun titleOf(photo: Photo): String {
+        val root = scannedSources.getOrNull(photo.album) ?: return photo.file.parentFile?.name ?: ""
+        return File(root).name + (photo.file.parent ?: root).removePrefix(root)
+    }
+
+    /**
+     * Where a queued photo sits, for the Selections rows. With several albums that is the album's
+     * name and the folders under it. With one album only the folders under it are worth a line.
+     */
+    fun placeOf(file: File): String? {
+        val parent = file.parent ?: return null
+        val at = Store.albumOf(file.path)
+        if (at < 0) return parent
+        val root = Store.sources[at]
+        val under = parent.removePrefix(root).trimStart('/')
+        return when {
+            Store.sources.size == 1 -> under.ifEmpty { null }
+            under.isEmpty() -> File(root).name
+            else -> "${File(root).name}/$under"
+        }
     }
 
     /** First unqueued photo from [from] on. */
@@ -312,8 +387,14 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** Counts the whole album and queue again. Anything that changes more than one photo goes through here. */
     private fun recount() {
         counts = Store.counts()
-        queuedHere = photos.count { it.path in Store.pending }
-        for (i in photos.indices) unsorted.set(i, photos[i].path !in Store.pending)
+        albumQueued.fill(0)
+        for (i in photos.indices) {
+            val queued = photos[i].path in Store.pending
+            unsorted.set(i, !queued)
+            if (queued) albumQueued[photos[i].album]++
+        }
+        queuedHere = albumQueued.sum()
+        publishAlbums()
     }
 
     /**
@@ -326,7 +407,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         Store.setPending(path, dest)
         indexOf[path]?.let { i ->
             unsorted.set(i, dest == null)
-            if (before == null) queuedHere++ else if (dest == null) queuedHere--
+            val by = if (before == null) 1 else if (dest == null) -1 else 0
+            if (by != 0) {
+                queuedHere += by
+                albumQueued[photos[i].album] += by
+                publishAlbums()
+            }
         }
         // A new map, so the folder badges see the change
         counts = HashMap(counts).also { m ->
@@ -553,7 +639,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     // region settings
 
     private fun syncSettings() {
-        source = Store.source
+        sources = Store.sources.toList()
         recursive = Store.recursive
         order = Store.order
         dests = Store.dests.toList()
@@ -567,8 +653,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The album and its subfolder setting stay fixed while selections wait for Move. Changing
-     * either would leave choices queued for photos that are no longer on screen.
+     * The subfolder setting stays fixed while selections wait for Move. Turning it off would leave
+     * choices queued for photos that are no longer on screen.
      */
     private fun locked(): Boolean {
         // An empty queue that hasn't been read yet would look unlocked
@@ -578,15 +664,42 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    fun askPickSource() {
-        if (Store.source != null && locked()) return
+    /** Opens the picker to add albums. That is safe at any time: what is already queued stays in the list. */
+    fun pickAlbums() {
         open(Screen.Picker(forSource = true))
+    }
+
+    fun askRemoveSource(path: String) {
+        // A folder read counts against the queue from another thread, so the queue holds still until it ends
+        if (!Store.ready || scanning) {
+            messages.tryEmit("Wait until the albums have been read")
+            return
+        }
+        val at = Store.sources.indexOf(path)
+        if (at < 0) return
+        val here = Store.pending.keys.count { Store.albumOf(it) == at }
+        if (here == 0) removeSource(path) else dialog = Dialog.ConfirmRemoveSource(path, here, Store.pending.size - here)
+    }
+
+    /** Takes an album out of sorting and drops the selections made in it. Its photos stay where they are. */
+    fun removeSource(path: String) {
+        if (busy || scanning || !Store.ready) return
+        val at = Store.sources.indexOf(path)
+        if (at < 0) return
+        if (Store.pending.keys.removeAll { Store.albumOf(it) == at }) {
+            Store.compactPending()
+            counts = Store.counts()
+        }
+        Store.sources.removeAt(at)
+        changed(rescan = true)
     }
 
     fun changeRecursive(on: Boolean) {
         if (!on && locked()) return
         Store.recursive = on
         changed(rescan = true)
+        // The Folders screen shows what each album holds, and that just changed
+        refresh()
     }
 
     fun changeOrder(value: Int) {
@@ -595,32 +708,21 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         changed(rescan = true)
     }
 
-    fun pickSource(path: String) {
-        // A folder can't be sorted into itself
-        Store.dests.firstOrNull { it.path == path }?.let { dest ->
-            Store.dests.remove(dest)
-            if (Store.pending.values.removeAll { it == path }) Store.compactPending()
-            messages.tryEmit("Removed the ${dest.label} button")
-        }
-        Store.source = path
-        Store.lastPath = null
-        Store.lastPickerDir = File(path).parent
-        changed(rescan = true)
-        back()
-    }
+    /** A folder can't be sorted into itself, so one that is an album or a destination can't be ticked as either. */
+    fun isSource(path: String): Boolean = path in sources
 
-    /** True for the folder being sorted, and when adding destinations, for folders that already are ones. */
-    fun isTaken(path: String, forSource: Boolean): Boolean =
-        path == source || (!forSource && dests.any { it.path == path })
+    fun isDest(path: String): Boolean = dests.any { it.path == path }
 
-    fun togglePicked(path: String) {
+    fun isTaken(path: String): Boolean = isSource(path) || isDest(path)
+
+    fun togglePicked(path: String, forSource: Boolean) {
         if (picked.remove(path)) return
-        if (path == Store.source) {
-            messages.tryEmit("That's the folder being sorted")
+        if (path in Store.sources) {
+            messages.tryEmit(if (forSource) "Already being sorted" else "That's a folder being sorted")
             return
         }
         if (Store.dests.any { it.path == path }) {
-            messages.tryEmit("Already a destination")
+            messages.tryEmit(if (forSource) "That folder is a destination" else "Already a destination")
             return
         }
         picked.add(path)
@@ -631,14 +733,16 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (picked.isEmpty()) back() else dialog = Dialog.ConfirmDiscardPicks(picked.size)
     }
 
-    /** Adds every ticked folder as a destination in one go and leaves the picker. */
-    fun addPicked() {
+    /** Adds every ticked folder in one go, as albums to sort or as destinations, and leaves the picker. */
+    fun addPicked(forSource: Boolean) {
         if (picked.isEmpty()) return
-        for (path in picked) Store.dests.add(Dest(path, File(path).name))
+        if (forSource) Store.sources.addAll(picked) else for (path in picked) Store.dests.add(Dest(path, File(path).name))
         Store.lastPickerDir = File(picked.last()).parent
         picked.clear()
         changed(rescan = true)
         back()
+        // The Folders screen shows what each album holds, so new albums are read without waiting for Home
+        if (forSource) refresh()
     }
 
     fun moveDest(from: Int, to: Int) {
@@ -777,13 +881,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (clean.isEmpty() || clean.contains('/')) return
         val made = File(parent, clean)
         if (made.isDirectory || made.mkdirs()) {
-            if (forSource) {
-                pickSource(made.path)
-            } else {
-                // Stays in the picker, so more folders can be ticked before adding them all
-                if (made.path !in picked) togglePicked(made.path)
-                if (browsing) browse(browseDir)
-            }
+            // Stays in the picker, so more folders can be ticked before adding them all
+            if (made.path !in picked) togglePicked(made.path, forSource)
+            if (browsing) browse(browseDir)
         } else {
             messages.tryEmit("Can't create a folder there")
         }

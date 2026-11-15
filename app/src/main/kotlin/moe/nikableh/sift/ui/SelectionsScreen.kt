@@ -141,7 +141,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                         }
                     }
                     if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
-                        SelectionRow(row, vm.source, ready, onPreview = { preview = row.file }) { vm.dropSelection(row) }
+                        SelectionRow(row, vm.placeOf(row.file), ready, onPreview = { preview = row.file }) { vm.dropSelection(row) }
                     }
                 }
             }
@@ -198,7 +198,7 @@ fun Dot(color: Color?) {
 @Composable
 private fun SelectionRow(
     row: Selection,
-    source: String?,
+    place: String?,
     enabled: Boolean,
     onPreview: () -> Unit,
     onRemove: () -> Unit,
@@ -214,10 +214,9 @@ private fun SelectionRow(
         )
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(row.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            // Only a recursive scan puts photos outside the album's own folder
-            val parent = row.file.parent
-            if (parent != null && parent != source) Text(
-                if (source != null && parent.startsWith("$source/")) parent.substring(source.length + 1) else parent,
+            // With several albums the one it comes from. With subfolders included, the folders under that
+            if (place != null) Text(
+                place,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import java.io.File
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Mover
 import moe.nikableh.sift.SiftViewModel
@@ -125,12 +126,12 @@ fun Dialogs(vm: SiftViewModel) {
 
         Dialog.SelectionsLocked -> AlertDialog(
             onDismissRequest = close,
-            title = { Text("Finish this album first") },
+            title = { Text(if (vm.sources.size == 1) "Finish this album first" else "Finish these albums first") },
             text = {
                 val one = vm.queued == 1
                 Text(
                     "${selections(vm.queued)} ${if (one) "is" else "are"} waiting. " +
-                        "Move or clear ${if (one) "it" else "them"} before changing what is sorted."
+                        "Move or clear ${if (one) "it" else "them"} before leaving subfolders out."
                 )
             },
             confirmButton = {
@@ -140,6 +141,36 @@ fun Dialogs(vm: SiftViewModel) {
                 Row {
                     TextButton(onClick = close) { Text("Cancel") }
                     TextButton(onClick = { vm.dialog = Dialog.ConfirmClear }) { Text("Clear") }
+                }
+            },
+        )
+
+        is Dialog.ConfirmRemoveSource -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Remove ${File(d.path).name}?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("${selections(d.queued)} in this album ${if (d.queued == 1) "is" else "are"} dropped. No files are touched.")
+                    // Counted, not listed, so the line stays one line at any number of albums
+                    val others = vm.sources.size - 1
+                    if (d.elsewhere > 0 && others > 0) {
+                        Text(if (others == 1) "Selections in the other album stay." else "Selections in the other $others albums stay.")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        vm.removeSource(d.path)
+                        close()
+                    },
+                    shapes = ButtonDefaults.shapes(),
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = close) { Text("Cancel") }
+                    TextButton(onClick = { vm.reviewSelections() }) { Text("Review") }
                 }
             },
         )

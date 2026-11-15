@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
@@ -24,6 +25,8 @@ import moe.nikableh.sift.SiftViewModel
 @Composable
 fun SiftApp(vm: SiftViewModel) {
     val snackbar = remember { SnackbarHostState() }
+    // Holds what Home keeps with rememberSaveable, such as its unfolded album list, while another screen covers it
+    val saved = rememberSaveableStateHolder()
     LaunchedEffect(vm) {
         vm.messages.collect { snackbar.showSnackbar(it) }
     }
@@ -53,7 +56,7 @@ fun SiftApp(vm: SiftViewModel) {
                 // Opaque even where a screen draws no background of its own, or the one under it shows through
                 Box(Modifier.fillMaxSize().background(surface)) {
                     when (screen) {
-                        Screen.Home -> HomeScreen(vm)
+                        Screen.Home -> saved.SaveableStateProvider("home") { HomeScreen(vm) }
                         Screen.Sort -> SortScreen(vm)
                         Screen.Setup -> SetupScreen(vm, snackbar)
                         Screen.Selections -> SelectionsScreen(vm)

@@ -88,12 +88,19 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
+import java.io.File
+import java.text.DateFormat
+import java.util.Date
+import kotlin.math.ceil
+import kotlin.math.pow
 import kotlinx.coroutines.delay
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
@@ -102,11 +109,6 @@ import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
 import moe.nikableh.sift.ZoomImageView
-import java.io.File
-import java.text.DateFormat
-import java.util.Date
-import kotlin.math.ceil
-import kotlin.math.pow
 
 /** The sorting screen: one photo, one tap on a folder button queues it and shows the next. */
 @Composable
@@ -127,7 +129,7 @@ fun SortScreen(vm: SiftViewModel) {
             Gate.Setup -> Welcome(
                 icon = Icons.Rounded.PhotoLibrary,
                 title = "Pick your folders",
-                body = "Choose the album to sort and the folders its photos can go to.",
+                body = "Choose the albums to sort and the folders their photos can go to.",
                 action = "Set up folders",
             ) { vm.open(Screen.Setup) }
 
@@ -212,7 +214,7 @@ private fun BigButton(label: String, onClick: () -> Unit) {
 
 @Composable
 private fun Viewer(vm: SiftViewModel, modifier: Modifier) {
-    val folder = File(vm.source ?: "").name
+    val folder = vm.albumsLabel
 
     Column(
         modifier.background(MaterialTheme.colorScheme.surface)
@@ -249,7 +251,7 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
             Gate.Empty -> Status(Modifier.align(Alignment.Center), "No photos in $folder") {
-                BigButton("Change folder") { vm.askPickSource() }
+                BigButton("Add albums") { vm.pickAlbums() }
             }
             Gate.End -> Status(
                 Modifier.align(Alignment.Center),
@@ -302,9 +304,9 @@ private fun Status(modifier: Modifier, title: String, body: String? = null, extr
 @Composable
 private fun TopBar(vm: SiftViewModel, folder: String) {
     val context = LocalContext.current
-    val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
+    val dayFormat = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
+    val timeFormat = remember { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT) }
     val photo = vm.current
-    val date = photo?.let { dateFormat.format(Date(it.mtime)) }
     val idle = !vm.busy && !vm.scanning
     var menu by remember { mutableStateOf(false) }
 
@@ -319,36 +321,43 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             }
 
             // The menu hangs off the details, so the panel under the photo holds nothing but folder buttons
-            Box(Modifier.weight(1f)) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(enabled = idle, onClickLabel = "Open menu") { menu = true }
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(enabled = idle, onClickLabel = "Open menu") { menu = true }
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // The album leads. With several of them it is what changes from one photo to the next
+                    Text(
+                        if (photo == null) folder else vm.titleOf(photo),
+                        Modifier.weight(1f, fill = false),
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        // Album at the start and the photo's own folder at the end both say where it is
+                        overflow = TextOverflow.MiddleEllipsis,
+                    )
+                    Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(20.dp))
+                }
+                if (photo != null) {
+                    val details = MaterialTheme.typography.bodySmall
+                    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+                    Row {
                         // The position never gets cut. When even a line of its own is too narrow it breaks
                         // after the slash, which a no-break space keeps with the first number
+                        Text("${(vm.index + 1).grouped()} / ${vm.photos.size.grouped()}", style = details, color = quiet)
+                        // The date gives way first. The menu has it in full, with the name and the size
                         Text(
-                            if (photo == null) folder else "${(vm.index + 1).grouped()} / ${vm.photos.size.grouped()}",
+                            "  ·  ${dayFormat.format(Date(photo.mtime))}",
                             Modifier.weight(1f, fill = false),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(20.dp))
-                    }
-                    if (photo != null) {
-                        val parent = if (vm.recursive) "${photo.file.parentFile?.name}  ·  " else ""
-                        Text(
-                            "$parent${Formatter.formatShortFileSize(context, photo.size)}  ·  ${photo.file.name}  ·  $date",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = details,
+                            color = quiet,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
-                SortMenu(vm, photo?.file, date, expanded = menu) { menu = false }
             }
 
             // The count drops out where it would take more than a fair share of the bar, which at large
@@ -372,14 +381,23 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 FitLabel(if (fits) withCount else "Review", style)
             }
         }
+        // Hangs off the bar as a whole, so it can be as wide as the bar. The cap keeps it a panel on a tablet
+        SortMenu(
+            vm,
+            photo?.file,
+            photo?.let { "${Formatter.formatShortFileSize(context, it.size)}  ·  ${timeFormat.format(Date(it.mtime))}" },
+            width = min(barWidth - 8.dp, 480.dp),
+            expanded = menu,
+        ) { menu = false }
     }
 }
 
-/** Opens from the header. A photo's name and date lead it, since the line under the counter cuts them off. */
+/** Opens from the header and leads with what the header has no room for: the photo's name, size, time and folder. */
 @Composable
-private fun SortMenu(vm: SiftViewModel, file: File?, date: String?, expanded: Boolean, onDismiss: () -> Unit) {
+private fun SortMenu(vm: SiftViewModel, file: File?, details: String?, width: Dp, expanded: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+    // The offset centres it under the bar, whose padding leaves 8dp at each side
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, modifier = Modifier.width(width), offset = DpOffset(4.dp, 0.dp)) {
         @Composable
         fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
             text = { Text(label) },
@@ -388,16 +406,19 @@ private fun SortMenu(vm: SiftViewModel, file: File?, date: String?, expanded: Bo
                 onDismiss()
                 action()
             },
+            // An item stops at 280dp on its own, which would leave the touch feedback short of the edge
+            modifier = Modifier.fillMaxWidth(),
         )
         if (file != null) {
             Column(
-                Modifier.widthIn(max = 280.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
+                val quiet = MaterialTheme.colorScheme.onSurfaceVariant
                 Text(file.name, style = MaterialTheme.typography.titleSmall)
-                if (date != null) {
-                    Text(date, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                if (details != null) Text(details, style = MaterialTheme.typography.bodySmall, color = quiet)
+                // The whole path of its folder. Two albums can share a name and differ only here
+                file.parent?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = quiet) }
             }
             HorizontalDivider(Modifier.padding(vertical = 4.dp))
             item("Share", Icons.Rounded.Share) { sharePhoto(context, file) }
@@ -407,7 +428,7 @@ private fun SortMenu(vm: SiftViewModel, file: File?, date: String?, expanded: Bo
                 vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
             }
         }
-        item("Reload folder", Icons.Rounded.Refresh) { vm.reload() }
+        item(if (vm.sources.size == 1) "Reload album" else "Reload albums", Icons.Rounded.Refresh) { vm.reload() }
     }
 }
 

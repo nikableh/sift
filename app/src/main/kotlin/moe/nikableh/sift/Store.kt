@@ -22,7 +22,8 @@ object Store {
     private var configLoaded = false
     private val io = Executors.newSingleThreadExecutor()
 
-    var source: String? = null
+    /** Albums to sort, in the order they were added. */
+    val sources = ArrayList<String>()
     var recursive = false
     var order = ORDER_NEWEST
     val dests = ArrayList<Dest>()
@@ -108,7 +109,14 @@ object Store {
         } catch (e: Exception) {
             return
         }
-        source = json.optString("source").ifEmpty { null }
+        sources.clear()
+        val albums = json.optJSONArray("sources")
+        if (albums != null) {
+            for (i in 0 until albums.length()) albums.optString(i).ifEmpty { null }?.let { sources.add(it) }
+        } else {
+            // Written by versions that sorted one album at a time
+            json.optString("source").ifEmpty { null }?.let { sources.add(it) }
+        }
         recursive = json.optBoolean("recursive")
         order = json.optInt("order", ORDER_NEWEST)
         lastPath = json.optString("lastPath").ifEmpty { null }
@@ -123,7 +131,7 @@ object Store {
 
     fun saveConfig() {
         val json = JSONObject()
-        json.put("source", source ?: "")
+        json.put("sources", JSONArray(sources))
         json.put("recursive", recursive)
         json.put("order", order)
         json.put("lastPath", lastPath ?: "")
@@ -162,6 +170,20 @@ object Store {
         val out = HashMap<String, Int>()
         for (dest in pending.values) out[dest] = (out[dest] ?: 0) + 1
         return out
+    }
+
+    /**
+     * Index in [sources] of the album a photo belongs to, or -1. An album inside another one is
+     * the closer of the two, the way a folder read counts it
+     */
+    fun albumOf(photoPath: String): Int {
+        val parent = photoPath.substringBeforeLast('/')
+        var best = -1
+        sources.forEachIndexed { i, album ->
+            val holds = parent == album || (recursive && parent.startsWith("$album/"))
+            if (holds && (best < 0 || album.length > sources[best].length)) best = i
+        }
+        return best
     }
 
     fun labelFor(destPath: String): String =

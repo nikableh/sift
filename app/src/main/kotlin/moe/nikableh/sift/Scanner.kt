@@ -2,7 +2,8 @@ package moe.nikableh.sift
 
 import java.io.File
 
-class Photo(val file: File, val mtime: Long, val size: Long) {
+/** [album] is the index of the album it was read from, in the list that was scanned. */
+class Photo(val file: File, val mtime: Long, val size: Long, val album: Int) {
     val path: String = file.path
 }
 
@@ -15,10 +16,15 @@ object Scanner {
         return dot > 0 && name.substring(dot + 1).lowercase() in exts
     }
 
-    /** [exclude] holds destination folders, so already sorted photos don't come back in a recursive scan. */
-    fun scan(root: File, recursive: Boolean, exclude: Set<String>, order: Int): List<Photo> {
+    /**
+     * Reads every album into one list. [exclude] holds destination folders, so already sorted
+     * photos don't come back in a recursive scan. An album inside another one is read on its own,
+     * so its photos show up once and count for the closer album.
+     */
+    fun scan(roots: List<File>, recursive: Boolean, exclude: Set<String>, order: Int): List<Photo> {
         val out = ArrayList<Photo>()
-        walk(root, recursive, exclude, out)
+        val albums = roots.mapTo(HashSet()) { it.path }
+        roots.forEachIndexed { i, root -> walk(root, recursive, exclude + (albums - root.path), i, out) }
         val byName = compareBy<Photo, String>(String.CASE_INSENSITIVE_ORDER) { it.file.name }
         when (order) {
             Store.ORDER_NEWEST -> out.sortWith(compareByDescending<Photo> { it.mtime }.then(byName))
@@ -28,14 +34,14 @@ object Scanner {
         return out
     }
 
-    private fun walk(dir: File, recursive: Boolean, exclude: Set<String>, out: MutableList<Photo>) {
+    private fun walk(dir: File, recursive: Boolean, exclude: Set<String>, album: Int, out: MutableList<Photo>) {
         val children = dir.listFiles() ?: return
         for (f in children) {
             if (f.name.startsWith(".")) continue
             if (f.isDirectory) {
-                if (recursive && f.path !in exclude) walk(f, true, exclude, out)
+                if (recursive && f.path !in exclude) walk(f, true, exclude, album, out)
             } else if (isImage(f.name)) {
-                out.add(Photo(f, f.lastModified(), f.length()))
+                out.add(Photo(f, f.lastModified(), f.length(), album))
             }
         }
     }
