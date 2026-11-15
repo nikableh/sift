@@ -324,6 +324,8 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             Column(
                 Modifier
                     .weight(1f)
+                    // The back button's touch area keeps the highlight this far from it, and Review gets the same
+                    .padding(end = 4.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .clickable(enabled = idle, onClickLabel = "Open menu") { menu = true }
                     .padding(horizontal = 12.dp, vertical = 4.dp),
