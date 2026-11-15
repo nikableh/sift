@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
@@ -387,10 +388,18 @@ private fun AlbumRow(album: AlbumStat) {
             LinearProgressIndicator(
                 progress = { if (album.total == 0) 0f else album.queued / album.total.toFloat() },
                 modifier = Modifier.fillMaxWidth(),
+                trackColor = cardTrackColor(),
             )
         }
     }
 }
+
+/**
+ * The default track is a container tone, which all but vanishes on the album card's own container
+ * tone. A tint of the card's text colour shows in light and dark alike
+ */
+@Composable
+private fun cardTrackColor(): Color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.24f)
 
 @Composable
 private fun AlbumStats(total: Int, queued: Int, left: Int, modifier: Modifier = Modifier) {
@@ -403,6 +412,7 @@ private fun AlbumStats(total: Int, queued: Int, left: Int, modifier: Modifier = 
         LinearProgressIndicator(
             progress = { if (total == 0) 0f else queued / total.toFloat() },
             modifier = Modifier.fillMaxWidth(),
+            trackColor = cardTrackColor(),
         )
     }
 }
