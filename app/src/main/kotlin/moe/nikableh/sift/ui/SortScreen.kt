@@ -283,7 +283,7 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
                 }
             } else {
                 Status(Modifier.align(Alignment.Center), "No photos in $folder") {
-                    BigButton("Change folders") { vm.open(Screen.Setup) }
+                    BigButton("Change folder") { vm.askPickSource() }
                 }
             }
             Gate.End -> Status(
