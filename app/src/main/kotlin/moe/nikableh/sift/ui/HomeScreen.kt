@@ -355,20 +355,15 @@ private fun AlbumRows(albums: List<AlbumStat>) {
                     .padding(start = 48.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (expanded) {
-                    Text("Show fewer", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                } else {
-                    Text(
-                        if (rest == 1) "+1 more album" else "+$rest more albums",
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        "${albums.drop(SHOWN_ALBUMS).sumOf { it.left }.grouped()} left",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
+                Text(
+                    when {
+                        expanded -> "Show fewer"
+                        rest == 1 -> "+1 more album"
+                        else -> "+$rest more albums"
+                    },
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(20.dp))
             }
         }
