@@ -3,7 +3,6 @@ package moe.nikableh.sift.ui
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -42,10 +40,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -68,6 +67,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -187,14 +187,18 @@ private fun AlbumCard(vm: SiftViewModel) {
     val albums = vm.albumStats
     val total = vm.photos.size
     val queuedHere = vm.queuedHere
+    // One album is the whole card already. The rows match the albums only once those have been read
+    val rows = !vm.scanning && sources.size > 1 && albums.map { it.path } == sources
     Card(
-        // Opens sorting like the button at the bottom. A tap does nothing while that button is
-        // disabled, and the card stays enabled so it doesn't grey out during a folder read
-        onClick = { if (!vm.scanning && !vm.busy && total > 0) vm.open(Screen.Sort) },
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(
+            // The album rows bring their own padding, so their list item reaches the card's edges.
+            // The little left under the bar keeps the item's press highlight off it
+            Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (rows) 8.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             AlbumHeader(vm)
             when {
                 vm.scanning -> Box(contentAlignment = Alignment.CenterStart) {
@@ -215,9 +219,8 @@ private fun AlbumCard(vm: SiftViewModel) {
                 )
                 else -> AlbumStats(total, queuedHere, vm.leftHere)
             }
-            // One album is the whole card already. The rows match the albums only once those have been read
-            if (!vm.scanning && sources.size > 1 && albums.map { it.path } == sources) AlbumRows(albums)
         }
+        if (rows) AlbumRows(albums)
     }
 }
 
@@ -248,7 +251,6 @@ private fun AlbumHeader(vm: SiftViewModel) {
                 }
             }
         }
-        // The card itself opens sorting, so the way to change what is sorted sits on it as its own button
         val edit = @Composable {
             FilledTonalIconButton(
                 onClick = { vm.open(Screen.Setup) },
@@ -341,19 +343,28 @@ private fun Cover(file: File?, placeholder: Boolean, modifier: Modifier, shape: 
 @Composable
 private fun AlbumRows(albums: List<AlbumStat>) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-        Row(
-            Modifier.fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable(onClickLabel = if (expanded) "Hide the albums" else "Show each album") { expanded = !expanded }
-                .heightIn(min = 48.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text("By album", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-            Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null, Modifier.size(20.dp))
+    val content = MaterialTheme.colorScheme.onPrimaryContainer
+    val label = if (expanded) "Hide the albums" else "Show each album"
+    Column {
+        // As wide as the card, so the label sits on the card's margin and the press highlight still clears it
+        ListItem(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.semantics { onClick(label = label, action = null) },
+            colors = ListItemDefaults.colors(
+                containerColor = Color.Transparent,
+                contentColor = content,
+                trailingContentColor = content,
+            ),
+            trailingContent = { Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null) },
+        ) { Text("By album") }
+        if (expanded) {
+            Column(
+                Modifier.padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                for (album in albums) AlbumRow(album)
+            }
         }
-        if (expanded) for (album in albums) AlbumRow(album)
     }
 }
 
