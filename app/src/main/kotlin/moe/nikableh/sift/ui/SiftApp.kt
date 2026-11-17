@@ -65,6 +65,7 @@ fun SiftApp(vm: SiftViewModel) {
                 }
             }
             Dialogs(vm)
+            WriteRequests(vm)
         }
     }
 }

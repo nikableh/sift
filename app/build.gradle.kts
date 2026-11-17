@@ -12,7 +12,7 @@ android {
     defaultConfig {
         applicationId = "moe.nikableh.sift"
         minSdk = 30
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 11
         versionName = "0.11"
     }

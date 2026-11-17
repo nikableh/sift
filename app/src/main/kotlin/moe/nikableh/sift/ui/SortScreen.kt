@@ -4,8 +4,6 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.net.Uri
-import android.provider.Settings
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
 import android.webkit.MimeTypeMap
@@ -118,13 +116,7 @@ fun SortScreen(vm: SiftViewModel) {
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         when (vm.gate) {
-            Gate.Permission -> Welcome(
-                icon = Icons.Rounded.FolderOpen,
-                title = "Let Sift move your photos",
-                body = "Sift moves photos between folders on your phone. Android only lets an app do that " +
-                    "with the \"All files access\" permission.",
-                action = "Grant access",
-            ) { openAllFilesSettings(context) }
+            Gate.Permission -> AccessScreen(vm)
 
             Gate.Setup -> Welcome(
                 icon = Icons.Rounded.PhotoLibrary,
@@ -145,16 +137,6 @@ fun SortScreen(vm: SiftViewModel) {
                 }
             }
         }
-    }
-}
-
-fun openAllFilesSettings(context: Context) {
-    try {
-        context.startActivity(
-            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${context.packageName}"))
-        )
-    } catch (e: Exception) {
-        context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
     }
 }
 

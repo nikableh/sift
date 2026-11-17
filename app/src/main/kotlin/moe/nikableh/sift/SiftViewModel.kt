@@ -1,7 +1,11 @@
 package moe.nikableh.sift
 
+import android.Manifest
 import android.app.Application
+import android.content.IntentSender
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
 import android.os.storage.StorageManager
@@ -14,6 +18,7 @@ import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
@@ -31,6 +36,8 @@ sealed interface Screen {
 }
 
 sealed interface Dialog {
+    /** While Android is asked for write access, before anything moves. */
+    data class Preparing(val title: String) : Dialog
     data class Progress(val title: String, val total: Int, val cancellable: Boolean) : Dialog
     data class MoveDone(val result: Mover.Result, val batch: Batch?) : Dialog
     data class ConfirmUndoBatch(val batch: Batch) : Dialog
@@ -48,6 +55,9 @@ sealed interface Dialog {
 }
 
 enum class Gate { Permission, Setup, Reading, Empty, End, None }
+
+/** How far Android lets Sift go. Only [Ready] shows the app itself. */
+enum class Access { AskPhotos, PhotosDenied, PhotosLimited, AskManage, Ready }
 
 class Album(val path: String, val name: String, val count: Int, val cover: String)
 
@@ -96,8 +106,18 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var dests by mutableStateOf<List<Dest>>(emptyList(), neverEqualPolicy())
         private set
 
-    var allowed by mutableStateOf(false)
+    var access by mutableStateOf(Access.AskPhotos)
         private set
+    val allowed: Boolean get() = access == Access.Ready
+
+    /** False while Android would ask for confirmation on every Move. Always true before Android 12, which has no switch */
+    var manageMedia by mutableStateOf(true)
+        private set
+
+    /** A write request for the activity to launch. Android answers it without a dialog while [manageMedia] is on */
+    var writeRequest by mutableStateOf<IntentSender?>(null)
+        private set
+    private var writeAnswer: CompletableDeferred<Boolean>? = null
     var photos by mutableStateOf<List<Photo>>(emptyList())
         private set
 
@@ -198,6 +218,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     init {
         Store.init(app)
         syncSettings()
+        readAccess()
         if (!Store.ready) {
             // Reads the queue like a folder: everything that would change it waits until it is in
             scanning = true
@@ -248,7 +269,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Called on resume and whenever the sorting screen comes back. */
     fun refresh() {
-        allowed = Environment.isExternalStorageManager()
+        val wasAllowed = allowed
+        readAccess()
+        // A read made without full access found nothing or only part of the albums
+        if (allowed && !wasAllowed) Store.scanVersion++
         syncSettings()
         // Before the queue is in, the start-up read above owns the journal count
         if (Store.ready) lastBatchInfo = lastBatch()
@@ -585,14 +609,21 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val entries = Store.pending.map { it.key to it.value }
         // Where to land afterwards: the first photo from here on that isn't moved
         val landing = photos.getOrNull(firstUnsorted(index))?.path
-        val journal = Store.newJournal()
-        val stop = AtomicBoolean(false)
-        cancel = stop
-        progress = 0
-        dialog = Dialog.Progress("Moving ${entries.size} photos", entries.size, cancellable = true)
         busy = true
-        Store.lastPath = landing
+        dialog = Dialog.Preparing("Getting ready to move")
         viewModelScope.launch {
+            // Refused in Android's own dialog, so the untouched list says enough
+            if (!grantWrite(entries.map { it.first })) {
+                busy = false
+                dialog = null
+                return@launch
+            }
+            val journal = Store.newJournal()
+            val stop = AtomicBoolean(false)
+            cancel = stop
+            progress = 0
+            dialog = Dialog.Progress("Moving ${entries.size} photos", entries.size, cancellable = true)
+            Store.lastPath = landing
             val result = withContext(Dispatchers.IO) {
                 Mover.move(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
             }
@@ -615,10 +646,17 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun undoBatch(batch: Batch) {
         // A folder read counts against the queue from another thread, so the queue holds still until it ends
         if (busy || scanning) return
-        progress = 0
-        dialog = Dialog.Progress("Moving ${batch.moved} photos back", batch.moved, cancellable = false)
         busy = true
+        dialog = Dialog.Preparing("Getting ready to move back")
         viewModelScope.launch {
+            val moved = withContext(Dispatchers.IO) { Mover.readJournal(batch.journal).map { it.second } }
+            if (!grantWrite(moved)) {
+                busy = false
+                dialog = null
+                return@launch
+            }
+            progress = 0
+            dialog = Dialog.Progress("Moving ${batch.moved} photos back", batch.moved, cancellable = false)
             val result = withContext(Dispatchers.IO) {
                 Mover.undo(ctx, batch.journal) { done -> if (done % 8 == 0) progress = done }
             }
@@ -632,6 +670,73 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             if (Store.pending.isNotEmpty() && screen != Screen.Selections) open(Screen.Selections)
             refresh()
         }
+    }
+
+    // endregion
+
+    // region access
+
+    private fun granted(permission: String) = ctx.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun readAccess() {
+        val full = granted(if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE)
+        val limited = !full && Build.VERSION.SDK_INT >= 34 && granted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
+        manageMedia = Build.VERSION.SDK_INT < 31 || MediaStore.canManageMedia(ctx)
+        if (full && manageMedia && !Store.accessSetUp) {
+            Store.accessSetUp = true
+            Store.saveConfig()
+        }
+        access = when {
+            full && (manageMedia || Store.accessSetUp) -> Access.Ready
+            full -> Access.AskManage
+            limited -> Access.PhotosLimited
+            Store.askedPhotos -> Access.PhotosDenied
+            else -> Access.AskPhotos
+        }
+    }
+
+    /** What the photo permission dialog asks for. The location one keeps Media management from asking on Move */
+    fun photoPermissions(): Array<String> = when {
+        Build.VERSION.SDK_INT >= 34 -> arrayOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
+            Manifest.permission.ACCESS_MEDIA_LOCATION,
+        )
+        Build.VERSION.SDK_INT == 33 -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.ACCESS_MEDIA_LOCATION)
+        else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.ACCESS_MEDIA_LOCATION)
+    }
+
+    fun photosAsked() {
+        if (Store.askedPhotos) return
+        Store.askedPhotos = true
+        Store.saveConfig()
+    }
+
+    fun skipManage() {
+        Store.accessSetUp = true
+        Store.saveConfig()
+        refresh()
+    }
+
+    fun writeAnswered(ok: Boolean) {
+        writeRequest = null
+        writeAnswer?.complete(ok)
+        writeAnswer = null
+    }
+
+    /**
+     * Gets write access to every photo in [paths] that still exists, in requests Android accepts. With
+     * Media management on, Android grants it without a dialog. The grant lasts while the process does
+     */
+    private suspend fun grantWrite(paths: List<String>): Boolean {
+        val uris = withContext(Dispatchers.IO) { MediaAccess.urisFor(ctx, paths) }
+        for (chunk in uris.chunked(MediaAccess.MAX_REQUEST)) {
+            val answer = CompletableDeferred<Boolean>()
+            writeAnswer = answer
+            writeRequest = MediaStore.createWriteRequest(ctx.contentResolver, chunk).intentSender
+            if (!answer.await()) return false
+        }
+        return true
     }
 
     // endregion

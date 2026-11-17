@@ -82,15 +82,8 @@ import moe.nikableh.sift.SiftViewModel
 /** Where the app opens and where Back from sorting lands. */
 @Composable
 fun HomeScreen(vm: SiftViewModel) {
-    val context = LocalContext.current
     when {
-        !vm.allowed -> Welcome(
-            icon = Icons.Rounded.FolderOpen,
-            title = "Let Sift move your photos",
-            body = "Sift moves photos between folders on your phone. Android only lets an app do that " +
-                "with the \"All files access\" permission.",
-            action = "Grant access",
-        ) { openAllFilesSettings(context) }
+        !vm.allowed -> AccessScreen(vm)
 
         vm.sources.isEmpty() || vm.dests.isEmpty() -> Welcome(
             icon = Icons.Rounded.PhotoLibrary,
@@ -117,6 +110,7 @@ private fun Home(vm: SiftViewModel) {
                 style = MaterialTheme.typography.displaySmallEmphasized,
                 modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
             )
+            MediaManagementCard(vm)
             AlbumCard(vm)
             DestinationsCard(vm)
             vm.lastBatchInfo?.let { batch ->

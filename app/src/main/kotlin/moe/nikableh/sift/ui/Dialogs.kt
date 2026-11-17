@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -47,6 +50,19 @@ fun Dialogs(vm: SiftViewModel) {
     val close = { vm.dialog = null }
     when (val d = vm.dialog) {
         null -> {}
+
+        is Dialog.Preparing -> AlertDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            title = { Text(d.title) },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LoadingIndicator(Modifier.size(32.dp))
+                    Text("Asking Android for access to the photos")
+                }
+            },
+            confirmButton = {},
+        )
 
         is Dialog.Progress -> AlertDialog(
             onDismissRequest = {},
