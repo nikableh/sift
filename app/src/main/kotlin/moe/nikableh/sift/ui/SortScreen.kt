@@ -11,7 +11,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -252,8 +254,8 @@ private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
             val i = vm.dests.indexOfFirst { it.path == assigned }
             Pill(
                 label = Store.labelFor(assigned),
-                color = if (i >= 0) folderColor(i).dimmed() else MaterialTheme.colorScheme.inverseSurface,
-                contentColor = if (i >= 0) Color.White else MaterialTheme.colorScheme.inverseOnSurface,
+                color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
+                contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 onClear = { vm.clearAssignment() },
             )
@@ -422,7 +424,7 @@ private fun Pill(
     label: String,
     color: Color,
     modifier: Modifier,
-    contentColor: Color = Color.White,
+    contentColor: Color,
     onClear: (() -> Unit)?,
 ) {
     Surface(
@@ -457,10 +459,12 @@ private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
         // Consumed, so coming back to this spot later doesn't replay a stale confirmation
         vm.flashShown(flash.id)
     }
+    val color = folderColor(flash.colorIndex)
     Pill(
         flash.label,
-        folderColor(flash.colorIndex).dimmed(),
+        color.tile(),
         modifier.graphicsLayer { this.alpha = alpha.value },
+        color.ink(),
         onClear = null,
     )
 }
@@ -534,7 +538,9 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
     val view = LocalView.current
     val selected = vm.assigned == dest.path
     val count = vm.counts[dest.path] ?: 0
-    val container = folderColor(index).dimmed()
+    val color = folderColor(index)
+    val ink = color.ink()
+    val dark = isSystemInDarkTheme()
 
     Box(modifier) {
         Button(
@@ -544,41 +550,49 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
             },
             // Past about 16dp the corner curve reaches the badge and the selection ring cuts through it
             shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp), pressedShape = RoundedCornerShape(6.dp)),
-            colors = ButtonDefaults.buttonColors(containerColor = container, contentColor = Color.White),
-            // A dark ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel
-            border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
-            contentPadding = PaddingValues(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = color.tile(), contentColor = ink),
+            // A dark ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel.
+            // In dark theme a ring at the edge is either pale on a pale tile or dark on the dark panel,
+            // so there it moves inside the tile
+            border = if (selected && !dark) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
+            // The padding sits on the column inside, so the dark theme ring can sit 3dp from the tile's edge
+            contentPadding = PaddingValues(0.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
-            Column(Modifier.fillMaxSize()) {
-                // The badge row is laid out even at zero, so a label never moves when its first count shows up,
-                // and the badge sits above the label instead of over it
-                val badge = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp)
-                Badge(
-                    Modifier.align(Alignment.End)
-                        .then(if (count > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ) { FitLabel(count.grouped(), badge) }
-                Row(
-                    Modifier.weight(1f).fillMaxWidth().padding(end = 4.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (selected) {
-                        Icon(Icons.Rounded.Check, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
+            Box(Modifier.fillMaxSize()) {
+                if (selected && dark) {
+                    Box(Modifier.fillMaxSize().padding(3.dp).border(3.dp, ink, RoundedCornerShape(11.dp)))
+                }
+                Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)) {
+                    // The badge row is laid out even at zero, so a label never moves when its first count shows up,
+                    // and the badge sits above the label instead of over it
+                    val badge = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp)
+                    Badge(
+                        Modifier.align(Alignment.End)
+                            .then(if (count > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
+                        containerColor = ink,
+                        contentColor = Color.White,
+                    ) { FitLabel(count.grouped(), badge) }
+                    Row(
+                        Modifier.weight(1f).fillMaxWidth().padding(end = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (selected) {
+                            Icon(Icons.Rounded.Check, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        // A line height relative to the size, so two shrunk lines fit where two full ones would not
+                        val style = MaterialTheme.typography.titleMedium.copy(lineHeight = 1.25.em)
+                        Text(
+                            dest.label,
+                            style = style,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            autoSize = shrinkToFit(style, minRatio = 0.4f),
+                        )
                     }
-                    // A line height relative to the size, so two shrunk lines fit where two full ones would not
-                    val style = MaterialTheme.typography.titleMedium.copy(lineHeight = 1.25.em)
-                    Text(
-                        dest.label,
-                        style = style,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        autoSize = shrinkToFit(style, minRatio = 0.4f),
-                    )
                 }
             }
         }

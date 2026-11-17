@@ -153,7 +153,7 @@ private fun DestinationsCard(vm: SiftViewModel) {
             ) {
                 dests.take(SHOWN_DESTS).forEachIndexed { i, dest ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Dot(folderColor(i))
+                        Dot(folderColor(i).tile())
                         Spacer(Modifier.width(6.dp))
                         Text(dest.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }

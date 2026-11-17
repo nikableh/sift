@@ -47,5 +47,11 @@ fun segmentColors(): ListItemColors =
 
 fun folderColor(index: Int): Color = folderPalette[index.mod(folderPalette.size)]
 
-/** Dark enough for white labels on every palette colour, amber and cyan included. */
-fun Color.dimmed(): Color = lerp(this, Color.Black, 0.3f)
+/**
+ * Fill of a folder button, its pill and its dot on the other screens. The same in light and dark,
+ * so what sits on it has fixed colours too
+ */
+fun Color.tile(): Color = lerp(this, Color.White, 0.45f)
+
+/** Text and icons on [tile]. */
+fun Color.ink(): Color = lerp(this, Color.Black, 0.78f)

@@ -152,7 +152,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
 /** Folders that are no longer buttons get no colour. */
 private fun destColor(vm: SiftViewModel, dest: String): Color? {
     val i = vm.dests.indexOfFirst { it.path == dest }
-    return if (i >= 0) folderColor(i) else null
+    return if (i >= 0) folderColor(i).tile() else null
 }
 
 private val KeySetSaver = Saver<Set<String>, ArrayList<String>>(save = { ArrayList(it) }, restore = { it.toSet() })

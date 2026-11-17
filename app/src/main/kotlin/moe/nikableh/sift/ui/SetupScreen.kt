@@ -176,7 +176,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     colors = segmentColors(),
                     modifier = Modifier.animateItem(),
                     leadingContent = {
-                        Box(Modifier.size(18.dp).clip(CircleShape).background(folderColor(i)))
+                        Box(Modifier.size(18.dp).clip(CircleShape).background(folderColor(i).tile()))
                     },
                     supportingContent = { Text(dest.path) },
                     trailingContent = {
