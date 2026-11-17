@@ -717,9 +717,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun writeAnswered(ok: Boolean) {
+        val answer = writeAnswer
         writeRequest = null
-        writeAnswer?.complete(ok)
         writeAnswer = null
+        // Last: it runs grantWrite on, which sets the next chunk's request and answer before it returns
+        answer?.complete(ok)
     }
 
     /**
