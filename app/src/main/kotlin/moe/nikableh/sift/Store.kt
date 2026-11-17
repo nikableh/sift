@@ -56,6 +56,7 @@ object Store {
     private val configFile get() = File(dir, "config.json")
     private val pendingFile get() = File(dir, "pending.log")
     private val journalDir get() = File(dir, "journals")
+    private val runningFile get() = File(dir, "running")
 
     /** Reads the settings. The queue log can hold 200,000 lines, so it comes separately from [readQueue] */
     fun init(ctx: Context) {
@@ -85,6 +86,61 @@ object Store {
         // Left by versions that could skip photos
         File(dir, "skipped.log").delete()
         return pending
+    }
+
+    /** A Move or an undo whose process died under it. [moved] counts the photos its journal lists. */
+    class Interrupted(val journal: File, val undo: Boolean, val moved: Int)
+
+    /**
+     * Names the journal of the run about to start. Written at once instead of queued, because the
+     * process may die before a queued write lands
+     */
+    fun markRunning(journal: File, undo: Boolean) {
+        try {
+            runningFile.writeText(mark(journal, undo))
+        } catch (e: Exception) {
+        }
+    }
+
+    /**
+     * Queued behind [compactPending], so the mark is gone only once the settled queue is on disk.
+     * By then the next run may have put its own mark there, and that one stays
+     */
+    fun clearRunning(journal: File, undo: Boolean) {
+        val mine = mark(journal, undo)
+        io.execute {
+            try {
+                if (runningFile.readText() == mine) runningFile.delete()
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    private fun mark(journal: File, undo: Boolean) = (if (undo) "undo" else "move") + "\n" + journal.name
+
+    /**
+     * Start-up, off the main thread, on the map [readQueue] returned. A Move cut short had no
+     * chance to drop what it moved from the queue, so its journal does that here
+     */
+    fun recover(ctx: Context, pending: LinkedHashMap<String, String>): Interrupted? {
+        val mark = try {
+            runningFile.readLines()
+        } catch (e: Exception) {
+            return null
+        }
+        val journal = File(journalDir, mark.getOrNull(1) ?: return null)
+        val undo = mark[0] == "undo"
+        if (!undo) Mover.settle(journal)
+        val moves = Mover.readJournal(journal)
+        if (!undo) {
+            var dropped = false
+            for (m in moves) if (pending.remove(m.first) != null) dropped = true
+            if (dropped) writeAtomic(pendingFile, pendingText(pending))
+            // The run tells MediaStore at its end, which it never reached
+            Mover.rescan(ctx, moves.flatMap { listOf(it.first, it.second) })
+        }
+        runningFile.delete()
+        return Interrupted(journal, undo, moves.size)
     }
 
     /** Main thread: takes over what [readQueue] read. */
@@ -209,7 +265,7 @@ object Store {
 
     fun newJournal(): File {
         journalDir.mkdirs()
-        journals().drop(MAX_JOURNALS - 1).forEach { it.delete() }
+        journals().drop(MAX_JOURNALS - 1).forEach { Mover.discard(it) }
         return File(journalDir, "batch-${System.currentTimeMillis()}.log")
     }
 

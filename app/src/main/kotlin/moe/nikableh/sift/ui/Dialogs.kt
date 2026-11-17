@@ -42,12 +42,35 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import java.io.File
 import moe.nikableh.sift.Dialog
+import moe.nikableh.sift.MoveRunner
 import moe.nikableh.sift.Mover
 import moe.nikableh.sift.SiftViewModel
 
 @Composable
 fun Dialogs(vm: SiftViewModel) {
     val close = { vm.dialog = null }
+    // Read from the run itself, so a view model made while it is on shows it too
+    val run = MoveRunner.run
+    if (run != null) {
+        AlertDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            title = { Text(run.title) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LinearWavyProgressIndicator(
+                        progress = { if (run.total == 0) 0f else MoveRunner.done / run.total.toFloat() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text("${MoveRunner.done.grouped()} of ${run.total.grouped()}")
+                }
+            },
+            confirmButton = {
+                if (run.cancellable) TextButton(onClick = { vm.stopMove() }) { Text("Stop") }
+            },
+        )
+        return
+    }
     when (val d = vm.dialog) {
         null -> {}
 
@@ -64,23 +87,43 @@ fun Dialogs(vm: SiftViewModel) {
             confirmButton = {},
         )
 
-        is Dialog.Progress -> AlertDialog(
-            onDismissRequest = {},
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-            title = { Text(d.title) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LinearWavyProgressIndicator(
-                        progress = { if (d.total == 0) 0f else vm.progress / d.total.toFloat() },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Text("${vm.progress.grouped()} of ${d.total.grouped()}")
-                }
-            },
-            confirmButton = {
-                if (d.cancellable) TextButton(onClick = { vm.stopMove() }) { Text("Stop") }
-            },
-        )
+        is Dialog.MoveInterrupted -> if (d.left == 0) {
+            AlertDialog(
+                onDismissRequest = close,
+                icon = { Icon(Icons.Rounded.DoneAll, null) },
+                title = { Text("Moved ${photos(d.moved)}") },
+                text = { Text("Sift was closed just as the move ended.") },
+                confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
+            )
+        } else {
+            Confirm(
+                title = "The move didn't finish",
+                confirm = "Continue",
+                dismiss = "Not now",
+                onConfirm = {
+                    close()
+                    vm.move()
+                },
+                onDismiss = close,
+            ) {
+                val moved = if (d.moved == 0) "before any photo moved" else "after moving ${photos(d.moved)}"
+                Text("Sift was closed $moved. ${d.left.grouped()} ${if (d.left == 1) "is" else "are"} still queued.")
+            }
+        }
+
+        is Dialog.UndoInterrupted -> {
+            val b = d.batch
+            Confirm(
+                icon = Icons.Rounded.History,
+                title = "Moving back didn't finish",
+                confirm = "Continue",
+                dismiss = "Not now",
+                onConfirm = { vm.undoBatch(b) },
+                onDismiss = close,
+            ) {
+                Text("Sift was closed while moving ${photos(b.moved)} back. Continue to return the rest and put them all back in the queue.")
+            }
+        }
 
         is Dialog.MoveDone -> AlertDialog(
             onDismissRequest = close,
@@ -297,6 +340,7 @@ private fun Confirm(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     icon: ImageVector? = null,
+    dismiss: String = "Cancel",
     body: @Composable () -> Unit,
 ) {
     AlertDialog(
@@ -305,7 +349,7 @@ private fun Confirm(
         title = { Text(title) },
         text = body,
         confirmButton = { Button(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(dismiss) } },
     )
 }
 

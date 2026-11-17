@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
@@ -25,7 +26,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.BitSet
-import java.util.concurrent.atomic.AtomicBoolean
 
 sealed interface Screen {
     data object Home : Screen
@@ -38,8 +38,11 @@ sealed interface Screen {
 sealed interface Dialog {
     /** While Android is asked for write access, before anything moves. */
     data class Preparing(val title: String) : Dialog
-    data class Progress(val title: String, val total: Int, val cancellable: Boolean) : Dialog
     data class MoveDone(val result: Mover.Result, val batch: Batch?) : Dialog
+
+    /** At the first launch after the process died under a Move. [left] photos are still queued. */
+    data class MoveInterrupted(val moved: Int, val left: Int) : Dialog
+    data class UndoInterrupted(val batch: Batch) : Dialog
     data class ConfirmUndoBatch(val batch: Batch) : Dialog
     data class UndoFailed(val restored: Int, val failed: List<Pair<String, String>>) : Dialog
     data object ConfirmClear : Dialog
@@ -124,8 +127,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var scanning by mutableStateOf(false)
         private set
-    var busy by mutableStateOf(false)
-        private set
+    /** Asking Android for write access, before a run starts. */
+    private var preparing by mutableStateOf(false)
+
+    /** A Move or an undo is being prepared or is running, started here or by a view model before this one. */
+    val busy: Boolean get() = preparing || MoveRunner.run != null
     var queued by mutableIntStateOf(0)
         private set
     var counts by mutableStateOf<Map<String, Int>>(emptyMap())
@@ -149,8 +155,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var flash by mutableStateOf<Flash?>(null)
         private set
     var dialog by mutableStateOf<Dialog?>(null)
-    var progress by mutableIntStateOf(0)
-        private set
 
     /** Null while loading. */
     var albums by mutableStateOf<List<Album>?>(null)
@@ -182,8 +186,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private var scannedVersion = -1
     private var lastAssignAt = 0L
     private var flashId = 0
-    private var cancel: AtomicBoolean? = null
     private var browseGeneration = 0
+
+    /** Held back until the first folder read ends, because Move and undo do nothing during one. */
+    private var interrupted: Dialog? = null
     private var batchKey: String? = null
     private var batchMoved = 0
 
@@ -221,16 +227,45 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             // Reads the queue like a folder: everything that would change it waits until it is in
             scanning = true
             viewModelScope.launch {
-                val queue = withContext(Dispatchers.IO) {
+                val (queue, cut) = withContext(Dispatchers.IO) {
+                    val queue = Store.readQueue()
+                    val cut = Store.recover(ctx, queue)
                     // A big batch's journal has 100,000 lines, so its count is read here too
                     lastBatch()
-                    Store.readQueue()
+                    queue to cut
                 }
                 Store.useQueue(queue)
+                interrupted = when {
+                    cut == null -> null
+                    cut.undo -> Dialog.UndoInterrupted(Batch(cut.journal, cut.moved)).takeIf { cut.moved > 0 }
+                    else -> Dialog.MoveInterrupted(cut.moved, queue.size).takeIf { cut.moved > 0 || queue.isNotEmpty() }
+                }
                 scanning = false
                 refresh()
             }
         }
+        viewModelScope.launch {
+            // A run can end while no view model is around, and then its outcome waits for this one
+            snapshotFlow { MoveRunner.outcome }.collect { if (it != null) finished(it) }
+        }
+    }
+
+    private fun finished(outcome: MoveRunner.Outcome) {
+        MoveRunner.outcome = null
+        when (outcome) {
+            is MoveRunner.Outcome.Moved -> {
+                val result = outcome.result
+                dialog = Dialog.MoveDone(result, lastBatch().takeIf { result.moved > 0 })
+                // What failed or was stopped is still queued, and then the list stays up to show it
+                if (Store.pending.isEmpty()) leaveSelections()
+            }
+            is MoveRunner.Outcome.Undone -> {
+                val result = outcome.result
+                dialog = if (result.failed.isEmpty()) null else Dialog.UndoFailed(result.restored.size, result.failed)
+                if (Store.pending.isNotEmpty() && screen != Screen.Selections) open(Screen.Selections)
+            }
+        }
+        refresh()
     }
 
     // region navigation
@@ -276,11 +311,23 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (Store.ready) lastBatchInfo = lastBatch()
         if (!allowed || sources.isEmpty() || dests.isEmpty()) {
             showImage(null)
+            announceInterrupted()
             return
         }
-        if (scanning) return
+        // A folder read counts against the queue from another thread, and a run settles the queue when it ends
+        if (scanning || MoveRunner.run != null) return
         // Every change to the queue already updated the counts, so coming back only needs the position
-        if (scannedVersion != Store.scanVersion) rescan() else syncPosition()
+        if (scannedVersion != Store.scanVersion) {
+            rescan()
+        } else {
+            syncPosition()
+            announceInterrupted()
+        }
+    }
+
+    private fun announceInterrupted() {
+        dialog = interrupted ?: return
+        interrupted = null
     }
 
     fun persist() {
@@ -607,66 +654,35 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val entries = Store.pending.map { it.key to it.value }
         // Where to land afterwards: the first photo from here on that isn't moved
         val landing = photos.getOrNull(firstUnsorted(index))?.path
-        busy = true
+        preparing = true
         dialog = Dialog.Preparing("Getting ready to move")
         viewModelScope.launch {
             // Refused in Android's own dialog, so the untouched list says enough
-            if (!grantWrite(entries.map { it.first })) {
-                busy = false
-                dialog = null
-                return@launch
+            val granted = grantWrite(entries.map { it.first })
+            dialog = null
+            if (granted) {
+                Store.lastPath = landing
+                MoveRunner.move(ctx, entries)
             }
-            val journal = Store.newJournal()
-            val stop = AtomicBoolean(false)
-            cancel = stop
-            progress = 0
-            dialog = Dialog.Progress("Moving ${entries.size} photos", entries.size, cancellable = true)
-            Store.lastPath = landing
-            val result = withContext(Dispatchers.IO) {
-                Mover.move(ctx, entries, journal, stop) { done -> if (done % 8 == 0) progress = done }
-            }
-            for (path in result.settled) Store.pending.remove(path)
-            Store.compactPending()
-            ImageLoader.clear()
-            busy = false
-            Store.scanVersion++
-            dialog = Dialog.MoveDone(result, lastBatch().takeIf { result.moved > 0 })
-            // What failed or was stopped is still queued, and then the list stays up to show it
-            if (Store.pending.isEmpty()) leaveSelections()
-            refresh()
+            preparing = false
         }
     }
 
     fun stopMove() {
-        cancel?.set(true)
+        MoveRunner.stop()
     }
 
     fun undoBatch(batch: Batch) {
         // A folder read counts against the queue from another thread, so the queue holds still until it ends
         if (busy || scanning) return
-        busy = true
+        preparing = true
         dialog = Dialog.Preparing("Getting ready to move back")
         viewModelScope.launch {
             val moved = withContext(Dispatchers.IO) { Mover.readJournal(batch.journal).map { it.second } }
-            if (!grantWrite(moved)) {
-                busy = false
-                dialog = null
-                return@launch
-            }
-            progress = 0
-            dialog = Dialog.Progress("Moving ${batch.moved} photos back", batch.moved, cancellable = false)
-            val result = withContext(Dispatchers.IO) {
-                Mover.undo(ctx, batch.journal) { done -> if (done % 8 == 0) progress = done }
-            }
-            for ((path, dest) in result.restored) Store.pending[path] = dest
-            Store.compactPending()
-            ImageLoader.clear()
-            busy = false
-            Store.lastPath = result.restored.lastOrNull()?.first
-            Store.scanVersion++
-            dialog = if (result.failed.isEmpty()) null else Dialog.UndoFailed(result.restored.size, result.failed)
-            if (Store.pending.isNotEmpty() && screen != Screen.Selections) open(Screen.Selections)
-            refresh()
+            val granted = grantWrite(moved)
+            dialog = null
+            if (granted) MoveRunner.undo(ctx, batch)
+            preparing = false
         }
     }
 

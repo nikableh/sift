@@ -7,6 +7,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Runs the queued moves. Never overwrites a file and never deletes a source it hasn't verified a copy of. */
@@ -39,6 +40,7 @@ object Mover {
         var moved = 0
         var missing = 0
         var cancelled = false
+        val next = RandomAccessFile(nextFile(journal), "rw")
         FileOutputStream(journal, true).use { log ->
             for ((i, entry) in entries.withIndex()) {
                 if (cancel.get()) {
@@ -55,9 +57,9 @@ object Mover {
                         }
                         src.parentFile == destDir -> settled.add(entry.first)
                         else -> {
-                            val target = move(src, destDir, src.name)
+                            val target = move(src, destDir, src.name, next)
                             // Flushed per file, so a crash mid-batch still leaves an undoable record
-                            log.write((JSONArray().put(src.path).put(target.path).toString() + "\n").toByteArray())
+                            log.write(line(src.path, target.path))
                             log.flush()
                             touched.add(src.path)
                             touched.add(target.path)
@@ -71,6 +73,8 @@ object Mover {
                 progress(i + 1)
             }
         }
+        next.close()
+        nextFile(journal).delete()
         if (moved == 0) journal.delete()
         rescan(ctx, touched)
         return Result(settled, moved, missing, failed, cancelled)
@@ -82,29 +86,77 @@ object Mover {
      */
     fun isMoveLine(line: String) = line.endsWith("\"]")
 
+    /**
+     * Where an undo notes each photo it has put back. An undo cut short by the death of its
+     * process leaves the file behind, and the next one reads it instead of failing on those photos
+     */
+    fun backLog(journal: File) = File(journal.path + ".back")
+
+    /** Names the one rename under way, see [settle]. */
+    private fun nextFile(log: File) = File(log.path + ".next")
+
+    /**
+     * A kill can land after a rename and before its line reaches the log, so each rename is
+     * announced first. This adds the line a dead run owed its log, if that rename went through
+     */
+    fun settle(log: File) {
+        val next = nextFile(log)
+        val owed = readJournal(next).firstOrNull()
+        if (owed != null && !File(owed.first).exists() && File(owed.second).exists() && readJournal(log).lastOrNull() != owed) {
+            try {
+                FileOutputStream(log, true).use { it.write(line(owed.first, owed.second)) }
+            } catch (e: Exception) {
+            }
+        }
+        next.delete()
+    }
+
+    /** Deletes a journal together with what an undo keeps beside it. */
+    fun discard(journal: File) {
+        val notes = backLog(journal)
+        for (f in listOf(journal, nextFile(journal), notes, nextFile(notes))) f.delete()
+    }
+
     fun undo(ctx: Context, journal: File, progress: (Int) -> Unit): UndoResult {
         val lines = readJournal(journal)
+        val notes = backLog(journal)
+        settle(notes)
+        // Moved-to path to the path an earlier undo put the photo back at
+        val back = readJournal(notes).toMap()
         val restored = ArrayList<Pair<String, String>>()
         val failed = ArrayList<Pair<String, String>>()
         val touched = ArrayList<String>()
-        for ((i, m) in lines.asReversed().withIndex()) {
-            val original = File(m.first)
-            val current = File(m.second)
-            try {
-                if (!current.exists()) throw IOException("no longer in ${current.parentFile?.name}")
-                val back = move(current, original.parentFile!!, original.name)
-                touched.add(current.path)
-                touched.add(back.path)
-                restored.add(back.path to current.parent!!)
-            } catch (e: Exception) {
-                failed.add(current.name to (e.message ?: e.javaClass.simpleName))
+        val next = RandomAccessFile(nextFile(notes), "rw")
+        FileOutputStream(notes, true).use { log ->
+            for ((i, m) in lines.asReversed().withIndex()) {
+                val original = File(m.first)
+                val current = File(m.second)
+                try {
+                    val was = back[current.path]
+                    if (was != null) {
+                        restored.add(was to current.parent!!)
+                    } else {
+                        if (!current.exists()) throw IOException("no longer in ${current.parentFile?.name}")
+                        val to = move(current, original.parentFile!!, original.name, next)
+                        log.write(line(current.path, to.path))
+                        log.flush()
+                        touched.add(current.path)
+                        touched.add(to.path)
+                        restored.add(to.path to current.parent!!)
+                    }
+                } catch (e: Exception) {
+                    failed.add(current.name to (e.message ?: e.javaClass.simpleName))
+                }
+                progress(i + 1)
             }
-            progress(i + 1)
         }
-        journal.delete()
+        next.close()
+        discard(journal)
         rescan(ctx, touched)
         return UndoResult(restored, failed)
     }
+
+    private fun line(from: String, to: String) = (JSONArray().put(from).put(to).toString() + "\n").toByteArray()
 
     /** Original path to new path, one pair per moved photo. */
     fun readJournal(journal: File): List<Pair<String, String>> {
@@ -122,11 +174,15 @@ object Mover {
         return out
     }
 
-    private fun move(src: File, destDir: File, name: String): File {
+    private fun move(src: File, destDir: File, name: String, next: RandomAccessFile): File {
         if (!destDir.isDirectory && !destDir.mkdirs() && !destDir.isDirectory) {
             throw IOException("can't create ${destDir.path}")
         }
         val target = freeName(destDir, name)
+        val announced = line(src.path, target.path)
+        next.seek(0)
+        next.write(announced)
+        next.setLength(announced.size.toLong())
         // Same volume: a rename only rewrites directory entries, which is what makes a batch fast
         if (src.renameTo(target)) return target
 
@@ -173,7 +229,7 @@ object Mover {
     }
 
     /** Tells MediaStore about old and new paths, so gallery apps don't show ghosts. */
-    private fun rescan(ctx: Context, paths: List<String>) {
+    fun rescan(ctx: Context, paths: List<String>) {
         if (paths.isEmpty()) return
         MediaScannerConnection.scanFile(ctx.applicationContext, paths.toTypedArray(), null, null)
     }
