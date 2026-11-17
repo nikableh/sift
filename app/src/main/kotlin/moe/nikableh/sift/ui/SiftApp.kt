@@ -57,7 +57,8 @@ fun SiftApp(vm: SiftViewModel) {
                 Box(Modifier.fillMaxSize().background(surface)) {
                     when (screen) {
                         Screen.Home -> saved.SaveableStateProvider("home") { HomeScreen(vm) }
-                        Screen.Sort -> SortScreen(vm)
+                        // A video waits for the slide to end, so its picture never comes in halfway through one
+                        Screen.Sort -> SortScreen(vm, settled = !transition.isRunning)
                         Screen.Setup -> SetupScreen(vm, snackbar)
                         Screen.Selections -> SelectionsScreen(vm)
                         is Screen.Picker -> PickerScreen(vm, screen.forSource, snackbar)
@@ -66,15 +67,24 @@ fun SiftApp(vm: SiftViewModel) {
             }
             Dialogs(vm)
             WriteRequests(vm)
+            VideoAccess(vm)
         }
     }
 }
 
+/** How many callers want the screen awake right now. The view has one flag for all of them. Main thread only */
+private var awake = 0
+
+/** Keeps the screen on for as long as any caller is in the composition: a move, or a video's first play through. */
 @Composable
-private fun KeepScreenOn() {
+fun KeepScreenOn() {
     val view = LocalView.current
     DisposableEffect(view) {
+        awake++
         view.keepScreenOn = true
-        onDispose { view.keepScreenOn = false }
+        onDispose {
+            // A video starting under the Move dialog must not take the flag away from the undo that follows
+            if (--awake == 0) view.keepScreenOn = false
+        }
     }
 }

@@ -39,6 +39,9 @@ object Store {
      */
     var accessSetUp = false
 
+    /** Videos start without sound until the user turns it on, and the choice is kept. */
+    var videoMuted = true
+
     /** Photo path to destination folder path. Nothing on disk changes until Move. */
     var pending = LinkedHashMap<String, String>()
         private set
@@ -188,6 +191,7 @@ object Store {
         lastPickerDir = json.optString("lastPickerDir").ifEmpty { null }
         askedPhotos = json.optBoolean("askedPhotos")
         accessSetUp = json.optBoolean("accessSetUp")
+        videoMuted = json.optBoolean("videoMuted", true)
         dests.clear()
         val arr = json.optJSONArray("dests") ?: JSONArray()
         for (i in 0 until arr.length()) {
@@ -205,6 +209,7 @@ object Store {
         json.put("lastPickerDir", lastPickerDir ?: "")
         json.put("askedPhotos", askedPhotos)
         json.put("accessSetUp", accessSetUp)
+        json.put("videoMuted", videoMuted)
         val arr = JSONArray()
         for (d in dests) arr.put(JSONObject().put("path", d.path).put("label", d.label))
         json.put("dests", arr)

@@ -11,8 +11,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Finds the MediaStore entries of photos, so Sift can ask Android for write access to them. Without
- * all-files access a photo another app made can only be moved after that
+ * Finds the MediaStore entries of photos and videos, so Sift can ask Android for write access to them.
+ * Without all-files access one that another app made can only be moved after that
  */
 object MediaAccess {
     /** Android refuses a bigger request from apps that target API 37 and later. */
@@ -27,15 +27,22 @@ object MediaAccess {
         val found = HashMap<String, Uri>(want.size * 2)
         @Suppress("DEPRECATION")
         val data = MediaStore.MediaColumns.DATA
-        val columns = arrayOf(MediaStore.MediaColumns._ID, data, MediaStore.MediaColumns.VOLUME_NAME)
-        val all = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        val type = MediaStore.Files.FileColumns.MEDIA_TYPE
+        val columns = arrayOf(MediaStore.MediaColumns._ID, data, MediaStore.MediaColumns.VOLUME_NAME, type)
+        // The one collection that lists photos and videos together. A write request wants each by its own kind
+        val all = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
         for (batch in want.chunked(QUERY_BATCH)) {
             val selection = "$data IN (${batch.joinToString(",") { "?" }})"
             ctx.contentResolver.query(all, columns, selection, batch.toTypedArray(), null)?.use { c ->
                 while (c.moveToNext()) {
                     val path = c.getString(1) ?: continue
                     val volume = c.getString(2) ?: MediaStore.VOLUME_EXTERNAL_PRIMARY
-                    found[path] = ContentUris.withAppendedId(MediaStore.Images.Media.getContentUri(volume), c.getLong(0))
+                    val collection = when (c.getInt(3)) {
+                        MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE -> MediaStore.Images.Media.getContentUri(volume)
+                        MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO -> MediaStore.Video.Media.getContentUri(volume)
+                        else -> continue
+                    }
+                    found[path] = ContentUris.withAppendedId(collection, c.getLong(0))
                 }
             }
         }

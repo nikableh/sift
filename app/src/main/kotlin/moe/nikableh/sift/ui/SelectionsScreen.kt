@@ -210,7 +210,7 @@ private fun SelectionRow(
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                .clickable(onClickLabel = "Preview photo", role = Role.Image, onClick = onPreview),
+                .clickable(onClickLabel = "Preview", role = Role.Image, onClick = onPreview),
         )
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(row.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)

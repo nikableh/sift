@@ -118,7 +118,8 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                             // An album added a moment ago has no counts until it has been read
                             if (stat != null && !vm.scanning) {
                                 // What is queued only gets a mention when there is something, or the line says one number twice
-                                Text(if (stat.queued > 0) "${photos(stat.total)}  ·  ${stat.queued.grouped()} queued" else photos(stat.total))
+                                val holds = media(stat.total, stat.videos)
+                                Text(if (stat.queued > 0) "$holds  ·  ${stat.queued.grouped()} queued" else holds)
                             }
                         }
                     },

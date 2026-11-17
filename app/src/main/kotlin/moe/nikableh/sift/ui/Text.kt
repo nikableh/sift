@@ -31,6 +31,23 @@ fun Int.grouped(): String {
 
 fun photos(n: Int) = if (n == 1) "1 photo" else "${n.grouped()} photos"
 
+fun files(n: Int) = if (n == 1) "1 file" else "${n.grouped()} files"
+
+fun videos(n: Int) = if (n == 1) "1 video" else "${n.grouped()} videos"
+
+/** "12 photos", "3 videos" or "12 photos and 3 videos". [videos] is the part of [total] that is videos */
+fun media(total: Int, videos: Int) = when (videos) {
+    0 -> photos(total)
+    total -> videos(videos)
+    else -> "${photos(total - videos)} and ${videos(videos)}"
+}
+
+/** 47,000 as 0:47 and 3,725,000 as 1:02:05. */
+fun clock(ms: Long): String {
+    val s = ms / 1000
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+}
+
 fun selections(n: Int) = if (n == 1) "1 selection" else "${n.grouped()} selections"
 
 /**

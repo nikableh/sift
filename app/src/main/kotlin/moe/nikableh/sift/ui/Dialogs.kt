@@ -81,7 +81,7 @@ fun Dialogs(vm: SiftViewModel) {
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     LoadingIndicator(Modifier.size(32.dp))
-                    Text("Asking Android for access to the photos")
+                    Text("Asking Android for access to the files")
                 }
             },
             confirmButton = {},
@@ -91,7 +91,7 @@ fun Dialogs(vm: SiftViewModel) {
             AlertDialog(
                 onDismissRequest = close,
                 icon = { Icon(Icons.Rounded.DoneAll, null) },
-                title = { Text("Moved ${photos(d.moved)}") },
+                title = { Text("Moved ${files(d.moved)}") },
                 text = { Text("Sift was closed just as the move ended.") },
                 confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
             )
@@ -106,7 +106,7 @@ fun Dialogs(vm: SiftViewModel) {
                 },
                 onDismiss = close,
             ) {
-                val moved = if (d.moved == 0) "before any photo moved" else "after moving ${photos(d.moved)}"
+                val moved = if (d.moved == 0) "before any file moved" else "after moving ${files(d.moved)}"
                 Text("Sift was closed $moved. ${d.left.grouped()} ${if (d.left == 1) "is" else "are"} still queued.")
             }
         }
@@ -121,14 +121,14 @@ fun Dialogs(vm: SiftViewModel) {
                 onConfirm = { vm.undoBatch(b) },
                 onDismiss = close,
             ) {
-                Text("Sift was closed while moving ${photos(b.moved)} back. Continue to return the rest and put them all back in the queue.")
+                Text("Sift was closed while moving ${files(b.moved)} back. Continue to return the rest and put them all back in the queue.")
             }
         }
 
         is Dialog.MoveDone -> AlertDialog(
             onDismissRequest = close,
             icon = { Icon(Icons.Rounded.DoneAll, null) },
-            title = { Text("Moved ${d.result.moved.grouped()} photos") },
+            title = { Text("Moved ${files(d.result.moved)}") },
             text = { applyDetails(d.result)?.let { Text(it) } },
             confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
             dismissButton = {
@@ -143,7 +143,7 @@ fun Dialogs(vm: SiftViewModel) {
             val b = d.batch
             Confirm(
                 icon = Icons.Rounded.History,
-                title = "Move ${photos(b.moved)} back?",
+                title = "Move ${files(b.moved)} back?",
                 confirm = "Move back",
                 onConfirm = { vm.undoBatch(b) },
                 onDismiss = close,
@@ -242,7 +242,12 @@ fun Dialogs(vm: SiftViewModel) {
                 close()
             },
             onDismiss = close,
-        ) { Text("${d.queued.grouped()} queued photos lose this choice and stay where they are.") }
+        ) {
+            Text(
+                if (d.queued == 1) "1 queued file loses this choice and stays where it is."
+                else "${d.queued.grouped()} queued files lose this choice and stay where they are."
+            )
+        }
 
         is Dialog.RenameDest -> TextPrompt(
             title = "Button label",

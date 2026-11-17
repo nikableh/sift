@@ -113,7 +113,7 @@ private fun Home(vm: SiftViewModel) {
             vm.lastBatchInfo?.let { batch ->
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Last batch moved ${photos(batch.moved)}",
+                        "Last batch moved ${files(batch.moved)}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -193,7 +193,7 @@ private fun AlbumCard(vm: SiftViewModel) {
             when {
                 vm.scanning -> Box(contentAlignment = Alignment.CenterStart) {
                     // An invisible copy of the loaded count gives the indicator the same height at any font scale
-                    Box(Modifier.alpha(0f).clearAndSetSemantics {}) { PhotoCount(0) }
+                    Box(Modifier.alpha(0f).clearAndSetSemantics {}) { MediaCount(0, 0) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         LoadingIndicator(Modifier.size(28.dp))
                         Spacer(Modifier.width(10.dp))
@@ -204,10 +204,10 @@ private fun AlbumCard(vm: SiftViewModel) {
                     }
                 }
                 total == 0 -> Text(
-                    if (sources.size == 1) "No photos in this album" else "No photos in these albums",
+                    if (sources.size == 1) "No photos or videos in this album" else "No photos or videos in these albums",
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                else -> PhotoCount(total)
+                else -> MediaCount(total, vm.videosHere)
             }
         }
         if (rows) AlbumRows(albums)
@@ -384,10 +384,15 @@ private fun cardInsetColor(): Color = MaterialTheme.colorScheme.surface
 
 /** At the card's end edge, in a column with the counts of the album rows under it. */
 @Composable
-private fun PhotoCount(total: Int) {
+private fun MediaCount(total: Int, videos: Int) {
     Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.End) {
         Text(total.grouped(), style = MaterialTheme.typography.titleLargeEmphasized)
-        Text(if (total == 1) "photo" else "photos", style = MaterialTheme.typography.bodyMedium)
+        val label = when (videos) {
+            0 -> if (total == 1) "photo" else "photos"
+            total -> if (total == 1) "video" else "videos"
+            else -> "photos and videos"
+        }
+        Text(label, style = MaterialTheme.typography.bodyMedium)
     }
 }
 

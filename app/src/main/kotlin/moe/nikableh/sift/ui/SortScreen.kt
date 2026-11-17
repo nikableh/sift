@@ -42,12 +42,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.VolumeOff
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Numbers
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
@@ -56,7 +60,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material3.HorizontalFloatingToolbar
+import androidx.compose.material3.Slider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
@@ -67,11 +75,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -84,6 +95,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,6 +109,9 @@ import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleStartEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -105,16 +121,27 @@ import kotlinx.coroutines.delay
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Gate
+import moe.nikableh.sift.MediaView
+import moe.nikableh.sift.Scanner
 import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
-import moe.nikableh.sift.ZoomImageView
+import moe.nikableh.sift.VideoPlayer
 
-/** The sorting screen: one photo, one tap on a folder button queues it and shows the next. */
+/**
+ * The sorting screen: one photo or video, one tap on a folder button queues it and shows the next.
+ * [settled] is false while the screen is still sliding in or out
+ */
 @Composable
-fun SortScreen(vm: SiftViewModel) {
+fun SortScreen(vm: SiftViewModel, settled: Boolean) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val context = LocalContext.current
+    // Held above the two layouts, so turning the phone doesn't start the video over
+    val player = remember { VideoPlayer(context.applicationContext) }
+    DisposableEffect(player) {
+        onDispose { player.release() }
+    }
+    Playback(vm, player, settled)
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         when (vm.gate) {
@@ -129,12 +156,12 @@ fun SortScreen(vm: SiftViewModel) {
 
             else -> if (landscape) {
                 Row(Modifier.fillMaxSize()) {
-                    Viewer(vm, Modifier.weight(1f).fillMaxHeight())
+                    Viewer(vm, player, landscape = true, Modifier.weight(1f).fillMaxHeight())
                     Panel(vm, landscape = true, Modifier.width(280.dp).fillMaxHeight())
                 }
             } else {
                 Column(Modifier.fillMaxSize()) {
-                    Viewer(vm, Modifier.weight(1f).fillMaxWidth())
+                    Viewer(vm, player, landscape = false, Modifier.weight(1f).fillMaxWidth())
                     Panel(vm, landscape = false, Modifier.fillMaxWidth())
                 }
             }
@@ -142,9 +169,50 @@ fun SortScreen(vm: SiftViewModel) {
     }
 }
 
+/** How long the video on screen has to stay there before it starts. */
+private const val VIDEO_START_MS = 200L
+
+/** Starts the video on screen a moment after landing on it, and lets go of it when the screen moves on. */
+@Composable
+private fun Playback(vm: SiftViewModel, player: VideoPlayer, settled: Boolean) {
+    val path = vm.current?.takeIf { it.video && vm.gate == Gate.None && !vm.busy && settled }?.path
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // Counted up on every return to the app, which starts the video again after the stop below
+    var starts by remember { mutableIntStateOf(0) }
+    LifecycleStartEffect(player) {
+        starts++
+        // Closed here and not through state: nothing recomposes while the app is in the background,
+        // and a video with sound would play on
+        onStopOrDispose { player.close() }
+    }
+    LaunchedEffect(path, starts) {
+        player.close()
+        if (path != null) {
+            // Tapping through an album at speed never gets as far as setting up a decoder
+            delay(VIDEO_START_MS)
+            // The wait runs on while the app is in the background, where nothing must start playing.
+            // Coming back counts [starts] up and gets here again
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) player.open(File(path))
+        }
+    }
+    val muted = vm.videoMuted
+    LaunchedEffect(muted) { player.setMuted(muted) }
+
+    val running = player.playing && player.showing
+    LaunchedEffect(running) {
+        if (running) while (true) {
+            withFrameNanos {}
+            player.tick()
+        }
+    }
+    // Awake for one play through. A video on repeat would otherwise never let the screen sleep
+    if (running && !player.looped) KeepScreenOn()
+}
+
 fun sharePhoto(context: Context, file: File) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase()) ?: "image/*"
+    val type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(file.extension.lowercase())
+        ?: if (Scanner.isVideo(file.name)) "video/*" else "image/*"
     val send = Intent(Intent.ACTION_SEND).apply {
         setType(type)
         putExtra(Intent.EXTRA_STREAM, uri)
@@ -197,7 +265,7 @@ private fun BigButton(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Viewer(vm: SiftViewModel, modifier: Modifier) {
+private fun Viewer(vm: SiftViewModel, player: VideoPlayer, landscape: Boolean, modifier: Modifier) {
     val folder = vm.albumsLabel
 
     Column(
@@ -205,64 +273,152 @@ private fun Viewer(vm: SiftViewModel, modifier: Modifier) {
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))
     ) {
         TopBar(vm, folder)
-        Photo(vm, folder, Modifier.weight(1f).fillMaxWidth())
+        Photo(vm, player, folder, landscape, Modifier.weight(1f).fillMaxWidth())
     }
 }
 
 @Composable
-private fun Photo(vm: SiftViewModel, folder: String, modifier: Modifier) {
+private fun Photo(vm: SiftViewModel, player: VideoPlayer, folder: String, landscape: Boolean, modifier: Modifier) {
     val gate = vm.gate
+    val video = gate == Gate.None && vm.current?.video == true
 
     Box(modifier) {
         AndroidView(
             factory = { context ->
-                ZoomImageView(context).apply {
-                    onSwipe = { vm.go(it) }
-                    onZoomIn = { vm.loadSharper() }
+                MediaView(context).apply {
+                    pager.onSwipe = { vm.go(it) }
+                    pager.onZoomIn = { vm.loadSharper() }
+                    pager.onTap = { player.toggle() }
+                    player.attach(surface)
                 }
             },
             update = {
                 val pages = !vm.busy && (gate == Gate.None || gate == Gate.End)
-                it.show(
-                    vm.bitmapPath, vm.bitmap, vm.prevBitmap, vm.nextBitmap,
+                val bitmap = vm.bitmap
+                it.pager.show(
+                    vm.bitmapPath, bitmap, vm.prevBitmap, vm.nextBitmap,
                     canPrev = pages && vm.index > 0,
                     canNext = pages && vm.index < vm.photos.size,
+                    zoomable = !video,
                 )
+                // The still frame's shape stands in until the decoder reports the video's own
+                val aspect = player.aspect.takeIf { a -> a > 0f } ?: bitmap?.let { b -> b.width / b.height.toFloat() } ?: 0f
+                it.video(aspect, show = video && player.showing && player.path == vm.bitmapPath)
             },
+            onRelease = { player.detach(it.surface) },
             modifier = Modifier.fillMaxSize(),
         )
 
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
-            Gate.Empty -> Status(Modifier.align(Alignment.Center), "No photos in $folder") {
+            Gate.Empty -> Status(Modifier.align(Alignment.Center), "No photos or videos in $folder") {
                 BigButton("Add albums") { vm.pickAlbums() }
             }
             Gate.End -> Status(
                 Modifier.align(Alignment.Center),
-                "That was the last photo",
+                "That was the last one",
                 "${vm.queuedHere.grouped()} queued to move, ${vm.leftHere.grouped()} left",
             ) {
                 if (vm.queued > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
             }
-            else -> if (vm.decodeFailed) {
-                Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}") {}
+            else -> when {
+                video && player.failed -> Status(Modifier.align(Alignment.Center), "Can't play this video") {}
+                // A video without a still frame can play all the same, and then it shows itself
+                vm.decodeFailed && !(video && player.showing) -> {
+                    Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}") {}
+                }
             }
         }
 
-        val assigned = vm.assigned
-        if (assigned != null) {
-            val i = vm.dests.indexOfFirst { it.path == assigned }
-            Pill(
-                label = Store.labelFor(assigned),
-                color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
-                contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
-                onClear = { vm.clearAssignment() },
-            )
-        } else {
-            FlashPill(vm, Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp))
+        Column(
+            // Beside the folder panel nothing else keeps the bar off the navigation bar
+            Modifier.align(Alignment.BottomCenter)
+                .then(if (video && landscape) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)) else Modifier)
+                .padding(bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val assigned = vm.assigned
+            if (assigned != null) {
+                val i = vm.dests.indexOfFirst { it.path == assigned }
+                Pill(
+                    label = Store.labelFor(assigned),
+                    color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
+                    modifier = Modifier,
+                    onClear = { vm.clearAssignment() },
+                )
+            } else {
+                FlashPill(vm, Modifier)
+            }
+            if (video && !player.failed) VideoBar(vm, player)
         }
     }
+}
+
+/** Play or pause, the timeline, the time and sound, floating over the bottom of the viewer. */
+@Composable
+private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
+    HorizontalFloatingToolbar(
+        expanded = true,
+        modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth(),
+    ) {
+        // A video starts by itself, so until the player has it the button already shows what is about to happen
+        val playing = player.playing || player.path == null
+        // The timeline's two colours, so the bar reads as one piece: a button that is on has the
+        // colour of the played part, one that is off the colour of the part still to come. All four
+        // are set, because the defaults of the ones left out follow the ones given
+        val scheme = MaterialTheme.colorScheme
+        val colors = IconButtonDefaults.filledIconToggleButtonColors(
+            containerColor = scheme.secondaryContainer,
+            contentColor = scheme.primary,
+            checkedContainerColor = scheme.primary,
+            checkedContentColor = scheme.onPrimary,
+        )
+        FilledIconToggleButton(
+            checked = playing,
+            onCheckedChange = { player.toggle() },
+            shapes = IconButtonDefaults.toggleableShapes(),
+            colors = colors,
+        ) {
+            if (playing) Icon(Icons.Rounded.Pause, "Pause") else Icon(Icons.Rounded.PlayArrow, "Play")
+        }
+        Timeline(player, Modifier.weight(1f).padding(horizontal = 8.dp))
+        Elapsed(player, Modifier.align(Alignment.CenterVertically))
+        val sound = !vm.videoMuted
+        FilledIconToggleButton(
+            checked = sound,
+            onCheckedChange = { vm.changeMuted(!it) },
+            shapes = IconButtonDefaults.toggleableShapes(),
+            colors = colors,
+        ) {
+            if (sound) Icon(Icons.AutoMirrored.Rounded.VolumeUp, "Turn sound off")
+            else Icon(Icons.AutoMirrored.Rounded.VolumeOff, "Turn sound on")
+        }
+    }
+}
+
+/** On its own, so the position changing every frame redraws the slider and nothing around it. */
+@Composable
+private fun Timeline(player: VideoPlayer, modifier: Modifier) {
+    val duration = player.duration
+    Slider(
+        value = if (duration > 0) (player.position / duration.toFloat()).coerceIn(0f, 1f) else 0f,
+        onValueChange = { player.scrubTo((it * duration).toLong()) },
+        onValueChangeFinished = { player.scrubEnd() },
+        modifier = modifier.semantics { contentDescription = "Timeline" },
+    )
+}
+
+@Composable
+private fun Elapsed(player: VideoPlayer, modifier: Modifier) {
+    Text(
+        clock(player.position),
+        modifier,
+        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+    )
 }
 
 @Composable
@@ -333,6 +489,8 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                         // The position never gets cut. When even a line of its own is too narrow it breaks
                         // after the slash, which a no-break space keeps with the first number
                         Text("${(vm.index + 1).grouped()} / ${vm.photos.size.grouped()}", style = details, color = quiet)
+                        // A video's length, once its still frame is in
+                        vm.duration?.let { Text("  ·  ${clock(it)}", style = details, color = quiet, maxLines = 1) }
                         // The date gives way first. The menu has it in full, with the name and the size
                         Text(
                             "  ·  ${dayFormat.format(Date(photo.mtime))}",

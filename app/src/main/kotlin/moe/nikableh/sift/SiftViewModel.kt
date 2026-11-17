@@ -62,12 +62,17 @@ enum class Gate { Permission, Setup, Reading, Empty, End, None }
 /** How far Android lets Sift go. Only [Ready] shows the app itself. */
 enum class Access { AskPhotos, PhotosDenied, PhotosLimited, AskManage, Ready }
 
-class Album(val path: String, val name: String, val count: Int, val cover: String)
+/** [videos] is the part of [count] that is videos. */
+class Album(val path: String, val name: String, val count: Int, val videos: Int, val cover: String)
 
-/** One album being sorted. [cover] is its first photo in sorting order. */
-class AlbumStat(val path: String, val name: String, val total: Int, val queued: Int, val cover: File?)
+/**
+ * One album being sorted. [videos] is the part of [total] that is videos, and [cover] is its first
+ * photo or video in sorting order
+ */
+class AlbumStat(val path: String, val name: String, val total: Int, val videos: Int, val queued: Int, val cover: File?)
 
-class Folder(val dir: File, val title: String, val subtitle: String)
+/** [count] is what the folder holds directly. A storage volume has none and shows its path instead. */
+class Folder(val dir: File, val title: String, val count: Scanner.Count?)
 
 class Flash(val id: Int, val label: String, val colorIndex: Int)
 
@@ -111,6 +116,15 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         private set
     val allowed: Boolean get() = access == Access.Ready
 
+    /**
+     * Set while photos are allowed and videos are not, which is how an install from before video
+     * sorting starts. The screen then asks for them, and Android answers that without a dialog
+     */
+    var askVideo by mutableStateOf(false)
+        private set
+    private var videoAllowed = false
+    private var videoAsked = false
+
     /** False while Android would ask for confirmation on every Move. Always true before Android 12, which has no switch */
     var manageMedia by mutableStateOf(true)
         private set
@@ -152,6 +166,13 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var decodeFailed by mutableStateOf(false)
         private set
+
+    var videoMuted by mutableStateOf(true)
+        private set
+
+    /** Length of the video on screen in milliseconds. Null for a photo, and until the video's still frame is in */
+    var duration by mutableStateOf<Long?>(null)
+        private set
     var flash by mutableStateOf<Flash?>(null)
         private set
     var dialog by mutableStateOf<Dialog?>(null)
@@ -170,7 +191,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var folders by mutableStateOf<List<Folder>>(emptyList())
         private set
-    var imagesHere by mutableIntStateOf(0)
+    var mediaHere by mutableStateOf(Scanner.Count(0, 0))
         private set
 
     private var indexOf: Map<String, Int> = emptyMap()
@@ -178,6 +199,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** What [Photo.album] points into: the albums as they were when [photos] was read. */
     private var scannedSources: List<String> = emptyList()
     private var albumTotals = IntArray(0)
+    private var albumVideos = IntArray(0)
     private var albumQueued = IntArray(0)
     private var albumCovers = arrayOfNulls<File>(0)
 
@@ -210,6 +232,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         private set
 
     val leftHere: Int get() = photos.size - queuedHere
+
+    /** How many of [photos] are videos. */
+    var videosHere by mutableIntStateOf(0)
+        private set
 
     /** What the Selections screen lists, in button order. */
     var selectionGroups by mutableStateOf<List<SelectionGroup>>(emptyList())
@@ -303,9 +329,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** Called on resume and whenever the sorting screen comes back. */
     fun refresh() {
         val wasAllowed = allowed
+        val hadVideo = videoAllowed
         readAccess()
         // A read made without full access found nothing or only part of the albums
-        if (allowed && !wasAllowed) Store.scanVersion++
+        if ((allowed && !wasAllowed) || (videoAllowed && !hadVideo)) Store.scanVersion++
         syncSettings()
         // Before the queue is in, the start-up read above owns the journal count
         if (Store.ready) lastBatchInfo = lastBatch()
@@ -360,6 +387,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             counts = result.counts
             scannedSources = roots
             albumTotals = result.albumTotals
+            albumVideos = result.albumVideos
+            videosHere = result.albumVideos.sum()
             albumQueued = result.albumQueued
             albumCovers = result.albumCovers
             publishAlbums()
@@ -376,6 +405,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val queued: Int,
         val counts: Map<String, Int>,
         val albumTotals: IntArray,
+        val albumVideos: IntArray,
         val albumQueued: IntArray,
         val albumCovers: Array<File?>,
     )
@@ -384,21 +414,23 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val indexOf = HashMap<String, Int>(list.size * 2)
         val unsorted = BitSet(list.size)
         val totals = IntArray(albums)
+        val videos = IntArray(albums)
         val queuedIn = IntArray(albums)
         val covers = arrayOfNulls<File>(albums)
         list.forEachIndexed { i, p ->
             indexOf[p.path] = i
             totals[p.album]++
+            if (p.video) videos[p.album]++
             if (covers[p.album] == null) covers[p.album] = p.file
             if (p.path in Store.pending) queuedIn[p.album]++ else unsorted.set(i)
         }
-        return ScanResult(list, indexOf, unsorted, list.size - unsorted.cardinality(), Store.counts(), totals, queuedIn, covers)
+        return ScanResult(list, indexOf, unsorted, list.size - unsorted.cardinality(), Store.counts(), totals, videos, queuedIn, covers)
     }
 
     /** Pushes the per-album counts into observable state. An album list is short, so a tap can afford it. */
     private fun publishAlbums() {
         albumStats = scannedSources.mapIndexed { i, path ->
-            AlbumStat(path, File(path).name, albumTotals[i], albumQueued[i], albumCovers[i])
+            AlbumStat(path, File(path).name, albumTotals[i], albumVideos[i], albumQueued[i], albumCovers[i])
         }
     }
 
@@ -444,6 +476,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         bitmapPath = path
         bitmap = null
         decodeFailed = false
+        duration = null
     }
 
     /** Pushes Store and position into observable state, and keeps the next photos decoded. */
@@ -511,7 +544,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
                 ImageLoader.load(p.file) { bmp ->
                     if (bitmapPath != p.path) return@load
                     if (bmp != null) bitmap = bmp else decodeFailed = true
+                    if (p.video) duration = ImageLoader.durationOf(p.file)
                 }
+            } else if (p.video) {
+                duration = ImageLoader.durationOf(p.file)
             }
         }
         neighbour(1) { nextBitmap = it }
@@ -529,7 +565,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The viewer asks for a sharper bitmap the first time the user zooms into a photo. */
     fun loadSharper() {
-        val p = current ?: return
+        val p = current?.takeIf { !it.video } ?: return
         ImageLoader.loadFull(p.file) { bmp -> if (bmp != null && bitmapPath == p.path) bitmap = bmp }
     }
 
@@ -561,6 +597,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         // Jumps past photos that already have a folder, so fixing an old choice returns to where you left off
         index = firstUnsorted(index + 1)
         syncPosition()
+    }
+
+    fun changeMuted(muted: Boolean) {
+        Store.videoMuted = muted
+        Store.saveConfig()
+        videoMuted = muted
     }
 
     fun flashShown(id: Int) {
@@ -694,6 +736,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun readAccess() {
         val full = granted(if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE)
+        // Before Android 13 one permission covers both
+        videoAllowed = full && (Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.READ_MEDIA_VIDEO))
+        // Asked once per run, so a refusal leaves Sift sorting photos instead of asking in a loop
+        askVideo = full && !videoAllowed && !videoAsked
         val limited = !full && Build.VERSION.SDK_INT >= 34 && granted(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED)
         manageMedia = Build.VERSION.SDK_INT < 31 || MediaStore.canManageMedia(ctx)
         if (full && manageMedia && !Store.accessSetUp) {
@@ -713,10 +759,15 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun photoPermissions(): Array<String> = when {
         Build.VERSION.SDK_INT >= 34 -> arrayOf(
             Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
             Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED,
             Manifest.permission.ACCESS_MEDIA_LOCATION,
         )
-        Build.VERSION.SDK_INT == 33 -> arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.ACCESS_MEDIA_LOCATION)
+        Build.VERSION.SDK_INT == 33 -> arrayOf(
+            Manifest.permission.READ_MEDIA_IMAGES,
+            Manifest.permission.READ_MEDIA_VIDEO,
+            Manifest.permission.ACCESS_MEDIA_LOCATION,
+        )
         else -> arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.ACCESS_MEDIA_LOCATION)
     }
 
@@ -724,6 +775,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (Store.askedPhotos) return
         Store.askedPhotos = true
         Store.saveConfig()
+    }
+
+    fun videoAnswered() {
+        videoAsked = true
+        refresh()
     }
 
     fun skipManage() {
@@ -765,6 +821,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         order = Store.order
         dests = Store.dests.toList()
         queued = Store.pending.size
+        videoMuted = Store.videoMuted
     }
 
     private fun changed(rescan: Boolean) {
@@ -900,9 +957,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     // region picker
 
     /**
-     * Albums as a gallery shows them: every folder MediaStore has indexed images in, newest first.
-     * All-files access is enough to read that index. If the index comes back empty, a walk over
-     * the disk stands in for it.
+     * Albums as a gallery shows them: every folder MediaStore has indexed photos or videos in,
+     * newest first. If the index comes back empty, a walk over the disk stands in for it.
      */
     private fun loadAlbums() {
         albums = null
@@ -912,26 +968,31 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun queryAlbums(): List<Album> {
-        class Acc(var count: Int, var cover: String, var coverTime: Long)
+        class Acc(var count: Int, var videos: Int, var cover: String, var coverTime: Long)
 
         val found = HashMap<String, Acc>()
         try {
+            val type = MediaStore.Files.FileColumns.MEDIA_TYPE
+            val image = MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE
+            val video = MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
             @Suppress("DEPRECATION")
-            val columns = arrayOf(MediaStore.Images.Media.DATA, MediaStore.Images.Media.DATE_MODIFIED)
-            ctx.contentResolver.query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, columns, null, null, null)?.use { c ->
+            val columns = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DATE_MODIFIED, type)
+            // The one collection that lists photos and videos together
+            val all = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            ctx.contentResolver.query(all, columns, "$type IN ($image, $video)", null, null)?.use { c ->
                 while (c.moveToNext()) {
                     val path = c.getString(0) ?: continue
+                    val isVideo = c.getInt(2) == video
+                    // A video in a container the player can't read isn't sorted, so it isn't counted
+                    if (isVideo && !Scanner.isVideo(path)) continue
                     val parent = File(path).parent ?: continue
                     val time = c.getLong(1)
-                    val acc = found[parent]
-                    if (acc == null) {
-                        found[parent] = Acc(1, path, time)
-                    } else {
-                        acc.count++
-                        if (time > acc.coverTime) {
-                            acc.cover = path
-                            acc.coverTime = time
-                        }
+                    val acc = found[parent] ?: Acc(0, 0, path, time).also { found[parent] = it }
+                    acc.count++
+                    if (isVideo) acc.videos++
+                    if (time > acc.coverTime) {
+                        acc.cover = path
+                        acc.coverTime = time
                     }
                 }
             }
@@ -940,27 +1001,27 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         }
         return found.entries
             .sortedByDescending { it.value.coverTime }
-            .map { Album(it.key, File(it.key).name, it.value.count, it.value.cover) }
+            .map { Album(it.key, File(it.key).name, it.value.count, it.value.videos, it.value.cover) }
     }
 
     private fun walkAlbums(): List<Album> =
         Scanner.albums(volumes().map { it.dir })
             .sortedByDescending { it.count }
-            .map { Album(it.path, File(it.path).name, it.count, it.cover) }
+            .map { Album(it.path, File(it.path).name, it.count, it.videos, it.cover) }
 
     fun browse(dir: File?) {
         browsing = true
         browseDir = dir
         folders = emptyList()
-        imagesHere = 0
+        mediaHere = Scanner.Count(0, 0)
         val generation = ++browseGeneration
         viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { if (dir == null) volumes() else children(dir) }
             if (generation != browseGeneration) return@launch
             folders = list
             if (dir != null) {
-                val here = withContext(Dispatchers.IO) { Scanner.countImages(dir) }
-                if (generation == browseGeneration) imagesHere = here
+                val here = withContext(Dispatchers.IO) { Scanner.count(dir) }
+                if (generation == browseGeneration) mediaHere = here
             }
         }
     }
@@ -978,10 +1039,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private fun volumes(): List<Folder> {
         val out = ArrayList<Folder>()
         val primary = Environment.getExternalStorageDirectory()
-        out.add(Folder(primary, "Internal storage", primary.path))
+        out.add(Folder(primary, "Internal storage", null))
         for (v in ctx.getSystemService(StorageManager::class.java).storageVolumes) {
             val d = v.directory ?: continue
-            if (!v.isPrimary) out.add(Folder(d, v.getDescription(ctx), d.path))
+            if (!v.isPrimary) out.add(Folder(d, v.getDescription(ctx), null))
         }
         return out
     }
@@ -989,10 +1050,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private fun children(dir: File): List<Folder> =
         (dir.listFiles { f -> f.isDirectory && !f.name.startsWith(".") } ?: emptyArray())
             .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
-            .map {
-                val n = Scanner.countImages(it)
-                Folder(it, it.name, if (n == 1) "1 image" else "$n images")
-            }
+            .map { Folder(it, it.name, Scanner.count(it)) }
 
     /** New albums go under Pictures, where gallery apps expect them. */
     fun picturesDir(): File = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)

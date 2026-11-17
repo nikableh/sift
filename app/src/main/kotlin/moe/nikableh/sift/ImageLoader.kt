@@ -2,6 +2,7 @@ package moe.nikableh.sift
 
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
+import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
@@ -10,13 +11,17 @@ import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
 
-/** Decodes screen-sized bitmaps off the main thread and keeps the neighbours of the current photo warm. */
+/**
+ * Decodes screen-sized bitmaps off the main thread and keeps the neighbours of the current photo warm.
+ * A video gives its first frame
+ */
 object ImageLoader {
     private const val FULL_MAX_SIDE = 4700
 
     private val pool = Executors.newFixedThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
     private val cache = LruCache<String, Bitmap>(6)
+    private val durations = LruCache<String, Long>(64)
     private val inFlight = HashMap<String, MutableList<(Bitmap?) -> Unit>>()
 
     private var screenLong = 2400
@@ -75,7 +80,43 @@ object ImageLoader {
         }
     }
 
-    private fun decode(file: File, fitScreen: Boolean): Bitmap? = try {
+    /** A video's length in milliseconds, known once its still frame has been decoded. */
+    fun durationOf(file: File): Long? = durations.get(file.path)
+
+    /**
+     * A video's first frame. That is where playback starts, so the still and the player's first
+     * picture are the same one
+     */
+    private fun frame(file: File): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.path)
+            fun number(key: Int) = retriever.extractMetadata(key)?.toLongOrNull() ?: 0L
+            number(MediaMetadataRetriever.METADATA_KEY_DURATION).takeIf { it > 0 }?.let { durations.put(file.path, it) }
+            val width = number(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+            val height = number(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            val long = max(width, height)
+            val short = min(width, height)
+            // The frame is fitted into a square of this side, so it only has to hold the long one
+            val side = if (short > 0) {
+                (long * min(1f, min(screenLong / long.toFloat(), screenShort / short.toFloat()))).toInt().coerceAtLeast(1)
+            } else {
+                screenLong
+            }
+            retriever.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, side, side)
+        } catch (e: Exception) {
+            null
+        } catch (e: OutOfMemoryError) {
+            null
+        } finally {
+            try {
+                retriever.release()
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    private fun decode(file: File, fitScreen: Boolean): Bitmap? = if (Scanner.isVideo(file.name)) frame(file) else try {
         ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
             val long = max(info.size.width, info.size.height)
             val short = min(info.size.width, info.size.height)

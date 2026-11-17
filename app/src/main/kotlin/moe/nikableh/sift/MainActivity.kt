@@ -8,6 +8,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import coil3.SingletonImageLoader
+import coil3.video.VideoFrameDecoder
 import moe.nikableh.sift.ui.SiftApp
 
 class MainActivity : ComponentActivity() {
@@ -18,6 +20,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val bounds = windowManager.currentWindowMetrics.bounds
         ImageLoader.setScreen(bounds.width(), bounds.height())
+        // Lets the thumbnails on Home, Folders, the picker and Selections show a frame of a video
+        SingletonImageLoader.setSafe { context ->
+            coil3.ImageLoader.Builder(context).components { add(VideoFrameDecoder.Factory()) }.build()
+        }
         setContent { SiftApp(vm) }
     }
 

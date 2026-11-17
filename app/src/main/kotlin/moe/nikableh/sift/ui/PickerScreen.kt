@@ -167,7 +167,7 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
         },
         supportingContent = {
             Column {
-                Text(photos(album.count))
+                Text(media(album.count, album.videos))
                 // Whole path, wrapped. Two albums can share a name and differ only here
                 Text(album.path, style = MaterialTheme.typography.bodySmall)
             }
@@ -214,11 +214,11 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
     ) {
         if (dir != null) {
             item {
-                val n = vm.imagesHere
+                val here = vm.mediaHere
                 Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp)) {
                     Text(dir.path, style = MaterialTheme.typography.titleSmall)
                     Text(
-                        if (n == 1) "1 image in this folder" else "${n.grouped()} images in this folder",
+                        "${media(here.total, here.videos)} in this folder",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -257,7 +257,7 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
                     }
                 },
-                supportingContent = { Text(folder.subtitle) },
+                supportingContent = { Text(folder.count?.let { media(it.total, it.videos) } ?: folder.dir.path) },
             ) { Text(folder.title) }
         }
     }

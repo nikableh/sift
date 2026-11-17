@@ -25,18 +25,35 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     /** Fired once per image when the user first zooms in, to fetch a sharper bitmap. */
     var onZoomIn: (() -> Unit)? = null
 
+    /** A tap on a page that doesn't zoom, which is a video. It can't be the start of a double tap, so it fires at once */
+    var onTap: (() -> Unit)? = null
+
+    /** The current page's offset from rest, whenever it changes. The video picture laid over the page follows it */
+    var onDrag: ((Float) -> Unit)? = null
+
+    /** Fired when a swipe makes the neighbour the current page, before [onSwipe]. */
+    var onTurn: (() -> Unit)? = null
+
     private var bitmap: Bitmap? = null
     private var prev: Bitmap? = null
     private var next: Bitmap? = null
     private var canPrev = false
     private var canNext = false
     private var key: String? = null
+    private var zoomable = true
     private var zoom = 1f
     private var panX = 0f
     private var panY = 0f
 
     /** Offset of the current page from rest. The neighbours sit one page to either side of it. */
     private var dragX = 0f
+        set(value) {
+            if (field == value) return
+            field = value
+            onDrag?.invoke(value)
+        }
+
+    val dragOffset get() = dragX
     private var downDragX = 0f
     private var flingDir = 0
     private var settle: ValueAnimator? = null
@@ -52,9 +69,11 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     /**
      * Shows [b] for the photo [newKey], with its neighbours ready to slide in. A new bitmap for the
      * same photo keeps zoom and pan. A new photo arriving as the bitmap already on screen is the
-     * echo of a swipe this view turned itself, so the slide carries on.
+     * echo of a swipe this view turned itself, so the slide carries on. A page that isn't [zoomable]
+     * reports taps instead.
      */
-    fun show(newKey: String?, b: Bitmap?, prev: Bitmap?, next: Bitmap?, canPrev: Boolean, canNext: Boolean) {
+    fun show(newKey: String?, b: Bitmap?, prev: Bitmap?, next: Bitmap?, canPrev: Boolean, canNext: Boolean, zoomable: Boolean) {
+        this.zoomable = zoomable
         this.prev = prev
         this.next = next
         this.canPrev = canPrev
@@ -98,6 +117,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     /** Makes the neighbour the current page without moving anything on screen. */
     private fun turn(dir: Int) {
+        onTurn?.invoke()
         val old = bitmap
         if (dir > 0) {
             bitmap = next
@@ -169,7 +189,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     private val scaleDetector = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(d: ScaleGestureDetector): Boolean {
-            if (bitmap == null) return true
+            if (bitmap == null || !zoomable) return true
             dragX = 0f
             zoomTo(zoom * d.scaleFactor, d.focusX, d.focusY)
             return true
@@ -179,8 +199,13 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private val gestures = GestureDetector(ctx, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
 
+        override fun onSingleTapUp(e: MotionEvent): Boolean {
+            if (!zoomable) onTap?.invoke()
+            return true
+        }
+
         override fun onDoubleTap(e: MotionEvent): Boolean {
-            if (bitmap == null) return true
+            if (bitmap == null || !zoomable) return true
             if (isZoomed) zoomTo(1f, e.x, e.y) else zoomTo(3f, e.x, e.y)
             return true
         }

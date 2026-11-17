@@ -1,5 +1,6 @@
 package moe.nikableh.sift.ui
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -281,6 +282,19 @@ fun MediaManagementCard(vm: SiftViewModel) {
                 Button(onClick = { openManageMedia(context) }, shapes = ButtonDefaults.shapes()) { Text("Turn on") }
             }
         }
+    }
+}
+
+/**
+ * Asks for video access where only photo access is there, which is an install from before Sift sorted
+ * videos. Android grants it without a dialog while photos are allowed
+ */
+@Composable
+fun VideoAccess(vm: SiftViewModel) {
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.videoAnswered() }
+    val ask = vm.askVideo
+    LaunchedEffect(ask) {
+        if (ask) launcher.launch(Manifest.permission.READ_MEDIA_VIDEO)
     }
 }
 
