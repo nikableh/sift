@@ -42,7 +42,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
@@ -62,7 +61,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -70,7 +68,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
@@ -173,14 +170,13 @@ private fun DestinationsCard(vm: SiftViewModel) {
     }
 }
 
-/** The albums being sorted, with how far along they are. */
+/** The albums being sorted, with how many photos they hold. */
 @Composable
 private fun AlbumCard(vm: SiftViewModel) {
     val sources = vm.sources
     if (sources.isEmpty()) return
     val albums = vm.albumStats
     val total = vm.photos.size
-    val queuedHere = vm.queuedHere
     // One album is the whole card already. The rows match the albums only once those have been read
     val rows = !vm.scanning && sources.size > 1 && albums.map { it.path } == sources
     Card(
@@ -189,15 +185,15 @@ private fun AlbumCard(vm: SiftViewModel) {
     ) {
         Column(
             // The album rows bring their own padding, so their list item reaches the card's edges.
-            // The little left under the bar keeps the item's press highlight off it
+            // The little left under the count keeps the item's press highlight off it
             Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (rows) 8.dp else 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             AlbumHeader(vm)
             when {
                 vm.scanning -> Box(contentAlignment = Alignment.CenterStart) {
-                    // An invisible copy of the loaded stats gives the indicator the same height at any font scale
-                    AlbumStats(0, 0, 0, Modifier.alpha(0f).clearAndSetSemantics {})
+                    // An invisible copy of the loaded count gives the indicator the same height at any font scale
+                    Box(Modifier.alpha(0f).clearAndSetSemantics {}) { PhotoCount(0) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         LoadingIndicator(Modifier.size(28.dp))
                         Spacer(Modifier.width(10.dp))
@@ -211,7 +207,7 @@ private fun AlbumCard(vm: SiftViewModel) {
                     if (sources.size == 1) "No photos in this album" else "No photos in these albums",
                     style = MaterialTheme.typography.bodyLarge,
                 )
-                else -> AlbumStats(total, queuedHere, vm.leftHere)
+                else -> PhotoCount(total)
             }
         }
         if (rows) AlbumRows(albums)
@@ -313,7 +309,7 @@ private fun Covers(files: List<File?>, placeholder: Boolean) {
 @Composable
 private fun Cover(file: File?, placeholder: Boolean, modifier: Modifier, shape: Shape) {
     Box(
-        // An album without a photo to show gets a blank cover, which needs to stand off the card like the bars do
+        // An album without a photo to show gets a blank cover, which needs to stand off the card
         modifier.clip(shape).background(cardInsetColor()),
         contentAlignment = Alignment.Center,
     ) {
@@ -331,7 +327,7 @@ private fun Cover(file: File?, placeholder: Boolean, modifier: Modifier, shape: 
 }
 
 /**
- * What is left in each album, behind a line that unfolds it. Folded is how it starts, so the card is
+ * How many photos each album holds, behind a line that unfolds it. Folded is how it starts, so the card is
  * the same height at any number of albums and Home fits a screen. Whether it is unfolded is kept
  */
 @Composable
@@ -367,81 +363,31 @@ private fun AlbumRow(album: AlbumStat) {
     Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
         Cover(album.cover, placeholder = true, Modifier.size(36.dp), RoundedCornerShape(10.dp))
         Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    album.name,
-                    Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("${album.left.grouped()} left", style = MaterialTheme.typography.bodyMedium)
-            }
-            LinearProgressIndicator(
-                progress = { if (album.total == 0) 0f else album.queued / album.total.toFloat() },
-                modifier = Modifier.fillMaxWidth(),
-                trackColor = cardInsetColor(),
-            )
-        }
+        Text(
+            album.name,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(photos(album.total), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
 /**
- * What sits on the album card as a quiet shape of its own: the empty part of a progress bar, a
- * blank cover and the edit button. Their default container tones all but vanish on the card's container tone, and a
- * tint of the card's text reads as a bar that is already full. The page's own colour does neither
+ * What sits on the album card as a quiet shape of its own: a blank cover and the edit button.
+ * Their default container tones all but vanish on the card's container tone. The page's own colour doesn't
  */
 @Composable
 private fun cardInsetColor(): Color = MaterialTheme.colorScheme.surface
 
+/** At the card's end edge, in a column with the counts of the album rows under it. */
 @Composable
-private fun AlbumStats(total: Int, queued: Int, left: Int, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text(photos(total), style = MaterialTheme.typography.bodyMedium)
-        StatGrid {
-            Stat(queued, "queued")
-            Stat(left, "left")
-        }
-        LinearProgressIndicator(
-            progress = { if (total == 0) 0f else queued / total.toFloat() },
-            modifier = Modifier.fillMaxWidth(),
-            trackColor = cardInsetColor(),
-        )
-    }
-}
-
-/**
- * Equal columns while the widest stat fits one, otherwise fewer per row. Six-digit counts at a
- * large font size don't fit a third of a phone, and a cut-off digit reads as a different number
- */
-@Composable
-private fun StatGrid(content: @Composable () -> Unit) {
-    Layout(content, Modifier.fillMaxWidth()) { items, constraints ->
-        val gap = 16.dp.roundToPx()
-        val rowGap = 12.dp.roundToPx()
-        val width = constraints.maxWidth
-        val widest = items.maxOf { it.maxIntrinsicWidth(Constraints.Infinity) }
-        val perRow = (items.size downTo 1).firstOrNull { it * widest + (it - 1) * gap <= width } ?: 1
-        val cell = (width - (perRow - 1) * gap) / perRow
-        val rows = items.map { it.measure(Constraints.fixedWidth(cell)) }.chunked(perRow)
-        val height = rows.sumOf { row -> row.maxOf { it.height } } + (rows.size - 1) * rowGap
-        layout(width, height) {
-            var y = 0
-            for (row in rows) {
-                row.forEachIndexed { i, p -> p.placeRelative(i * (cell + gap), y) }
-                y += row.maxOf { it.height } + rowGap
-            }
-        }
-    }
-}
-
-@Composable
-private fun Stat(value: Int, label: String) {
-    Column(Modifier.semantics(mergeDescendants = true) {}) {
-        Text(value.grouped(), style = MaterialTheme.typography.titleLargeEmphasized)
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+private fun PhotoCount(total: Int) {
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.End) {
+        Text(total.grouped(), style = MaterialTheme.typography.titleLargeEmphasized)
+        Text(if (total == 1) "photo" else "photos", style = MaterialTheme.typography.bodyMedium)
     }
 }
 

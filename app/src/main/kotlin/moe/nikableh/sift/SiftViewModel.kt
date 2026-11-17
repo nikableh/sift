@@ -61,10 +61,8 @@ enum class Access { AskPhotos, PhotosDenied, PhotosLimited, AskManage, Ready }
 
 class Album(val path: String, val name: String, val count: Int, val cover: String)
 
-/** One album being sorted, with how far along it is. [cover] is its first photo in sorting order. */
-class AlbumStat(val path: String, val name: String, val total: Int, val queued: Int, val cover: File?) {
-    val left: Int get() = total - queued
-}
+/** One album being sorted. [cover] is its first photo in sorting order. */
+class AlbumStat(val path: String, val name: String, val total: Int, val queued: Int, val cover: File?)
 
 class Folder(val dir: File, val title: String, val subtitle: String)
 
