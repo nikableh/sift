@@ -40,10 +40,15 @@ private val folderPalette = listOf(
     Color(0xFFE98A3C), Color(0xFF7C8CA8),
 )
 
-/** Segmented list rows sit one tone above the page, so each segment reads as its own shape. */
+/**
+ * Segmented list rows sit one tone above the page, so each segment reads as its own shape.
+ * A disabled row keeps that tone, or it falls back to the page colour and loses its shape.
+ */
 @Composable
-fun segmentColors(): ListItemColors =
-    ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+fun segmentColors(): ListItemColors {
+    val container = MaterialTheme.colorScheme.surfaceContainer
+    return ListItemDefaults.segmentedColors(containerColor = container, disabledContainerColor = container)
+}
 
 fun folderColor(index: Int): Color = folderPalette[index.mod(folderPalette.size)]
 

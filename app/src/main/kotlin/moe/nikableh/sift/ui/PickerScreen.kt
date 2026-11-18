@@ -142,6 +142,13 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
     // Tap order, because for destinations it becomes the order of the buttons on the sorting screen
     val order = vm.picked.indexOf(album.path)
     val selected = vm.isTicked(album.path, forSource)
+    // Why the row can't be ticked. A folder can't be sorted into itself
+    val taken = when {
+        sorting && !forSource -> "Being sorted"
+        destination && forSource -> "Destination folder"
+        destination -> "Already a destination"
+        else -> null
+    }
     SegmentedListItem(
         checked = selected,
         onCheckedChange = { vm.tick(album.path, forSource) },
@@ -159,33 +166,23 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
             )
         },
         trailingContent = {
+            // Every row has its mark in the same place, so the right edge of the column stays even
             when {
-                sorting && !forSource -> Tag("Sorting")
-                destination -> Tag("Destination")
+                taken != null -> Checkbox(checked = false, onCheckedChange = null, enabled = false)
                 selected && !forSource -> OrderBadge(order + 1)
                 else -> Checkbox(checked = selected, onCheckedChange = null)
             }
         },
         supportingContent = {
             Column {
+                // Full strength on a greyed row, or the reason is the hardest thing to read
+                if (taken != null) Text(taken, color = MaterialTheme.colorScheme.primary)
                 Text(media(album.count, album.videos))
                 // Whole path, wrapped. Two albums can share a name and differ only here
                 Text(album.path, style = MaterialTheme.typography.bodySmall)
             }
         },
     ) { Text(album.name) }
-}
-
-/** Says why a folder can't be ticked: it is a destination, or an album when picking destinations. */
-@Composable
-private fun Tag(text: String) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.inverseSurface,
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-    ) {
-        Text(text, Modifier.padding(horizontal = 10.dp, vertical = 5.dp), style = MaterialTheme.typography.labelMedium)
-    }
 }
 
 /** The place a ticked destination gets among the sorting buttons. */
