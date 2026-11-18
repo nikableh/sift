@@ -247,15 +247,15 @@ object Store {
     }
 
     /**
-     * Index in [sources] of the album a photo belongs to, or -1. An album inside another one is
+     * Index in [albums] of the album a photo belongs to, or -1. An album inside another one is
      * the closer of the two, the way a folder read counts it
      */
-    fun albumOf(photoPath: String): Int {
+    fun albumOf(photoPath: String, albums: List<String> = sources): Int {
         val parent = photoPath.substringBeforeLast('/')
         var best = -1
-        sources.forEachIndexed { i, album ->
+        albums.forEachIndexed { i, album ->
             val holds = parent == album || (recursive && parent.startsWith("$album/"))
-            if (holds && (best < 0 || album.length > sources[best].length)) best = i
+            if (holds && (best < 0 || album.length > albums[best].length)) best = i
         }
         return best
     }

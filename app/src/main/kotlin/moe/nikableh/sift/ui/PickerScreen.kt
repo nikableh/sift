@@ -64,13 +64,14 @@ import java.io.File
  * albums, the folders a gallery app would show. Browsing the file system is one tap away for
  * folders that hold no photos yet.
  *
- * Folders are ticked in any number and added together.
+ * Folders are ticked in any number and added together. Albums being sorted start ticked, and the
+ * ones unticked here are taken out at the same moment.
  */
 @Composable
 fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostState) {
     val browsing = vm.browsing
     val dir = vm.browseDir
-    BackHandler(enabled = browsing || vm.picked.isNotEmpty()) {
+    BackHandler(enabled = browsing || vm.picked.isNotEmpty() || vm.unticked.isNotEmpty()) {
         if (browsing) vm.browseUp() else vm.leavePicker()
     }
 
@@ -140,11 +141,11 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
     val destination = vm.isDest(album.path)
     // Tap order, because for destinations it becomes the order of the buttons on the sorting screen
     val order = vm.picked.indexOf(album.path)
-    val selected = order >= 0
+    val selected = vm.isTicked(album.path, forSource)
     SegmentedListItem(
         checked = selected,
-        onCheckedChange = { vm.togglePicked(album.path, forSource) },
-        enabled = !sorting && !destination,
+        onCheckedChange = { vm.tick(album.path, forSource) },
+        enabled = vm.canTick(album.path, forSource),
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         colors = segmentColors(),
         leadingContent = {
@@ -159,7 +160,7 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
         },
         trailingContent = {
             when {
-                sorting -> Tag("Sorting")
+                sorting && !forSource -> Tag("Sorting")
                 destination -> Tag("Destination")
                 selected && !forSource -> OrderBadge(order + 1)
                 else -> Checkbox(checked = selected, onCheckedChange = null)
@@ -175,7 +176,7 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
     ) { Text(album.name) }
 }
 
-/** Says why a folder can't be ticked: it is already an album being sorted, or a destination. */
+/** Says why a folder can't be ticked: it is a destination, or an album when picking destinations. */
 @Composable
 private fun Tag(text: String) {
     Surface(
@@ -225,16 +226,17 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                 }
             }
             item {
-                val taken = vm.isTaken(dir.path)
+                val free = vm.canTick(dir.path, forSource)
+                val ticked = vm.isTicked(dir.path, forSource)
                 SegmentedListItem(
-                    checked = dir.path in vm.picked,
-                    onCheckedChange = { vm.togglePicked(dir.path, forSource) },
-                    enabled = !taken,
+                    checked = ticked,
+                    onCheckedChange = { vm.tick(dir.path, forSource) },
+                    enabled = free,
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
                     colors = segmentColors(),
                     modifier = Modifier.padding(bottom = 10.dp),
-                    trailingContent = { Checkbox(checked = dir.path in vm.picked, onCheckedChange = null, enabled = !taken) },
-                    supportingContent = { if (taken) Text("Already in use") },
+                    trailingContent = { Checkbox(checked = ticked, onCheckedChange = null, enabled = free) },
+                    supportingContent = { if (!free) Text("Already in use") },
                 ) { Text("Select this folder") }
             }
         }
@@ -249,9 +251,9 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                     if (dir != null) {
                         // Ticks a subfolder without having to open it first
                         Checkbox(
-                            checked = path in vm.picked,
-                            onCheckedChange = { vm.togglePicked(path, forSource) },
-                            enabled = !vm.isTaken(path),
+                            checked = vm.isTicked(path, forSource),
+                            onCheckedChange = { vm.tick(path, forSource) },
+                            enabled = vm.canTick(path, forSource),
                         )
                     } else {
                         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
@@ -263,10 +265,12 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
     }
 }
 
-/** Shows what is ticked so far and adds it all in one go. [browseDir] is null at the list of storage volumes. */
+/** Shows what is ticked so far and saves it all in one go. [browseDir] is null at the list of storage volumes. */
 @Composable
 private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, browseDir: File?) {
     val picked = vm.picked
+    val added = picked.size
+    val removed = vm.unticked.size
     // A new album only makes sense as a place to sort into, and the list of volumes has no folder to create one in
     val newFolder: Dialog.NewFolder? = when {
         browsing && browseDir != null -> Dialog.NewFolder(browseDir, forSource)
@@ -310,17 +314,20 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                     }
                 }
                 Button(
-                    onClick = { vm.addPicked(forSource) },
-                    enabled = picked.isNotEmpty(),
+                    onClick = { vm.savePicked(forSource) },
+                    enabled = added > 0 || removed > 0,
                     shapes = ButtonDefaults.shapes(),
                     modifier = Modifier.weight(1f).height(size),
                 ) {
                     FitLabel(
                         when {
-                            picked.isEmpty() -> "Add"
-                            !forSource -> "Add ${picked.size}"
-                            picked.size == 1 -> "Add 1 album"
-                            else -> "Add ${picked.size} albums"
+                            added > 0 && removed > 0 -> "Add $added, remove $removed"
+                            removed == 1 -> "Remove 1 album"
+                            removed > 1 -> "Remove $removed albums"
+                            added == 0 -> "Add"
+                            !forSource -> "Add $added"
+                            added == 1 -> "Add 1 album"
+                            else -> "Add $added albums"
                         }
                     )
                 }

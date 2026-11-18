@@ -160,15 +160,23 @@ fun Dialogs(vm: SiftViewModel) {
         )
 
         is Dialog.ConfirmDiscardPicks -> Confirm(
-            title = "Leave without adding?",
+            title = if (d.unticked == 0) "Leave without adding?" else "Leave without saving?",
             confirm = "Leave",
             onConfirm = {
                 close()
-                vm.picked.clear()
+                vm.clearPicks()
                 vm.back()
             },
             onDismiss = close,
-        ) { Text(if (d.count == 1) "1 ticked folder has not been added." else "${d.count} ticked folders have not been added.") }
+        ) {
+            Text(
+                when {
+                    d.unticked > 0 -> "Your albums stay as they were."
+                    d.count == 1 -> "1 ticked folder has not been added."
+                    else -> "${d.count} ticked folders have not been added."
+                }
+            )
+        }
 
         Dialog.ConfirmClear -> Confirm(
             title = "Clear selections?",
@@ -206,12 +214,13 @@ fun Dialogs(vm: SiftViewModel) {
 
         is Dialog.ConfirmRemoveSource -> AlertDialog(
             onDismissRequest = close,
-            title = { Text("Remove ${File(d.path).name}?") },
+            title = { Text(if (d.paths.size == 1) "Remove ${File(d.paths[0]).name}?" else "Remove ${d.paths.size} albums?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("${selections(d.queued)} in this album ${if (d.queued == 1) "is" else "are"} dropped. No files are touched.")
+                    val where = if (d.paths.size == 1) "this album" else "these albums"
+                    Text("${selections(d.queued)} in $where ${if (d.queued == 1) "is" else "are"} dropped. No files are touched.")
                     // Counted, not listed, so the line stays one line at any number of albums
-                    val others = vm.sources.size - 1
+                    val others = vm.sources.size - d.paths.size
                     if (d.elsewhere > 0 && others > 0) {
                         Text(if (others == 1) "Selections in the other album stay." else "Selections in the other $others albums stay.")
                     }
@@ -220,8 +229,9 @@ fun Dialogs(vm: SiftViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
-                        vm.removeSource(d.path)
+                        // Closes first, because saving the picker can open the next dialog
                         close()
+                        if (d.picker) vm.savePicked(forSource = true, confirmed = true) else vm.removeSource(d.paths.single())
                     },
                     shapes = ButtonDefaults.shapes(),
                 ) { Text("Remove") }

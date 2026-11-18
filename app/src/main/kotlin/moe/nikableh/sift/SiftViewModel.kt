@@ -47,11 +47,19 @@ sealed interface Dialog {
     data class UndoFailed(val restored: Int, val failed: List<Pair<String, String>>) : Dialog
     data object ConfirmClear : Dialog
     data object SelectionsLocked : Dialog
-    data class ConfirmDiscardPicks(val count: Int) : Dialog
+    data class ConfirmDiscardPicks(val count: Int, val unticked: Int) : Dialog
     data class ConfirmRemoveDest(val dest: Dest, val queued: Int) : Dialog
 
-    /** [queued] selections wait in the album, [elsewhere] in the other albums. */
-    data class ConfirmRemoveSource(val path: String, val queued: Int, val elsewhere: Int) : Dialog
+    /**
+     * [queued] selections wait in the albums, [elsewhere] in the other albums. With [picker] set,
+     * confirming saves the album picker, which may add albums too
+     */
+    data class ConfirmRemoveSource(
+        val paths: List<String>,
+        val queued: Int,
+        val elsewhere: Int,
+        val picker: Boolean = false,
+    ) : Dialog
     data class RenameDest(val dest: Dest) : Dialog
     data class NewFolder(val parent: File, val forSource: Boolean, val album: Boolean = false) : Dialog
     data class GoToPhoto(val current: Int, val total: Int) : Dialog
@@ -186,6 +194,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** Folders ticked in the picker. Tap order, because for destinations it becomes button order. */
     val picked = mutableStateListOf<String>()
 
+    /** Albums being sorted that were unticked in the picker. They stay in [sources] until it is saved. */
+    val unticked = mutableStateListOf<String>()
+
     /** Null at the list of storage volumes. */
     var browseDir by mutableStateOf<File?>(null)
         private set
@@ -304,7 +315,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (target == Screen.Selections) loadSelections()
         if (target is Screen.Picker) {
             browsing = false
-            picked.clear()
+            clearPicks()
             loadAlbums()
         }
     }
@@ -842,7 +853,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
-    /** Opens the picker to add albums. That is safe at any time: what is already queued stays in the list. */
+    /** Opens the picker to add and remove albums. Nothing changes until it is saved. */
     fun pickAlbums() {
         open(Screen.Picker(forSource = true))
     }
@@ -856,7 +867,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val at = Store.sources.indexOf(path)
         if (at < 0) return
         val here = Store.pending.keys.count { Store.albumOf(it) == at }
-        if (here == 0) removeSource(path) else dialog = Dialog.ConfirmRemoveSource(path, here, Store.pending.size - here)
+        if (here == 0) removeSource(path) else dialog = Dialog.ConfirmRemoveSource(listOf(path), here, Store.pending.size - here)
     }
 
     /** Takes an album out of sorting and drops the selections made in it. Its photos stay where they are. */
@@ -886,12 +897,28 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         changed(rescan = true)
     }
 
-    /** A folder can't be sorted into itself, so one that is an album or a destination can't be ticked as either. */
     fun isSource(path: String): Boolean = path in sources
 
     fun isDest(path: String): Boolean = dests.any { it.path == path }
 
-    fun isTaken(path: String): Boolean = isSource(path) || isDest(path)
+    /**
+     * A folder can't be sorted into itself, so a destination can't become an album or the reverse.
+     * The album picker can still untick the albums being sorted
+     */
+    fun canTick(path: String, forSource: Boolean): Boolean = !isDest(path) && (forSource || !isSource(path))
+
+    fun isTicked(path: String, forSource: Boolean): Boolean =
+        path in picked || (forSource && isSource(path) && path !in unticked)
+
+    fun tick(path: String, forSource: Boolean) {
+        if (!forSource || !isSource(path)) togglePicked(path, forSource)
+        else if (!unticked.remove(path)) unticked.add(path)
+    }
+
+    fun clearPicks() {
+        picked.clear()
+        unticked.clear()
+    }
 
     fun togglePicked(path: String, forSource: Boolean) {
         if (picked.remove(path)) return
@@ -906,21 +933,50 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         picked.add(path)
     }
 
-    /** Leaves the picker, asking first when that would drop ticked folders. */
+    /** Leaves the picker, asking first when that would drop changes made in it. */
     fun leavePicker() {
-        if (picked.isEmpty()) back() else dialog = Dialog.ConfirmDiscardPicks(picked.size)
+        if (picked.isEmpty() && unticked.isEmpty()) back()
+        else dialog = Dialog.ConfirmDiscardPicks(picked.size, unticked.size)
     }
 
-    /** Adds every ticked folder in one go, as albums to sort or as destinations, and leaves the picker. */
-    fun addPicked(forSource: Boolean) {
-        if (picked.isEmpty()) return
+    /**
+     * Takes out the unticked albums, adds every ticked folder, as albums to sort or as destinations,
+     * and leaves the picker. Asks first when that drops selections, unless [confirmed]
+     */
+    fun savePicked(forSource: Boolean, confirmed: Boolean = false) {
+        if (picked.isEmpty() && unticked.isEmpty()) return
+        if (unticked.isNotEmpty() && !removeUnticked(confirmed)) return
         if (forSource) Store.sources.addAll(picked) else for (path in picked) Store.dests.add(Dest(path, File(path).name))
-        Store.lastPickerDir = File(picked.last()).parent
-        picked.clear()
+        picked.lastOrNull()?.let { Store.lastPickerDir = File(it).parent }
+        clearPicks()
         changed(rescan = true)
         back()
         // The Folders screen shows what each album holds, so new albums are read without waiting for Home
         if (forSource) refresh()
+    }
+
+    /** False when the albums stay for now, because a folder read is on or the user has to confirm. */
+    private fun removeUnticked(confirmed: Boolean): Boolean {
+        // A folder read counts against the queue from another thread, so the queue holds still until it ends
+        if (busy || scanning || !Store.ready) {
+            messages.tryEmit("Wait until the albums have been read")
+            return false
+        }
+        val gone = unticked.toSet()
+        // Counts the albums being added too: a photo in one of them belongs to it and stays queued
+        val albums = Store.sources + picked
+        val dropped = Store.pending.keys.filterTo(HashSet()) { albums.getOrNull(Store.albumOf(it, albums)) in gone }
+        if (dropped.isNotEmpty()) {
+            if (!confirmed) {
+                dialog = Dialog.ConfirmRemoveSource(unticked.toList(), dropped.size, Store.pending.size - dropped.size, picker = true)
+                return false
+            }
+            Store.pending.keys.removeAll(dropped)
+            Store.compactPending()
+            counts = Store.counts()
+        }
+        Store.sources.removeAll(gone)
+        return true
     }
 
     fun moveDest(from: Int, to: Int) {
