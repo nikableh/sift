@@ -32,6 +32,8 @@ sealed interface Screen {
     data object Sort : Screen
     data object Setup : Screen
     data object Selections : Screen
+    data object About : Screen
+    data object Licenses : Screen
     data class Picker(val forSource: Boolean) : Screen
 }
 

@@ -61,6 +61,8 @@ fun SiftApp(vm: SiftViewModel) {
                         Screen.Sort -> SortScreen(vm, settled = !transition.isRunning)
                         Screen.Setup -> SetupScreen(vm, snackbar)
                         Screen.Selections -> SelectionsScreen(vm)
+                        Screen.About -> AboutScreen(vm, snackbar)
+                        Screen.Licenses -> LicensesScreen(vm)
                         is Screen.Picker -> PickerScreen(vm, screen.forSource, snackbar)
                     }
                 }

@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
@@ -41,6 +42,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -102,11 +104,13 @@ private fun Home(vm: SiftViewModel) {
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                "Sift",
-                style = MaterialTheme.typography.displaySmallEmphasized,
-                modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
-            )
+            Row(
+                Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Sift", style = MaterialTheme.typography.displaySmallEmphasized, modifier = Modifier.weight(1f))
+                IconButton(onClick = { vm.open(Screen.About) }) { Icon(Icons.Outlined.Info, "About") }
+            }
             MediaManagementCard(vm)
             AlbumCard(vm)
             DestinationsCard(vm)
