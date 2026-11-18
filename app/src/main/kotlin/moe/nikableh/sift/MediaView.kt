@@ -2,19 +2,22 @@ package moe.nikableh.sift
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Rect
 import android.view.SurfaceView
 import android.view.ViewGroup
 import kotlin.math.roundToInt
 
 /**
  * The pager with the video picture laid over its current page. Both are views of one parent, so a
- * touch on the picture falls through to the pager under it
+ * touch on the picture falls through to the pager under it. It covers the whole screen, and
+ * [setSlot] says which part of that the header and the folder buttons leave free
  */
 @SuppressLint("ViewConstructor")
 class MediaView(ctx: Context) : ViewGroup(ctx) {
     val pager = ZoomImageView(ctx)
     val surface = SurfaceView(ctx)
 
+    private val slot = Rect()
     private var aspect = 0f
     private var shown = false
 
@@ -25,6 +28,13 @@ class MediaView(ctx: Context) : ViewGroup(ctx) {
         pager.onDrag = { if (shown) surface.translationX = it }
         // The page under the picture just became the neighbour, and the picture must not ride on with the new one
         pager.onTurn = { show(false) }
+    }
+
+    fun setSlot(left: Int, top: Int, right: Int, bottom: Int) {
+        if (slot.left == left && slot.top == top && slot.right == right && slot.bottom == bottom) return
+        slot.set(left, top, right, bottom)
+        pager.setSlot(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+        requestLayout()
     }
 
     /** [aspect] is the video's width over its height, or 0 while nothing says what it is. */
@@ -49,18 +59,18 @@ class MediaView(ctx: Context) : ViewGroup(ctx) {
         setMeasuredDimension(width, height)
         pager.measure(exactly(width), exactly(height))
         // Fitted the way the pager fits the still frame, so the picture covers it exactly
-        var w = width
-        var h = height
-        if (aspect > 0f && height > 0) {
-            if (aspect > width / height.toFloat()) h = (width / aspect).roundToInt() else w = (height * aspect).roundToInt()
+        var w = slot.width()
+        var h = slot.height()
+        if (aspect > 0f && h > 0) {
+            if (aspect > w / h.toFloat()) h = (w / aspect).roundToInt() else w = (h * aspect).roundToInt()
         }
         surface.measure(exactly(w), exactly(h))
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
         pager.layout(0, 0, r - l, b - t)
-        val x = (r - l - surface.measuredWidth) / 2
-        val y = (b - t - surface.measuredHeight) / 2
+        val x = slot.left + (slot.width() - surface.measuredWidth) / 2
+        val y = slot.top + (slot.height() - surface.measuredHeight) / 2
         surface.layout(x, y, x + surface.measuredWidth, y + surface.measuredHeight)
     }
 

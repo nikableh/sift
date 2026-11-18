@@ -7,6 +7,8 @@ import android.content.res.Configuration
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
 import android.webkit.MimeTypeMap
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -90,6 +92,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -108,7 +112,9 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.zIndex
 import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -117,6 +123,7 @@ import java.text.DateFormat
 import java.util.Date
 import kotlin.math.ceil
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
@@ -154,15 +161,21 @@ fun SortScreen(vm: SiftViewModel, settled: Boolean) {
                 action = "Set up folders",
             ) { vm.open(Screen.Setup) }
 
-            else -> if (landscape) {
-                Row(Modifier.fillMaxSize()) {
-                    Viewer(vm, player, landscape = true, Modifier.weight(1f).fillMaxHeight())
-                    Panel(vm, landscape = true, Modifier.width(280.dp).fillMaxHeight())
-                }
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    Viewer(vm, player, landscape = false, Modifier.weight(1f).fillMaxWidth())
-                    Panel(vm, landscape = false, Modifier.fillMaxWidth())
+            else -> Box(Modifier.fillMaxSize()) {
+                // Under the header and the folder buttons and as large as the screen, so an open photo
+                // can come up over them. Shared by the two layouts, so turning the phone keeps the zoom
+                val stage = remember { Stage() }
+                Media(vm, player, stage)
+                if (landscape) {
+                    Row(Modifier.fillMaxSize()) {
+                        Viewer(vm, player, stage, landscape = true, Modifier.weight(1f).fillMaxHeight())
+                        Panel(vm, landscape = true, Modifier.width(280.dp).fillMaxHeight())
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        Viewer(vm, player, stage, landscape = false, Modifier.weight(1f).fillMaxWidth())
+                        Panel(vm, landscape = false, Modifier.fillMaxWidth())
+                    }
                 }
             }
         }
@@ -264,51 +277,113 @@ private fun BigButton(label: String, onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun Viewer(vm: SiftViewModel, player: VideoPlayer, landscape: Boolean, modifier: Modifier) {
-    val folder = vm.albumsLabel
+/** Ties the photo's view, which covers the screen, to the room the header and the folder buttons leave for it. */
+private class Stage {
+    var view: MediaView? = null
+    var screen: LayoutCoordinates? = null
+    var slot: LayoutCoordinates? = null
 
-    Column(
-        modifier.background(MaterialTheme.colorScheme.surface)
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))
-    ) {
-        TopBar(vm, folder)
-        Photo(vm, player, folder, landscape, Modifier.weight(1f).fillMaxWidth())
+    /** Straight to the view and not through state, which would show the photo in the wrong place for a frame. */
+    fun place() {
+        val screen = screen?.takeIf { it.isAttached } ?: return
+        val slot = slot?.takeIf { it.isAttached } ?: return
+        val box = screen.localBoundingBoxOf(slot, clipBounds = false)
+        view?.setSlot(box.left.roundToInt(), box.top.roundToInt(), box.right.roundToInt(), box.bottom.roundToInt())
     }
 }
 
+@Composable
+private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
+    val gate = vm.gate
+    val video = gate == Gate.None && vm.current?.video == true
+    var raised by remember { mutableStateOf(false) }
+    // The header's back button is under the open photo, and leaving the screen from there would come as a surprise
+    BackHandler(enabled = raised) { stage.view?.pager?.close() }
+    if (raised && !isSystemInDarkTheme()) PaleBarIcons()
+
+    AndroidView(
+        factory = { context ->
+            MediaView(context).apply {
+                pager.onSwipe = { vm.go(it) }
+                pager.onZoomIn = { vm.loadSharper() }
+                pager.onTap = { player.toggle() }
+                pager.onRaise = { raised = it }
+                player.attach(surface)
+                stage.view = this
+                stage.place()
+            }
+        },
+        update = {
+            val pages = !vm.busy && (gate == Gate.None || gate == Gate.End)
+            val bitmap = vm.bitmap
+            it.pager.show(
+                vm.bitmapPath, bitmap, vm.prevBitmap, vm.nextBitmap,
+                canPrev = pages && vm.index > 0,
+                canNext = pages && vm.index < vm.photos.size,
+                zoomable = !video,
+            )
+            // Only a photo opens. If the page under an open one turns into anything else, it belongs under the header
+            if (video || gate != Gate.None) it.pager.close()
+            // The still frame's shape stands in until the decoder reports the video's own
+            val aspect = player.aspect.takeIf { a -> a > 0f } ?: bitmap?.let { b -> b.width / b.height.toFloat() } ?: 0f
+            it.video(aspect, show = video && player.showing && player.path == vm.bitmapPath)
+        },
+        onRelease = {
+            player.detach(it.surface)
+            stage.view = null
+        },
+        modifier = Modifier
+            .fillMaxSize()
+            // An open photo draws over the header and the buttons, and takes the touches meant for them
+            .zIndex(if (raised) 1f else 0f)
+            .onGloballyPositioned {
+                stage.screen = it
+                stage.place()
+            },
+    )
+}
+
+/** The light theme's dark clock and status icons can't be seen on the black behind an open photo. */
+@Composable
+private fun PaleBarIcons() {
+    val window = LocalActivity.current?.window ?: return
+    val view = LocalView.current
+    DisposableEffect(window) {
+        val bars = WindowCompat.getInsetsController(window, view)
+        bars.isAppearanceLightStatusBars = false
+        bars.isAppearanceLightNavigationBars = false
+        onDispose {
+            // Read now, because a switch to the dark theme is one of the ways to get here
+            val night = (view.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            bars.isAppearanceLightStatusBars = !night
+            bars.isAppearanceLightNavigationBars = !night
+        }
+    }
+}
+
+@Composable
+private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, landscape: Boolean, modifier: Modifier) {
+    val folder = vm.albumsLabel
+
+    Column(modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))) {
+        TopBar(vm, folder)
+        Photo(
+            vm, player, folder, landscape,
+            Modifier.weight(1f).fillMaxWidth().onGloballyPositioned {
+                stage.slot = it
+                stage.place()
+            },
+        )
+    }
+}
+
+/** What lies over the photo. The photo itself is [Media], under all of this. */
 @Composable
 private fun Photo(vm: SiftViewModel, player: VideoPlayer, folder: String, landscape: Boolean, modifier: Modifier) {
     val gate = vm.gate
     val video = gate == Gate.None && vm.current?.video == true
 
     Box(modifier) {
-        AndroidView(
-            factory = { context ->
-                MediaView(context).apply {
-                    pager.onSwipe = { vm.go(it) }
-                    pager.onZoomIn = { vm.loadSharper() }
-                    pager.onTap = { player.toggle() }
-                    player.attach(surface)
-                }
-            },
-            update = {
-                val pages = !vm.busy && (gate == Gate.None || gate == Gate.End)
-                val bitmap = vm.bitmap
-                it.pager.show(
-                    vm.bitmapPath, bitmap, vm.prevBitmap, vm.nextBitmap,
-                    canPrev = pages && vm.index > 0,
-                    canNext = pages && vm.index < vm.photos.size,
-                    zoomable = !video,
-                )
-                // The still frame's shape stands in until the decoder reports the video's own
-                val aspect = player.aspect.takeIf { a -> a > 0f } ?: bitmap?.let { b -> b.width / b.height.toFloat() } ?: 0f
-                it.video(aspect, show = video && player.showing && player.path == vm.bitmapPath)
-            },
-            onRelease = { player.detach(it.surface) },
-            modifier = Modifier.fillMaxSize(),
-        )
-
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
             Gate.Empty -> Status(Modifier.align(Alignment.Center), "No photos or videos in $folder") {
