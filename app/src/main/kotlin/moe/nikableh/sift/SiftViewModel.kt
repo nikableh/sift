@@ -107,6 +107,17 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var sources by mutableStateOf<List<String>>(emptyList())
         private set
 
+    /** The albums of [sources] that a Move emptied. They are read like the others and come back when they hold photos again. */
+    var sortedAlbums by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    val activeAlbums: List<String> get() = sources.filter { it !in sortedAlbums }
+
+    val allSorted: Boolean get() = sources.isNotEmpty() && sortedAlbums.size == sources.size
+
+    /** What Home and the sorting screen name: the albums still to sort, or every album once all are sorted. */
+    val shownAlbums: List<String> get() = if (allSorted) sources else activeAlbums
+
     /**
      * The albums of the last folder read, in the order they had then. An album added since has no
      * entry yet, and one removed since keeps its entry until the next read, so look them up by path
@@ -265,14 +276,23 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             // Reads the queue like a folder: everything that would change it waits until it is in
             scanning = true
             viewModelScope.launch {
+                var movedBefore = emptyList<String>()
                 val (queue, cut) = withContext(Dispatchers.IO) {
                     val queue = Store.readQueue()
                     val cut = Store.recover(ctx, queue)
                     // A big batch's journal has 100,000 lines, so its count is read here too
                     lastBatch()
+                    // Neither an earlier version nor a Move cut short noted the albums it took from
+                    val unnoted = when {
+                        Store.sortedUnknown -> Store.journals()
+                        cut != null && !cut.undo -> listOf(cut.journal)
+                        else -> emptyList()
+                    }
+                    movedBefore = unnoted.flatMap { journal -> Mover.readJournal(journal).map { it.first } }
                     queue to cut
                 }
                 Store.useQueue(queue)
+                Store.noteMovedFrom(movedBefore)
                 interrupted = when {
                     cut == null -> null
                     cut.undo -> Dialog.UndoInterrupted(Batch(cut.journal, cut.moved)).takeIf { cut.moved > 0 }
@@ -364,6 +384,31 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun resumed() {
+        refresh()
+        lookIntoSorted()
+    }
+
+    /**
+     * Nothing else brings a sorted album back while the app stays open, because coming back to the
+     * front reads nothing. Looking into albums that were empty costs next to nothing, and a full read
+     * follows only when one of them holds photos again
+     */
+    private fun lookIntoSorted() {
+        val albums = sortedAlbums
+        if (albums.isEmpty() || scanning || busy || scannedVersion != Store.scanVersion) return
+        val version = Store.scanVersion
+        val recursive = Store.recursive
+        // An album inside a sorted one is read on its own, as in the full read
+        val exclude = Store.dests.mapTo(HashSet()) { it.path } + Store.sources
+        viewModelScope.launch {
+            val refilled = withContext(Dispatchers.IO) {
+                Scanner.scan(albums.map { File(it) }, recursive, exclude, Store.ORDER_NAME).isNotEmpty()
+            }
+            if (refilled && version == Store.scanVersion) reload()
+        }
+    }
+
     private fun announceInterrupted() {
         dialog = interrupted ?: return
         interrupted = null
@@ -418,6 +463,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             albumQueued = result.albumQueued
             albumCovers = result.albumCovers
             publishAlbums()
+            Store.settleSorted(roots, result.albumTotals)
             if (screen == Screen.Selections) loadSelections()
             refresh()
         }
@@ -469,7 +515,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     /** "Camera" for one album, "3 albums" for more. */
     val albumsLabel: String
-        get() = sources.singleOrNull()?.let { File(it).name } ?: "${sources.size} albums"
+        get() = shownAlbums.let { albums -> albums.singleOrNull()?.let { File(it).name } ?: "${albums.size} albums" }
 
     /** The album a photo of the list was read from, with the folders under it: "Camera" or "Camera/Trip". */
     fun titleOf(photo: Photo): String {
@@ -847,6 +893,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun syncSettings() {
         sources = Store.sources.toList()
+        sortedAlbums = Store.sources.filter { it in Store.sorted }
         recursive = Store.recursive
         order = Store.order
         dests = Store.dests.toList()
@@ -856,6 +903,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun changed(rescan: Boolean) {
         if (rescan) Store.scanVersion++
+        Store.forgetRemoved()
         Store.saveConfig()
         syncSettings()
     }
@@ -900,6 +948,15 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         }
         Store.sources.removeAt(at)
         changed(rescan = true)
+    }
+
+    /** Takes every sorted album off the list. They are empty, so no confirmation is needed. */
+    fun clearSorted() {
+        if (busy || scanning || !Store.ready) {
+            messages.tryEmit("Wait until the albums have been read")
+            return
+        }
+        for (path in sortedAlbums) removeSource(path)
     }
 
     fun changeRecursive(on: Boolean) {

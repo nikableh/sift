@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         // The all-files permission is granted on a system screen, so it has to be rechecked on return
-        vm.refresh()
+        vm.resumed()
     }
 
     override fun onPause() {

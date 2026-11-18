@@ -220,7 +220,7 @@ fun Dialogs(vm: SiftViewModel) {
                     val where = if (d.paths.size == 1) "this album" else "these albums"
                     Text("${selections(d.queued)} in $where ${if (d.queued == 1) "is" else "are"} dropped. No files are touched.")
                     // Counted, not listed, so the line stays one line at any number of albums
-                    val others = vm.sources.size - d.paths.size
+                    val others = vm.activeAlbums.count { it !in d.paths }
                     if (d.elsewhere > 0 && others > 0) {
                         Text(if (others == 1) "Selections in the other album stay." else "Selections in the other $others albums stay.")
                     }

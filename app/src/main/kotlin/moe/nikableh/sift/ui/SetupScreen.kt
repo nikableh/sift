@@ -21,6 +21,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Done
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -38,17 +41,24 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -64,7 +74,11 @@ import java.io.File
 fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val sources = vm.sources
+    val active = vm.activeAlbums
+    val sorted = vm.sortedAlbums
+    val shown = vm.shownAlbums
     val dests = vm.dests
+    var sortedOpen by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -91,7 +105,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         ) {
             // Each header carries the button that adds to its list
             item(key = "header:albums") {
-                SectionHeader("Albums to sort", "Add albums") { vm.pickAlbums() }
+                SectionHeader("Albums to sort", "Add albums", Modifier.animateItem()) { vm.pickAlbums() }
             }
             if (sources.isEmpty()) {
                 item(key = "albums:none") {
@@ -99,15 +113,16 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         onClick = { vm.pickAlbums() },
                         shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
                         colors = segmentColors(),
+                        modifier = Modifier.animateItem(),
                         leadingContent = { Icon(Icons.Rounded.PhotoLibrary, null) },
                         supportingContent = { Text("Tap to choose what to sort") },
                     ) { Text("No album chosen") }
                 }
             }
-            itemsIndexed(sources, key = { _, path -> "album:$path" }) { i, path ->
+            itemsIndexed(active, key = { _, path -> "album:$path" }) { i, path ->
                 val stat = vm.statOf(path)
                 SegmentedListItem(
-                    shapes = ListItemDefaults.segmentedShapes(index = i, count = sources.size),
+                    shapes = ListItemDefaults.segmentedShapes(index = i, count = active.size),
                     colors = segmentColors(),
                     modifier = Modifier.animateItem(),
                     leadingContent = { AlbumThumb(stat?.cover) },
@@ -128,17 +143,54 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     },
                 ) { Text(File(path).name) }
             }
-            item(key = "options:gap") { Spacer(Modifier.height(8.dp)) }
+            if (sorted.isNotEmpty()) {
+                // One folded row, however many albums are done, so the albums still to sort stay the list
+                if (active.isNotEmpty()) item(key = "sorted:gap") { Spacer(Modifier.animateItem().height(4.dp)) }
+                val rows = if (sortedOpen) sorted.size + 1 else 1
+                item(key = "sorted") {
+                    val label = if (sortedOpen) "Hide the sorted albums" else "Show the sorted albums"
+                    SegmentedListItem(
+                        onClick = { sortedOpen = !sortedOpen },
+                        shapes = ListItemDefaults.segmentedShapes(index = 0, count = rows),
+                        colors = segmentColors(),
+                        modifier = Modifier.animateItem().semantics { onClick(label = label, action = null) },
+                        leadingContent = { AlbumThumb(null, Icons.Rounded.Done) },
+                        supportingContent = { Text(sorted.joinToString(", ") { File(it).name }) },
+                        trailingContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { vm.clearSorted() }) { Text("Clear") }
+                                Icon(if (sortedOpen) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
+                            }
+                        },
+                    ) { Text(if (sorted.size == 1) "1 album sorted" else "${sorted.size} albums sorted") }
+                }
+                if (sortedOpen) {
+                    itemsIndexed(sorted, key = { _, path -> "album:$path" }) { i, path ->
+                        SegmentedListItem(
+                            shapes = ListItemDefaults.segmentedShapes(index = i + 1, count = rows),
+                            colors = segmentColors(),
+                            modifier = Modifier.animateItem(),
+                            leadingContent = { AlbumThumb(null) },
+                            supportingContent = { Text(path) },
+                            trailingContent = {
+                                IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove") }
+                            },
+                        ) { Text(File(path).name) }
+                    }
+                }
+            }
+            item(key = "options:gap") { Spacer(Modifier.animateItem().height(8.dp)) }
             item(key = "options:subfolders") {
                 SegmentedListItem(
                     checked = vm.recursive,
                     onCheckedChange = { vm.changeRecursive(it) },
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
                     colors = segmentColors(),
+                    modifier = Modifier.animateItem(),
                     trailingContent = { Switch(checked = vm.recursive, onCheckedChange = null) },
                     supportingContent = {
                         Text(
-                            if (sources.size > 1) "Of every album. Destination folders inside them are left out"
+                            if (shown.size > 1) "Of every album. Destination folders inside them are left out"
                             else "Destination folders inside it are left out"
                         )
                     },
@@ -148,17 +200,20 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 SegmentedListItem(
                     shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
                     colors = segmentColors(),
+                    modifier = Modifier.animateItem(),
                     supportingContent = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             OrderButtons(vm)
-                            if (sources.size > 1) Text("All albums are sorted as one list")
+                            if (shown.size > 1) Text("All albums are sorted as one list")
                         }
                     },
                 ) { Text("Order") }
             }
 
             item(key = "header:destinations") {
-                SectionHeader("Destination folders", "Add destinations") { vm.open(Screen.Picker(forSource = false)) }
+                SectionHeader("Destination folders", "Add destinations", Modifier.animateItem()) {
+                    vm.open(Screen.Picker(forSource = false))
+                }
             }
             item(key = "destinations:about") {
                 Text(
@@ -167,7 +222,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         "such as \"To delete\" and empty it later.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp),
+                    modifier = Modifier.animateItem().padding(start = 4.dp, end = 4.dp, bottom = 10.dp),
                 )
             }
             itemsIndexed(dests, key = { _, d -> d.path }) { i, dest ->
@@ -201,9 +256,9 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
 
 /** A section's name with the button that adds to its list. [addLabel] is what a screen reader says for the button. */
 @Composable
-private fun SectionHeader(text: String, addLabel: String, onAdd: () -> Unit) {
+private fun SectionHeader(text: String, addLabel: String, modifier: Modifier = Modifier, onAdd: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp, bottom = 6.dp),
+        modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -225,9 +280,9 @@ private fun SectionHeader(text: String, addLabel: String, onAdd: () -> Unit) {
     }
 }
 
-/** The album's first photo, or a placeholder until the album has been read. */
+/** The album's first photo, or [placeholder] when there is none or the album hasn't been read. */
 @Composable
-private fun AlbumThumb(cover: File?) {
+private fun AlbumThumb(cover: File?, placeholder: ImageVector = Icons.Rounded.PhotoLibrary) {
     Box(
         Modifier.size(40.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center,
@@ -240,7 +295,7 @@ private fun AlbumThumb(cover: File?) {
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
-            Icon(Icons.Rounded.PhotoLibrary, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(placeholder, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

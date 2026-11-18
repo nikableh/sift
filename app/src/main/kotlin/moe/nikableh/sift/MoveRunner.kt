@@ -44,6 +44,7 @@ object MoveRunner {
         start(ctx, Run("Moving ${entries.size} files", entries.size, cancellable = true), journal, undo = false) { app ->
             val result = withContext(Dispatchers.IO) { Mover.move(app, entries, journal, stop, ::tick) }
             for (path in result.settled) Store.pending.remove(path)
+            Store.noteMovedFrom(result.settled)
             Outcome.Moved(result)
         }
     }

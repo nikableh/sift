@@ -24,6 +24,19 @@ object Store {
 
     /** Albums to sort, in the order they were added. */
     val sources = ArrayList<String>()
+
+    /**
+     * Albums a Move emptied. They stay in [sources] and are still read, so one that holds photos
+     * again leaves this set by itself
+     */
+    val sorted = HashSet<String>()
+
+    /** Albums a Move took photos from since the last read. That read tells which of them are empty now */
+    private val movedFrom = HashSet<String>()
+
+    /** The settings come from a version that kept neither set, so only the journals know what was moved. */
+    var sortedUnknown = false
+        private set
     var recursive = false
     var order = ORDER_NEWEST
     val dests = ArrayList<Dest>()
@@ -189,6 +202,9 @@ object Store {
             // Written by versions that sorted one album at a time
             json.optString("source").ifEmpty { null }?.let { sources.add(it) }
         }
+        sortedUnknown = !json.has("sorted")
+        readAlbums(json, "sorted", sorted)
+        readAlbums(json, "movedFrom", movedFrom)
         recursive = json.optBoolean("recursive")
         order = json.optInt("order", ORDER_NEWEST)
         lastPath = json.optString("lastPath").ifEmpty { null }
@@ -206,9 +222,48 @@ object Store {
         }
     }
 
+    private fun readAlbums(json: JSONObject, key: String, into: MutableSet<String>) {
+        into.clear()
+        val arr = json.optJSONArray(key) ?: return
+        for (i in 0 until arr.length()) arr.optString(i).takeIf { it in sources }?.let { into.add(it) }
+    }
+
+    /** Called when a Move ends, with the paths it took. A big batch has 100,000 of them */
+    fun noteMovedFrom(paths: List<String>) {
+        var added = false
+        for (path in paths) {
+            if (movedFrom.size == sources.size) break
+            val album = sources.getOrNull(albumOf(path)) ?: continue
+            if (movedFrom.add(album)) added = true
+        }
+        // The process can be gone before the next read
+        if (added) saveConfig()
+    }
+
+    /** Called when a read ends, with what each of [albums] holds now. */
+    fun settleSorted(albums: List<String>, totals: IntArray) {
+        var changed = movedFrom.isNotEmpty()
+        albums.forEachIndexed { i, album ->
+            if (totals[i] > 0) {
+                if (sorted.remove(album)) changed = true
+            } else if (album in movedFrom) {
+                if (sorted.add(album)) changed = true
+            }
+        }
+        movedFrom.clear()
+        if (changed) saveConfig()
+    }
+
+    fun forgetRemoved() {
+        sorted.retainAll(sources.toSet())
+        movedFrom.retainAll(sources.toSet())
+    }
+
     fun saveConfig() {
         val json = JSONObject()
         json.put("sources", JSONArray(sources))
+        json.put("sorted", JSONArray(sorted))
+        json.put("movedFrom", JSONArray(movedFrom))
         json.put("recursive", recursive)
         json.put("order", order)
         json.put("lastPath", lastPath ?: "")

@@ -386,7 +386,11 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, folder: String, landsc
     Box(modifier) {
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
-            Gate.Empty -> Status(Modifier.align(Alignment.Center), "No photos or videos in $folder") {
+            Gate.Empty -> Status(
+                Modifier.align(Alignment.Center),
+                if (vm.allSorted) "All sorted" else "No photos or videos in $folder",
+                if (vm.allSorted) "Nothing is left in ${if (vm.sources.size == 1) folder else "these albums"}" else null,
+            ) {
                 BigButton("Add albums") { vm.pickAlbums() }
             }
             Gate.End -> Status(

@@ -28,7 +28,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -61,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -175,11 +178,12 @@ private fun DestinationsCard(vm: SiftViewModel) {
 /** The albums being sorted, with how many photos they hold. */
 @Composable
 private fun AlbumCard(vm: SiftViewModel) {
-    val sources = vm.sources
-    if (sources.isEmpty()) return
-    val albums = vm.albumStats
+    if (vm.sources.isEmpty()) return
+    val active = vm.activeAlbums
+    // A sorted album holds nothing to count
+    val albums = vm.albumStats.filter { it.path in active }
     // One album is the whole card already. The rows match the albums only once those have been read
-    val rows = !vm.scanning && sources.size > 1 && albums.map { it.path } == sources
+    val rows = !vm.scanning && active.size > 1 && albums.map { it.path } == active
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -197,10 +201,14 @@ private fun AlbumCard(vm: SiftViewModel) {
  */
 @Composable
 private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
-    val sources = vm.sources
+    val sources = vm.shownAlbums
     val single = sources.singleOrNull()
     val covers = if (single != null) listOf(vm.photos.firstOrNull()?.file) else sources.take(3).map { vm.statOf(it)?.cover }
-    val placeholder = !vm.scanning
+    val placeholder = when {
+        vm.scanning -> null
+        vm.allSorted -> Icons.Rounded.Done
+        else -> Icons.Rounded.PhotoLibrary
+    }
     val total = vm.photos.size
     BoxWithConstraints(modifier) {
         // Beside the cover the name only gets the rest of the row, a few letters a line at large
@@ -228,7 +236,12 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
                         )
                     }
                 } else {
-                    Text(if (total == 0) "No items" else items(total), style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val holds = when {
+                        vm.allSorted -> "All sorted"
+                        total == 0 -> "No items"
+                        else -> items(total)
+                    }
+                    Text(holds, style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (single != null) {
                     // The folder name is already above, so the middle of a long path is the part to lose
@@ -242,9 +255,10 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
             FilledTonalIconButton(
                 onClick = { vm.open(Screen.Setup) },
                 shapes = IconButtonDefaults.shapes(),
+                // The default tonal container all but vanishes on the card's primaryContainer
                 colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = cardInsetColor(),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    containerColor = MaterialTheme.colorScheme.primaryFixedDim,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryFixed,
                 ),
             ) {
                 Icon(Icons.Rounded.Edit, "Change albums")
@@ -278,7 +292,7 @@ private fun albumNames(sources: List<String>): String {
 
 /** One cover as it is, two or three fanned out with the first album's on top. */
 @Composable
-private fun Covers(files: List<File?>, placeholder: Boolean) {
+private fun Covers(files: List<File?>, placeholder: ImageVector?) {
     val n = files.size
     if (n == 1) {
         Cover(files[0], placeholder, Modifier.size(88.dp), MaterialTheme.shapes.large)
@@ -304,7 +318,7 @@ private fun Covers(files: List<File?>, placeholder: Boolean) {
 
 /** Square like a gallery thumbnail. The box is drawn before the read so the card keeps its height */
 @Composable
-private fun Cover(file: File?, placeholder: Boolean, modifier: Modifier, shape: Shape) {
+private fun Cover(file: File?, placeholder: ImageVector?, modifier: Modifier, shape: Shape) {
     Box(
         // An album without a photo to show gets a blank cover, which needs to stand off the card
         modifier.clip(shape).background(cardInsetColor()),
@@ -317,8 +331,8 @@ private fun Cover(file: File?, placeholder: Boolean, modifier: Modifier, shape: 
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-        } else if (placeholder) {
-            Icon(Icons.Rounded.PhotoLibrary, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (placeholder != null) {
+            Icon(placeholder, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -358,7 +372,7 @@ private fun AlbumRows(albums: List<AlbumStat>) {
 @Composable
 private fun AlbumRow(album: AlbumStat) {
     Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
-        Cover(album.cover, placeholder = true, Modifier.size(36.dp), RoundedCornerShape(10.dp))
+        Cover(album.cover, Icons.Rounded.PhotoLibrary, Modifier.size(36.dp), RoundedCornerShape(10.dp))
         Spacer(Modifier.width(12.dp))
         Text(
             album.name,
@@ -373,8 +387,8 @@ private fun AlbumRow(album: AlbumStat) {
 }
 
 /**
- * What sits on the album card as a quiet shape of its own: a blank cover and the edit button.
- * Their default container tones all but vanish on the card's container tone. The page's own colour doesn't
+ * A blank cover sits on the album card as a quiet shape of its own.
+ * The default container tones all but vanish on the card's container tone. The page's own colour doesn't
  */
 @Composable
 private fun cardInsetColor(): Color = MaterialTheme.colorScheme.surface
@@ -407,17 +421,27 @@ private fun Actions(vm: SiftViewModel) {
             }
         }
         val start = @Composable { modifier: Modifier ->
+            // With nothing to sort the button leads to more albums, like the one on the sorting screen
+            val add = !vm.scanning && vm.photos.isEmpty()
             Button(
-                onClick = { vm.open(Screen.Sort) },
-                enabled = ready && vm.photos.isNotEmpty(),
+                onClick = { if (add) vm.pickAlbums() else vm.open(Screen.Sort) },
+                enabled = ready,
                 shapes = ButtonDefaults.shapes(),
                 modifier = modifier.height(size),
             ) {
-                Icon(Icons.Rounded.PlayArrow, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
+                Icon(
+                    if (add) Icons.Rounded.Add else Icons.Rounded.PlayArrow,
+                    null,
+                    Modifier.size(ButtonDefaults.iconSizeFor(size)),
+                )
                 Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                 val style = ButtonDefaults.textStyleFor(size)
                 FitLabel(
-                    if (vm.index > 0 || vm.queuedHere > 0) "Continue sorting" else "Start sorting",
+                    when {
+                        add -> "Add albums"
+                        vm.index > 0 || vm.queuedHere > 0 -> "Continue sorting"
+                        else -> "Start sorting"
+                    },
                     style,
                 )
             }
