@@ -31,6 +31,9 @@ fun Int.grouped(): String {
 
 fun photos(n: Int) = if (n == 1) "1 photo" else "${n.grouped()} photos"
 
+/** Photos and videos under one word, where the split doesn't matter. */
+fun items(n: Int) = if (n == 1) "1 item" else "${n.grouped()} items"
+
 fun files(n: Int) = if (n == 1) "1 file" else "${n.grouped()} files"
 
 fun videos(n: Int) = if (n == 1) "1 video" else "${n.grouped()} videos"

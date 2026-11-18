@@ -249,10 +249,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     val leftHere: Int get() = photos.size - queuedHere
 
-    /** How many of [photos] are videos. */
-    var videosHere by mutableIntStateOf(0)
-        private set
-
     /** What the Selections screen lists, in button order. */
     var selectionGroups by mutableStateOf<List<SelectionGroup>>(emptyList())
         private set
@@ -419,7 +415,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             scannedSources = roots
             albumTotals = result.albumTotals
             albumVideos = result.albumVideos
-            videosHere = result.albumVideos.sum()
             albumQueued = result.albumQueued
             albumCovers = result.albumCovers
             publishAlbums()

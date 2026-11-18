@@ -58,7 +58,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -66,7 +65,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -180,52 +178,31 @@ private fun AlbumCard(vm: SiftViewModel) {
     val sources = vm.sources
     if (sources.isEmpty()) return
     val albums = vm.albumStats
-    val total = vm.photos.size
     // One album is the whole card already. The rows match the albums only once those have been read
     val rows = !vm.scanning && sources.size > 1 && albums.map { it.path } == sources
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
-        Column(
-            // The album rows bring their own padding, so their list item reaches the card's edges.
-            // The little left under the count keeps the item's press highlight off it
-            Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (rows) 8.dp else 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            AlbumHeader(vm)
-            when {
-                vm.scanning -> Box(contentAlignment = Alignment.CenterStart) {
-                    // An invisible copy of the loaded count gives the indicator the same height at any font scale
-                    Box(Modifier.alpha(0f).clearAndSetSemantics {}) { MediaCount(0, 0) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        LoadingIndicator(Modifier.size(28.dp))
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            if (sources.size == 1) "Reading the album" else "Reading the albums",
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-                total == 0 -> Text(
-                    if (sources.size == 1) "No photos or videos in this album" else "No photos or videos in these albums",
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                else -> MediaCount(total, vm.videosHere)
-            }
-        }
+        // The album rows bring their own padding, so their list item reaches the card's edges.
+        // The little left under the header keeps the item's press highlight off it
+        AlbumHeader(vm, Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (rows) 8.dp else 16.dp))
         if (rows) AlbumRows(albums)
     }
 }
 
-/** One album by its cover, name and path. Several by a stack of covers, their number and their names. */
+/**
+ * One album by its cover, name, count and path. Several by a stack of covers, their number, the count
+ * and their names
+ */
 @Composable
-private fun AlbumHeader(vm: SiftViewModel) {
+private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
     val sources = vm.sources
     val single = sources.singleOrNull()
     val covers = if (single != null) listOf(vm.photos.firstOrNull()?.file) else sources.take(3).map { vm.statOf(it)?.cover }
     val placeholder = !vm.scanning
-    BoxWithConstraints {
+    val total = vm.photos.size
+    BoxWithConstraints(modifier) {
         // Beside the cover the name only gets the rest of the row, a few letters a line at large
         // font sizes, so then it goes under the cover
         val beside = maxWidth - 152.dp >= 120.dp * LocalDensity.current.fontScale
@@ -237,6 +214,22 @@ private fun AlbumHeader(vm: SiftViewModel) {
                     maxLines = if (beside) 2 else 3,
                     overflow = TextOverflow.Ellipsis,
                 )
+                val count = MaterialTheme.typography.titleSmall
+                if (vm.scanning) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // As tall as the line of the count that replaces it, so the card keeps its height
+                        LoadingIndicator(Modifier.size(with(LocalDensity.current) { count.lineHeight.toDp() }))
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            if (single != null) "Reading the album" else "Reading the albums",
+                            style = count,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                } else {
+                    Text(if (total == 0) "No items" else items(total), style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
                 if (single != null) {
                     // The folder name is already above, so the middle of a long path is the part to lose
                     Text(single, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
@@ -375,7 +368,7 @@ private fun AlbumRow(album: AlbumStat) {
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.width(8.dp))
-        Text(photos(album.total), style = MaterialTheme.typography.bodyMedium)
+        Text(items(album.total), style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -385,20 +378,6 @@ private fun AlbumRow(album: AlbumStat) {
  */
 @Composable
 private fun cardInsetColor(): Color = MaterialTheme.colorScheme.surface
-
-/** At the card's end edge, in a column with the counts of the album rows under it. */
-@Composable
-private fun MediaCount(total: Int, videos: Int) {
-    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalAlignment = Alignment.End) {
-        Text(total.grouped(), style = MaterialTheme.typography.titleLargeEmphasized)
-        val label = when (videos) {
-            0 -> if (total == 1) "photo" else "photos"
-            total -> if (total == 1) "video" else "videos"
-            else -> "photos and videos"
-        }
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-    }
-}
 
 /** Start and Review sit at the bottom, in thumb reach. */
 @Composable
