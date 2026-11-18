@@ -28,6 +28,10 @@ object Store {
     var order = ORDER_NEWEST
     val dests = ArrayList<Dest>()
     var lastPath: String? = null
+
+    /** The position when the app last left the screen, and the order of the list it was in, or -1 for none yet. */
+    var lastIndex = 0
+    var lastOrder = -1
     var lastPickerDir: String? = null
 
     /** Tells a first launch from photo access that was refused. */
@@ -188,6 +192,8 @@ object Store {
         recursive = json.optBoolean("recursive")
         order = json.optInt("order", ORDER_NEWEST)
         lastPath = json.optString("lastPath").ifEmpty { null }
+        lastIndex = json.optInt("lastIndex")
+        lastOrder = json.optInt("lastOrder", -1)
         lastPickerDir = json.optString("lastPickerDir").ifEmpty { null }
         askedPhotos = json.optBoolean("askedPhotos")
         accessSetUp = json.optBoolean("accessSetUp")
@@ -206,6 +212,8 @@ object Store {
         json.put("recursive", recursive)
         json.put("order", order)
         json.put("lastPath", lastPath ?: "")
+        json.put("lastIndex", lastIndex)
+        json.put("lastOrder", lastOrder)
         json.put("lastPickerDir", lastPickerDir ?: "")
         json.put("askedPhotos", askedPhotos)
         json.put("accessSetUp", accessSetUp)

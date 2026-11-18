@@ -219,6 +219,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** Positions in [photos] that aren't queued, so finding the next one skips 64 at a time. */
     private var unsorted = BitSet()
     private var scannedVersion = -1
+
+    /** The order [photos] was read in, or -1 before the first read. */
+    private var scannedOrder = -1
     private var lastAssignAt = 0L
     private var flashId = 0
     private var browseGeneration = 0
@@ -372,6 +375,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     fun persist() {
         if (scannedVersion == Store.scanVersion) Store.lastPath = current?.path
+        // Until the first read ends there is no list here, and the number saved by the last run still counts
+        if (scannedOrder >= 0) {
+            Store.lastIndex = index
+            Store.lastOrder = scannedOrder
+        }
         Store.saveConfig()
     }
 
@@ -392,10 +400,20 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             }
             scanning = false
             scannedVersion = version
+            // Android can end the app between a new order and its read, so the first read compares with the last run
+            if (scannedOrder < 0) {
+                scannedOrder = Store.lastOrder
+                index = Store.lastIndex
+            }
+            // A new order keeps the number on screen, and another photo comes to it
+            val number = if (scannedOrder >= 0 && scannedOrder != order) sameNumber(result.photos.size) else null
+            scannedOrder = order
             photos = result.photos
             indexOf = result.indexOf
             unsorted = result.unsorted
-            index = Store.lastPath?.let { indexOf[it] } ?: firstUnsorted()
+            index = number ?: Store.lastPath?.let { indexOf[it] } ?: firstUnsorted()
+            // A read that starts away from the sorting screen would go back to the old photo
+            if (number != null) Store.lastPath = current?.path
             queuedHere = result.queued
             counts = result.counts
             scannedSources = roots
@@ -409,6 +427,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             refresh()
         }
     }
+
+    /** The current position in a list of [size]. The end card stays the end card, and a shorter list stops at its last photo. */
+    private fun sameNumber(size: Int): Int =
+        if (photos.isNotEmpty() && index == photos.size) size else index.coerceIn(0, maxOf(size - 1, 0))
 
     /** What a folder read hands to the main thread, worked out on the read's own thread. */
     private class ScanResult(
