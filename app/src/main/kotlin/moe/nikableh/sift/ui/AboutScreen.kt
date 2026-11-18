@@ -33,7 +33,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Balance
-import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Feedback
 import androidx.compose.material3.Card
@@ -68,7 +67,7 @@ import moe.nikableh.sift.SiftViewModel
 
 private const val REPO = "github.com/nikableh/sift"
 
-/** What Sift is, that it stays offline, and the ways out to its source, issue tracker and licenses. */
+/** What Sift is, and the ways out to its source, issue tracker and licenses. */
 @Composable
 fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val context = LocalContext.current
@@ -106,39 +105,34 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(28.dp))
-            Column(Modifier.widthIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                Modifier.widthIn(max = 560.dp),
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            ) {
                 SegmentedListItem(
-                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                    onClick = { browse("https://$REPO") },
+                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
                     colors = segmentColors(),
-                    leadingContent = { Icon(Icons.Rounded.CloudOff, null) },
-                    supportingContent = { Text("It has no internet permission. No account, no ads, no analytics.") },
-                ) { Text("Sift never goes online") }
-                Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
-                    SegmentedListItem(
-                        onClick = { browse("https://$REPO") },
-                        shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
-                        colors = segmentColors(),
-                        leadingContent = { Icon(Icons.Rounded.Code, null) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) },
-                        supportingContent = { Text(REPO) },
-                    ) { Text("Source code") }
-                    SegmentedListItem(
-                        onClick = { browse("https://$REPO/issues") },
-                        shapes = ListItemDefaults.segmentedShapes(index = 1, count = 3),
-                        colors = segmentColors(),
-                        leadingContent = { Icon(Icons.Rounded.Feedback, null) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) },
-                        supportingContent = { Text("Report bugs and ideas on GitHub") },
-                    ) { Text("Send feedback") }
-                    SegmentedListItem(
-                        onClick = { vm.open(Screen.Licenses) },
-                        shapes = ListItemDefaults.segmentedShapes(index = 2, count = 3),
-                        colors = segmentColors(),
-                        leadingContent = { Icon(Icons.Rounded.Balance, null) },
-                        trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-                        supportingContent = { Text("MIT for Sift, Apache 2.0 for the libraries in it") },
-                    ) { Text("Licenses") }
-                }
+                    leadingContent = { Icon(Icons.Rounded.Code, null) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) },
+                    supportingContent = { Text(REPO) },
+                ) { Text("Source code") }
+                SegmentedListItem(
+                    onClick = { browse("https://$REPO/issues") },
+                    shapes = ListItemDefaults.segmentedShapes(index = 1, count = 3),
+                    colors = segmentColors(),
+                    leadingContent = { Icon(Icons.Rounded.Feedback, null) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) },
+                    supportingContent = { Text("Report bugs and ideas on GitHub") },
+                ) { Text("Send feedback") }
+                SegmentedListItem(
+                    onClick = { vm.open(Screen.Licenses) },
+                    shapes = ListItemDefaults.segmentedShapes(index = 2, count = 3),
+                    colors = segmentColors(),
+                    leadingContent = { Icon(Icons.Rounded.Balance, null) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
+                    supportingContent = { Text("MIT for Sift, Apache 2.0 for the libraries in it") },
+                ) { Text("Licenses") }
             }
             Spacer(Modifier.height(24.dp))
             Text(
@@ -184,11 +178,10 @@ private val libraries = listOf(
     "JSpecify" to "org.jspecify",
 )
 
-/** Sift's own license, then the libraries built into it and theirs. */
+/** The libraries built into Sift, then the license they come under. */
 @Composable
 fun LicensesScreen(vm: SiftViewModel) {
     val context = LocalContext.current
-    val mit = remember { paragraphs(context, R.raw.license_mit) }
     val apache = remember { paragraphs(context, R.raw.license_apache_2_0) }
 
     Scaffold(
@@ -196,8 +189,6 @@ fun LicensesScreen(vm: SiftViewModel) {
         topBar = { BackBar("Licenses", vm) },
     ) { padding ->
         Page(padding) {
-            SectionTitle("Sift")
-            LicenseText(mit)
             SectionTitle("Libraries")
             Text(
                 "Sift is built with these. All of them come under the Apache License 2.0, which follows the list.",
