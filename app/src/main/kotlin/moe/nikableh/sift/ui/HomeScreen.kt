@@ -69,8 +69,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -110,7 +121,11 @@ private fun Home(vm: SiftViewModel) {
                 Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Sift", style = MaterialTheme.typography.displaySmallEmphasized, modifier = Modifier.weight(1f))
+                Text(
+                    "Sift",
+                    style = MaterialTheme.typography.displaySmallEmphasized,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
                 IconButton(onClick = { vm.open(Screen.About) }) { Icon(Icons.Outlined.Info, "About") }
             }
             MediaManagementCard(vm)
@@ -141,6 +156,10 @@ private fun DestinationsCard(vm: SiftViewModel) {
     val dests = vm.dests
     Card(
         onClick = { vm.open(Screen.Setup) },
+        modifier = Modifier.semantics {
+            role = Role.Button
+            onClick(label = "Change folders", action = null)
+        },
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
@@ -221,30 +240,33 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
             Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     single?.let { File(it).name } ?: "${sources.size} albums",
+                    modifier = Modifier.semantics { heading() },
                     style = MaterialTheme.typography.headlineSmallEmphasized,
                     maxLines = if (beside) 2 else 3,
                     overflow = TextOverflow.Ellipsis,
                 )
                 val count = MaterialTheme.typography.titleSmall
-                if (vm.scanning) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // As tall as the line of the count that replaces it, so the card keeps its height
-                        LoadingIndicator(Modifier.size(with(LocalDensity.current) { count.lineHeight.toDp() }))
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            if (single != null) "Reading the album" else "Reading the albums",
-                            style = count,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                // TalkBack announces a live region most reliably when the changed text is its own
+                Box(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                    if (vm.scanning) {
+                        val reading = if (single != null) "Reading the album" else "Reading the albums"
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // As tall as the line of the count that replaces it, so the card keeps its height
+                            LoadingIndicator(
+                                Modifier.size(with(LocalDensity.current) { count.lineHeight.toDp() })
+                                    .semantics { contentDescription = reading },
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(reading, style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    } else {
+                        val holds = when {
+                            vm.allSorted -> "All sorted"
+                            total == 0 -> "No items"
+                            else -> items(total)
+                        }
+                        Text(holds, style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                } else {
-                    val holds = when {
-                        vm.allSorted -> "All sorted"
-                        total == 0 -> "No items"
-                        else -> items(total)
-                    }
-                    Text(holds, style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (single != null) {
                     // The folder name is already above, so the middle of a long path is the part to lose
@@ -353,7 +375,10 @@ private fun AlbumRows(albums: List<AlbumStat>) {
         // As wide as the card, so the label sits on the card's margin and the press highlight reaches its edges
         ListItem(
             onClick = { expanded = !expanded },
-            modifier = Modifier.semantics { onClick(label = label, action = null) },
+            modifier = Modifier.semantics {
+                onClick(label = label, action = null)
+                stateDescription = if (expanded) "Expanded" else "Collapsed"
+            },
             colors = ListItemDefaults.colors(
                 containerColor = Color.Transparent,
                 contentColor = content,
@@ -363,18 +388,22 @@ private fun AlbumRows(albums: List<AlbumStat>) {
         ) { Text("By album") }
         if (expanded) {
             Column(
-                Modifier.padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp),
+                Modifier.padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp)
+                    .semantics { collectionInfo = CollectionInfo(albums.size, 1) },
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                for (album in albums) AlbumRow(album)
+                albums.forEachIndexed { index, album -> AlbumRow(album, index) }
             }
         }
     }
 }
 
 @Composable
-private fun AlbumRow(album: AlbumStat) {
-    Row(Modifier.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically) {
+private fun AlbumRow(album: AlbumStat, index: Int) {
+    Row(
+        Modifier.semantics(mergeDescendants = true) { collectionItemInfo = CollectionItemInfo(index, 1, 0, 1) },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Cover(album.cover, Icons.Rounded.PhotoLibrary, Modifier.size(36.dp), RoundedCornerShape(10.dp))
         Spacer(Modifier.width(12.dp))
         Text(

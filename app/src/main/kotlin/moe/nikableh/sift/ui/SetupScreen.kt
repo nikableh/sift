@@ -58,9 +58,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
@@ -84,7 +86,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("Folders") },
+                title = { Text("Folders", Modifier.semantics { heading() }) },
                 subtitle = { Text("What to sort and where it can go") },
                 navigationIcon = {
                     IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
@@ -153,7 +155,10 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         onClick = { sortedOpen = !sortedOpen },
                         shapes = ListItemDefaults.segmentedShapes(index = 0, count = rows),
                         colors = segmentColors(),
-                        modifier = Modifier.animateItem().semantics { onClick(label = label, action = null) },
+                        modifier = Modifier.animateItem().semantics {
+                            onClick(label = label, action = null)
+                            stateDescription = if (sortedOpen) "Expanded" else "Collapsed"
+                        },
                         leadingContent = { AlbumThumb(null, Icons.Rounded.Done) },
                         supportingContent = { Text(sorted.joinToString(", ") { File(it).name }) },
                         trailingContent = {

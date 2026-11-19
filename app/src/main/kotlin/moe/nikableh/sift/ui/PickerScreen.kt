@@ -53,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Album
@@ -80,7 +82,12 @@ fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostSt
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (forSource) "Albums to sort" else "Add destinations") },
+                title = {
+                    Text(
+                        if (forSource) "Albums to sort" else "Add destinations",
+                        Modifier.semantics { heading() },
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { if (browsing) vm.browseUp() else vm.leavePicker() }) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")

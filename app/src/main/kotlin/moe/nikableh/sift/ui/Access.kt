@@ -60,6 +60,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import moe.nikableh.sift.Access
@@ -182,7 +184,12 @@ private fun AccessLayout(icon: ImageVector, title: String, body: String, content
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(title, style = MaterialTheme.typography.headlineMediumEmphasized, textAlign = TextAlign.Center)
+                Text(
+                    title,
+                    Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.headlineMediumEmphasized,
+                    textAlign = TextAlign.Center,
+                )
                 Text(
                     body,
                     style = MaterialTheme.typography.bodyLarge,

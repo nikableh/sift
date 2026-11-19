@@ -33,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -80,7 +82,7 @@ fun Dialogs(vm: SiftViewModel) {
             title = { Text(d.title) },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LoadingIndicator(Modifier.size(32.dp))
+                    LoadingIndicator(Modifier.size(32.dp).semantics { contentDescription = "Asking Android for access to the files" })
                     Text("Asking Android for access to the files")
                 }
             },

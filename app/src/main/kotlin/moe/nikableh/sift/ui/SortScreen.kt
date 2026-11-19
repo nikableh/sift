@@ -108,6 +108,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -263,7 +264,12 @@ fun Welcome(icon: ImageVector, title: String, body: String, action: String, onAc
             Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
         Spacer(Modifier.height(28.dp))
-        Text(title, style = MaterialTheme.typography.headlineMediumEmphasized, textAlign = TextAlign.Center)
+        Text(
+            title,
+            Modifier.semantics { heading() },
+            style = MaterialTheme.typography.headlineMediumEmphasized,
+            textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(12.dp))
         Text(
             body,
@@ -409,7 +415,9 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, folder: String, landsc
 
     Box(modifier.then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)) {
         when (gate) {
-            Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
+            Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") {
+                LoadingIndicator(Modifier.semantics { contentDescription = "Reading $folder" })
+            }
             Gate.Empty -> Status(
                 Modifier.align(Alignment.Center),
                 if (vm.allSorted) "All sorted" else "No photos or videos in $folder",
@@ -533,7 +541,12 @@ private fun Status(modifier: Modifier, title: String, body: String? = null, extr
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.titleLargeEmphasized, textAlign = TextAlign.Center)
+        Text(
+            title,
+            Modifier.semantics { heading() },
+            style = MaterialTheme.typography.titleLargeEmphasized,
+            textAlign = TextAlign.Center,
+        )
         if (body != null) {
             Text(
                 body,

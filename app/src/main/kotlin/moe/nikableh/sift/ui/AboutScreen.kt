@@ -237,7 +237,7 @@ private fun Page(
 private fun BackBar(title: String, vm: SiftViewModel) {
     TopAppBar(
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-        title = { Text(title) },
+        title = { Text(title, Modifier.semantics { heading() }) },
         navigationIcon = {
             IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
         },
