@@ -103,13 +103,16 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -300,6 +303,7 @@ private class Stage {
     var view: MediaView? = null
     var screen: LayoutCoordinates? = null
     var slot: LayoutCoordinates? = null
+    var raised by mutableStateOf(false)
 
     /** Straight to the view and not through state, which would show the photo in the wrong place for a frame. */
     fun place() {
@@ -314,7 +318,7 @@ private class Stage {
 private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
     val gate = vm.gate
     val video = gate == Gate.None && vm.current?.video == true
-    var raised by remember { mutableStateOf(false) }
+    val raised = stage.raised
     // The header's back button is under the open photo, and leaving the screen from there would come as a surprise
     BackHandler(enabled = raised) { stage.view?.pager?.close() }
     if (raised && !isSystemInDarkTheme()) PaleBarIcons()
@@ -327,7 +331,7 @@ private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
                 pager.onSwipe = { vm.go(it) }
                 pager.onZoomIn = { vm.loadSharper() }
                 pager.onTap = { player.toggle() }
-                pager.onRaise = { raised = it }
+                pager.onRaise = { stage.raised = it }
                 player.attach(surface)
                 stage.view = this
                 stage.place()
@@ -389,7 +393,7 @@ private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, landsca
     Column(modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))) {
         TopBar(vm, folder)
         Photo(
-            vm, player, folder, landscape,
+            vm, player, stage, folder, landscape,
             Modifier.weight(1f).fillMaxWidth().onGloballyPositioned {
                 stage.slot = it
                 stage.place()
@@ -400,20 +404,44 @@ private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, landsca
 
 /** What lies over the photo. The photo itself is [Media], under all of this. */
 @Composable
-private fun Photo(vm: SiftViewModel, player: VideoPlayer, folder: String, landscape: Boolean, modifier: Modifier) {
+private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: String, landscape: Boolean, modifier: Modifier) {
     val gate = vm.gate
     val video = gate == Gate.None && vm.current?.video == true
     val dayFormat = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
     val current = vm.current
     // The picture itself is a plain view that TalkBack can't see, so the space it shows through names it
     val description = if (gate == Gate.None && current != null) {
-        "${if (current.video) "Video" else "Photo"} ${(vm.index + 1).grouped()} of ${vm.photos.size.grouped()}, " +
-            dayFormat.format(Date(current.mtime))
+        val kind = when {
+            current.video -> vm.duration?.let { "Video, ${clock(it)}," } ?: "Video"
+            vm.animation != null -> "Animated GIF"
+            else -> "Photo"
+        }
+        "$kind ${(vm.index + 1).grouped()} of ${vm.photos.size.grouped()}, " + dayFormat.format(Date(current.mtime))
     } else {
         null
     }
+    // The same pages a swipe may turn to. An open photo takes no swipes, so it offers no actions either
+    val raised = stage.raised
+    val pages = !raised && !vm.busy && (gate == Gate.None || gate == Gate.End)
+    val turns = listOfNotNull(
+        if (pages && vm.index > 0) CustomAccessibilityAction("Previous") { vm.go(-1); true } else null,
+        if (pages && vm.index < vm.photos.size) CustomAccessibilityAction("Next") { vm.go(1); true } else null,
+    )
+    val tapLabel = when {
+        gate != Gate.None || current == null || raised -> null
+        video -> if (player.playing) "Pause" else "Play"
+        vm.bitmap == null -> null
+        else -> "Open"
+    }
 
-    Box(modifier.then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)) {
+    Box(
+        modifier.semantics {
+            if (description != null) contentDescription = description
+            if (turns.isNotEmpty()) customActions = turns
+            if (tapLabel != null) onClick(label = tapLabel) { stage.view?.pager?.performClick() ?: false }
+            if (raised) paneTitle = "Photo viewer"
+        },
+    ) {
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") {
                 LoadingIndicator(Modifier.semantics { contentDescription = "Reading $folder" })

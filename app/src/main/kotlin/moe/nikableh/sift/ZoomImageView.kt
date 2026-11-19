@@ -505,12 +505,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             // In the slot a double tap means nothing, so the tap doesn't have to wait to see if it becomes one
-            if (!zoomable) {
-                onTap?.invoke()
-            } else {
-                openTap = spread == 0f
-                open()
-            }
+            tap()
             return true
         }
 
@@ -596,6 +591,22 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
         /** The same for closing an open image, which a flick should not do by accident. */
         const val DISMISS_FLICK_DP = 1500f
+    }
+
+    private fun tap() {
+        if (!zoomable) {
+            onTap?.invoke()
+        } else {
+            openTap = spread == 0f
+            open()
+        }
+    }
+
+    // No click listener is set, so super plays no click sound. It only reports the click to accessibility
+    override fun performClick(): Boolean {
+        super.performClick()
+        tap()
+        return true
     }
 
     @SuppressLint("ClickableViewAccessibility")
