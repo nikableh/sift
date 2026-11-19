@@ -53,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -128,7 +129,7 @@ private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVal
         }
         when {
             albums == null -> item {
-                Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
+                Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { LoadingIndicator(Modifier.semantics { contentDescription = "Loading albums" }) }
             }
             albums.isEmpty() -> item {
                 Text(
@@ -235,7 +236,7 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
             item {
                 val here = vm.mediaHere
                 Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp)) {
-                    Text(dir.path, style = MaterialTheme.typography.titleSmall)
+                    Text(dir.path, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
                     Text(
                         "${media(here.total, here.videos)} in this folder",
                         style = MaterialTheme.typography.bodyMedium,
@@ -273,6 +274,7 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                         Checkbox(
                             checked = vm.isTicked(path, forSource),
                             onCheckedChange = { vm.tick(path, forSource) },
+                            modifier = Modifier.semantics { contentDescription = folder.title },
                             enabled = vm.canTick(path, forSource),
                             colors = pickerCheckboxColors(),
                         )
