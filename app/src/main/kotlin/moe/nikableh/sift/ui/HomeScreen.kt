@@ -43,6 +43,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -188,10 +189,12 @@ private fun AlbumCard(vm: SiftViewModel) {
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
-        // The album rows bring their own padding, so their list item reaches the card's edges.
-        // The little left under the header keeps the item's press highlight off it
-        AlbumHeader(vm, Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = if (rows) 8.dp else 16.dp))
-        if (rows) AlbumRows(albums)
+        AlbumHeader(vm, Modifier.padding(16.dp))
+        if (rows) {
+            // The default outlineVariant all but vanishes on the card's primaryContainer
+            HorizontalDivider(color = MaterialTheme.colorScheme.background)
+            AlbumRows(albums)
+        }
     }
 }
 
@@ -347,7 +350,7 @@ private fun AlbumRows(albums: List<AlbumStat>) {
     val content = MaterialTheme.colorScheme.onPrimaryContainer
     val label = if (expanded) "Hide the albums" else "Show each album"
     Column {
-        // As wide as the card, so the label sits on the card's margin and the press highlight still clears it
+        // As wide as the card, so the label sits on the card's margin and the press highlight reaches its edges
         ListItem(
             onClick = { expanded = !expanded },
             modifier = Modifier.semantics { onClick(label = label, action = null) },
