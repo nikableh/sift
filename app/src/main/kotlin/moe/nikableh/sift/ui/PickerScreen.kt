@@ -32,6 +32,8 @@ import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxColors
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -149,6 +151,7 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
         destination -> "Already a destination"
         else -> null
     }
+    val thumbnailAlpha = if (taken != null) 0.38f else 1f
     SegmentedListItem(
         checked = selected,
         onCheckedChange = { vm.tick(album.path, forSource) },
@@ -161,14 +164,15 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
                 model = File(album.cover),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
+                alpha = thumbnailAlpha,
                 modifier = Modifier.size(56.dp).clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = thumbnailAlpha)),
             )
         },
         trailingContent = {
             // Every row has its mark in the same place, so the right edge of the column stays even
             when {
-                taken != null -> Checkbox(checked = false, onCheckedChange = null, enabled = false)
+                taken != null -> Checkbox(checked = false, onCheckedChange = null, enabled = false, colors = pickerCheckboxColors())
                 selected && !forSource -> OrderBadge(order + 1)
                 else -> Checkbox(checked = selected, onCheckedChange = null)
             }
@@ -183,6 +187,16 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
             }
         },
     ) { Text(album.name) }
+}
+
+/**
+ * A disabled box is a flat fill, because a pale outline still reads as a box waiting for a tap.
+ * The border matches the fill so Material draws one shape at the full checkbox size.
+ */
+@Composable
+private fun pickerCheckboxColors(): CheckboxColors {
+    val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    return CheckboxDefaults.colors(disabledUncheckedBoxColor = fill, disabledUncheckedBorderColor = fill)
 }
 
 /** The place a ticked destination gets among the sorting buttons. */
@@ -232,7 +246,9 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
                     colors = segmentColors(),
                     modifier = Modifier.padding(bottom = 10.dp),
-                    trailingContent = { Checkbox(checked = ticked, onCheckedChange = null, enabled = free) },
+                    trailingContent = {
+                        Checkbox(checked = ticked, onCheckedChange = null, enabled = free, colors = pickerCheckboxColors())
+                    },
                     supportingContent = { if (!free) Text("Already in use") },
                 ) { Text("Select this folder") }
             }
@@ -251,6 +267,7 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
                             checked = vm.isTicked(path, forSource),
                             onCheckedChange = { vm.tick(path, forSource) },
                             enabled = vm.canTick(path, forSource),
+                            colors = pickerCheckboxColors(),
                         )
                     } else {
                         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
