@@ -2,6 +2,7 @@ package moe.nikableh.sift
 
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
+import android.graphics.drawable.AnimatedImageDrawable
 import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
@@ -80,6 +81,29 @@ object ImageLoader {
         }
     }
 
+    /**
+     * The moving picture of a GIF, to draw in place of its still. Not cached, since only the photo
+     * on screen has one. [cb] runs on the main thread, with null for a GIF of a single frame
+     */
+    fun loadAnimation(file: File, cb: (AnimatedImageDrawable?) -> Unit) {
+        pool.execute {
+            val animation = if (file.path in wanted) animation(file) else null
+            main.post { cb(animation) }
+        }
+    }
+
+    private fun animation(file: File): AnimatedImageDrawable? = try {
+        val drawable = ImageDecoder.decodeDrawable(ImageDecoder.createSource(file)) { decoder, info, _ ->
+            fit(decoder, info, fitScreen = true)
+        }
+        // A GIF that doesn't ask to loop would play once, maybe before anyone has looked at it
+        (drawable as? AnimatedImageDrawable)?.apply { repeatCount = AnimatedImageDrawable.REPEAT_INFINITE }
+    } catch (e: Exception) {
+        null
+    } catch (e: OutOfMemoryError) {
+        null
+    }
+
     /** A video's length in milliseconds, known once its still frame has been decoded. */
     fun durationOf(file: File): Long? = durations.get(file.path)
 
@@ -117,23 +141,25 @@ object ImageLoader {
     }
 
     private fun decode(file: File, fitScreen: Boolean): Bitmap? = if (Scanner.isVideo(file.name)) frame(file) else try {
-        ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
-            val long = max(info.size.width, info.size.height)
-            val short = min(info.size.width, info.size.height)
-            var sample = 1
-            if (fitScreen) {
-                // Long and short sides instead of width and height, so the bitmap is sharp
-                // in both screen orientations and whichever way EXIF rotates it
-                val ratio = max(long.toFloat() / screenLong, short.toFloat() / screenShort)
-                while (sample * 2 <= ratio) sample *= 2
-            } else {
-                while (long / sample > FULL_MAX_SIDE) sample *= 2
-            }
-            decoder.setTargetSampleSize(sample)
-        }
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ -> fit(decoder, info, fitScreen) }
     } catch (e: Exception) {
         null
     } catch (e: OutOfMemoryError) {
         null
+    }
+
+    private fun fit(decoder: ImageDecoder, info: ImageDecoder.ImageInfo, fitScreen: Boolean) {
+        val long = max(info.size.width, info.size.height)
+        val short = min(info.size.width, info.size.height)
+        var sample = 1
+        if (fitScreen) {
+            // Long and short sides instead of width and height, so the bitmap is sharp
+            // in both screen orientations and whichever way EXIF rotates it
+            val ratio = max(long.toFloat() / screenLong, short.toFloat() / screenShort)
+            while (sample * 2 <= ratio) sample *= 2
+        } else {
+            while (long / sample > FULL_MAX_SIDE) sample *= 2
+        }
+        decoder.setTargetSampleSize(sample)
     }
 }

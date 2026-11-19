@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.drawable.AnimatedImageDrawable
 import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
@@ -178,6 +179,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var bitmap by mutableStateOf<Bitmap?>(null)
         private set
     var bitmapPath by mutableStateOf<String?>(null)
+        private set
+
+    /** The moving picture of the GIF on screen, which [bitmap] is the first frame of. */
+    var animation by mutableStateOf<AnimatedImageDrawable?>(null)
         private set
 
     /** Decoded photos on either side of the one on screen, for the viewer to slide in. Null until decoded. */
@@ -551,6 +556,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         }
         bitmapPath = path
         bitmap = null
+        animation = null
         decodeFailed = false
         duration = null
     }
@@ -625,6 +631,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
             } else if (p.video) {
                 duration = ImageLoader.durationOf(p.file)
             }
+            if (Scanner.isGif(p.file.name)) {
+                ImageLoader.loadAnimation(p.file) { if (bitmapPath == p.path) animation = it }
+            }
         }
         neighbour(1) { nextBitmap = it }
         neighbour(-1) { prevBitmap = it }
@@ -641,7 +650,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The viewer asks for a sharper bitmap the first time the user zooms into a photo. */
     fun loadSharper() {
-        val p = current?.takeIf { !it.video } ?: return
+        val p = current?.takeIf { !it.video && animation == null } ?: return
         ImageLoader.loadFull(p.file) { bmp -> if (bmp != null && bitmapPath == p.path) bitmap = bmp }
     }
 

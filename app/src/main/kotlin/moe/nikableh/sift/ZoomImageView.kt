@@ -11,6 +11,8 @@ import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.drawable.AnimatedImageDrawable
+import android.graphics.drawable.Drawable
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -56,6 +58,9 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private var bitmap: Bitmap? = null
     private var prev: Bitmap? = null
     private var next: Bitmap? = null
+
+    /** Drawn in place of [bitmap], which is its first frame. */
+    private var animation: AnimatedImageDrawable? = null
     private var canPrev = false
     private var canNext = false
     private var key: String? = null
@@ -129,9 +134,18 @@ class ZoomImageView(ctx: Context) : View(ctx) {
      * Shows [b] for the photo [newKey], with its neighbours ready to slide in. A new bitmap for the
      * same photo keeps zoom and pan. A new photo arriving as the bitmap already on screen is the
      * echo of a swipe this view turned itself, so the slide carries on. A page that isn't [zoomable]
-     * reports taps instead of opening.
+     * reports taps instead of opening. [animation] plays on the current page in place of [b].
      */
-    fun show(newKey: String?, b: Bitmap?, prev: Bitmap?, next: Bitmap?, canPrev: Boolean, canNext: Boolean, zoomable: Boolean) {
+    fun show(
+        newKey: String?,
+        b: Bitmap?,
+        prev: Bitmap?,
+        next: Bitmap?,
+        canPrev: Boolean,
+        canNext: Boolean,
+        zoomable: Boolean,
+        animation: AnimatedImageDrawable?,
+    ) {
         this.zoomable = zoomable
         this.prev = prev
         this.next = next
@@ -140,8 +154,20 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         val samePhoto = newKey == key
         key = newKey
         if (b !== bitmap) setImage(b, keepView = samePhoto && b != null)
+        play(animation)
         invalidate()
     }
+
+    private fun play(new: AnimatedImageDrawable?) {
+        if (new === animation) return
+        animation?.stop()
+        animation?.callback = null
+        animation = new
+        new?.callback = this
+        new?.start()
+    }
+
+    override fun verifyDrawable(who: Drawable) = who === animation || super.verifyDrawable(who)
 
     /** [keepView] swaps in a sharper bitmap of the same photo without resetting zoom and pan. */
     fun setImage(b: Bitmap?, keepView: Boolean = false) {
@@ -211,11 +237,19 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         }
         if (dragX > 0f) drawPage(canvas, prev, dragX - page)
         if (dragX < 0f) drawPage(canvas, next, dragX + page)
-        drawPage(canvas, bitmap, dragX, zoom, panX, panY)
+        drawPage(canvas, bitmap, dragX, zoom, panX, panY, animation)
         canvas.restoreToCount(count)
     }
 
-    private fun drawPage(canvas: Canvas, b: Bitmap?, dx: Float, zoom: Float = 1f, panX: Float = 0f, panY: Float = 0f) {
+    private fun drawPage(
+        canvas: Canvas,
+        b: Bitmap?,
+        dx: Float,
+        zoom: Float = 1f,
+        panX: Float = 0f,
+        panY: Float = 0f,
+        animation: Drawable? = null,
+    ) {
         if (b == null) return
         val scale = fitScale(b) * zoom
         drawMatrix.setScale(scale, scale)
@@ -223,12 +257,22 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             frame.centerX() - b.width * scale / 2f + panX + dx,
             frame.centerY() - b.height * scale / 2f + panY,
         )
-        canvas.drawBitmap(b, drawMatrix, paint)
+        if (animation == null) {
+            canvas.drawBitmap(b, drawMatrix, paint)
+            return
+        }
+        // The still's size, so zoom and pan limits worked out from the still hold for this too
+        animation.setBounds(0, 0, b.width, b.height)
+        val count = canvas.save()
+        canvas.concat(drawMatrix)
+        animation.draw(canvas)
+        canvas.restoreToCount(count)
     }
 
     /** Makes the neighbour the current page without moving anything on screen. */
     private fun turn(dir: Int) {
         onTurn?.invoke()
+        play(null)
         val old = bitmap
         if (dir > 0) {
             bitmap = next

@@ -21,6 +21,8 @@ object Scanner {
 
     fun isVideo(name: String): Boolean = ext(name) in videos
 
+    fun isGif(name: String): Boolean = ext(name) == "gif"
+
     fun isMedia(name: String): Boolean = ext(name).let { it in images || it in videos }
 
     /**

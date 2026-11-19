@@ -321,6 +321,7 @@ private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
                 canPrev = pages && vm.index > 0,
                 canNext = pages && vm.index < vm.photos.size,
                 zoomable = !video,
+                animation = vm.animation,
             )
             // Only a photo opens. If the page under an open one turns into anything else, it belongs under the header
             if (video || gate != Gate.None) it.pager.close()
