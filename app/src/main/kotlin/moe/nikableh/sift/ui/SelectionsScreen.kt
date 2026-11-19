@@ -61,17 +61,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
+import moe.nikableh.sift.Scanner
 import moe.nikableh.sift.Selection
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
-import java.io.File
 import androidx.compose.ui.window.Dialog as WindowDialog
 
 /** Every queued photo, with where it goes. A list, so long folder names have room. */
@@ -81,7 +85,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
     val ready = !vm.busy && !vm.scanning
     var collapsed by rememberSaveable(stateSaver = KeySetSaver) { mutableStateOf(emptySet<String>()) }
     val allCollapsed = groups.all { it.dest in collapsed }
-    var preview by remember { mutableStateOf<File?>(null) }
+    var preview by remember { mutableStateOf<Selection?>(null) }
     val layoutDirection = LocalLayoutDirection.current
 
     preview?.let { PhotoPreview(it) { preview = null } }
@@ -91,6 +95,8 @@ fun SelectionsScreen(vm: SiftViewModel) {
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
+                // Ahead of the FAB, which TalkBack would otherwise reach only after every row
+                modifier = Modifier.semantics { isTraversalGroup = true; traversalIndex = -2f },
                 windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 title = { Text("Selections", Modifier.semantics { heading() }) },
                 navigationIcon = {
@@ -143,7 +149,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                         }
                     }
                     if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
-                        SelectionRow(row, vm.placeOf(row.file), ready, onPreview = { preview = row.file }) { vm.dropSelection(row) }
+                        SelectionRow(row, vm.placeOf(row.file), ready, onPreview = { preview = row }) { vm.dropSelection(row) }
                     }
                 }
             }
@@ -168,7 +174,11 @@ private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Bool
             .background(MaterialTheme.colorScheme.background)
             .padding(top = 12.dp)
             .clip(MaterialTheme.shapes.medium)
-            .clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", onClick = onToggle)
+            .clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", role = Role.Button, onClick = onToggle)
+            .semantics {
+                heading()
+                stateDescription = if (collapsed) "Collapsed" else "Expanded"
+            }
             .padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,7 +189,11 @@ private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Bool
                 style = MaterialTheme.typography.titleMediumEmphasized,
                 modifier = Modifier.weight(1f),
             )
-            Text(count.grouped(), style = MaterialTheme.typography.titleMedium)
+            Text(
+                count.grouped(),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { contentDescription = files(count) },
+            )
             Spacer(Modifier.width(4.dp))
             Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(turn))
         }
@@ -208,7 +222,7 @@ private fun SelectionRow(
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             model = row.file,
-            contentDescription = null,
+            contentDescription = row.file.name,
             contentScale = ContentScale.Crop,
             modifier = Modifier.size(64.dp).clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest)
@@ -231,18 +245,25 @@ private fun SelectionRow(
 
 /** The whole photo fitted to the screen, so a thumbnail's crop doesn't hide what is being moved. */
 @Composable
-private fun PhotoPreview(file: File, onDismiss: () -> Unit) {
+private fun PhotoPreview(row: Selection, onDismiss: () -> Unit) {
+    val file = row.file
     WindowDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             Modifier.fillMaxSize()
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClickLabel = "Close preview",
+                    onClick = onDismiss,
+                )
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(16.dp),
             contentAlignment = Alignment.Center,
         ) {
             AsyncImage(
                 model = file,
-                contentDescription = file.name,
+                // The preview shows no text, so a camera file name would tell TalkBack users nothing
+                contentDescription = "${if (Scanner.isVideo(file.name)) "Video" else "Photo"} going to ${Store.labelFor(row.dest)}",
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -261,6 +282,7 @@ private fun MoveFab(vm: SiftViewModel, visible: Boolean) {
             text = { FitLabel("Move ${vm.queued.grouped()}") },
             icon = { Icon(Icons.Rounded.DoneAll, null) },
             onClick = { vm.move() },
+            modifier = Modifier.semantics { traversalIndex = -1f },
             containerColor = MaterialTheme.colorScheme.primary,
         )
     }
