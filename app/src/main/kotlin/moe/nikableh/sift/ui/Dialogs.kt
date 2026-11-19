@@ -34,6 +34,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
@@ -62,7 +63,7 @@ fun Dialogs(vm: SiftViewModel) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     LinearWavyProgressIndicator(
                         progress = { if (run.total == 0) 0f else MoveRunner.done / run.total.toFloat() },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = run.title },
                     )
                     Text("${MoveRunner.done.grouped()} of ${run.total.grouped()}")
                 }
@@ -322,7 +323,9 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
                 supportingText = { Text("From 1 to $max") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { submit() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics {
+                    if (value.text.isNotEmpty() && number == null) error("Enter a number from 1 to $max")
+                },
             )
         },
         confirmButton = {
