@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.text.format.Formatter
 import android.view.HapticFeedbackConstants
+import android.view.View
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -100,9 +101,18 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -306,6 +316,8 @@ private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
     AndroidView(
         factory = { context ->
             MediaView(context).apply {
+                // The slot over it in Photo carries the description
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 pager.onSwipe = { vm.go(it) }
                 pager.onZoomIn = { vm.loadSharper() }
                 pager.onTap = { player.toggle() }
@@ -385,8 +397,17 @@ private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, landsca
 private fun Photo(vm: SiftViewModel, player: VideoPlayer, folder: String, landscape: Boolean, modifier: Modifier) {
     val gate = vm.gate
     val video = gate == Gate.None && vm.current?.video == true
+    val dayFormat = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
+    val current = vm.current
+    // The picture itself is a plain view that TalkBack can't see, so the space it shows through names it
+    val description = if (gate == Gate.None && current != null) {
+        "${if (current.video) "Video" else "Photo"} ${(vm.index + 1).grouped()} of ${vm.photos.size.grouped()}, " +
+            dayFormat.format(Date(current.mtime))
+    } else {
+        null
+    }
 
-    Box(modifier) {
+    Box(modifier.then(if (description != null) Modifier.semantics { contentDescription = description } else Modifier)) {
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") { LoadingIndicator() }
             Gate.Empty -> Status(
@@ -463,7 +484,7 @@ private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
             shapes = IconButtonDefaults.toggleableShapes(),
             colors = colors,
         ) {
-            if (playing) Icon(Icons.Rounded.Pause, "Pause") else Icon(Icons.Rounded.PlayArrow, "Play")
+            if (playing) Icon(Icons.Rounded.Pause, "Playing") else Icon(Icons.Rounded.PlayArrow, "Playing")
         }
         Timeline(player, Modifier.weight(1f).padding(horizontal = 8.dp))
         Elapsed(player, Modifier.align(Alignment.CenterVertically))
@@ -474,8 +495,8 @@ private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
             shapes = IconButtonDefaults.toggleableShapes(),
             colors = colors,
         ) {
-            if (sound) Icon(Icons.AutoMirrored.Rounded.VolumeUp, "Turn sound off")
-            else Icon(Icons.AutoMirrored.Rounded.VolumeOff, "Turn sound on")
+            if (sound) Icon(Icons.AutoMirrored.Rounded.VolumeUp, "Sound")
+            else Icon(Icons.AutoMirrored.Rounded.VolumeOff, "Sound")
         }
     }
 }
@@ -551,7 +572,8 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                     // The back button's touch area keeps the highlight this far from it, and Review gets the same
                     .padding(end = 4.dp)
                     .clip(MaterialTheme.shapes.medium)
-                    .clickable(enabled = idle, onClickLabel = "Open menu") { menu = true }
+                    .clickable(enabled = idle, onClickLabel = "Open menu", role = Role.Button) { menu = true }
+                    .semantics { stateDescription = if (menu) "Expanded" else "Collapsed" }
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -672,7 +694,17 @@ private fun Pill(
     Surface(
         onClick = { onClear?.invoke() },
         enabled = onClear != null,
-        modifier = modifier,
+        // Only the queued pill can be tapped. The flash pill reuses it and must not claim an action
+        modifier = modifier.then(
+            if (onClear != null) {
+                Modifier.semantics {
+                    role = Role.Button
+                    onClick(label = "Take out of the queue", action = null)
+                }
+            } else {
+                Modifier
+            },
+        ),
         shape = CircleShape,
         color = color,
         contentColor = contentColor,
@@ -752,13 +784,20 @@ private fun FolderGrid(vm: SiftViewModel, landscape: Boolean) {
     val gap = 8.dp
 
     val grid = @Composable {
-        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+        Column(
+            Modifier.semantics { collectionInfo = CollectionInfo(rows, cols) },
+            verticalArrangement = Arrangement.spacedBy(gap),
+        ) {
             for (r in 0 until rows) {
                 Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
                     for (c in 0 until cols) {
                         val i = r * cols + c
                         if (i < n) {
-                            FolderButton(vm, dests[i], i, Modifier.weight(1f).height(rowHeight))
+                            FolderButton(
+                                vm, dests[i], i,
+                                Modifier.weight(1f).height(rowHeight)
+                                    .semantics { collectionItemInfo = CollectionItemInfo(r, 1, c, 1) },
+                            )
                         } else {
                             Spacer(Modifier.weight(1f))
                         }
@@ -799,7 +838,14 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
             border = if (selected && !dark) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
             // The padding sits on the column inside, so the dark theme ring can sit 3dp from the tile's edge
             contentPadding = PaddingValues(0.dp),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().semantics {
+                this.selected = selected
+                val state = listOfNotNull(
+                    if (selected) "This photo is queued here" else null,
+                    if (count > 0) "${count.grouped()} queued" else null,
+                ).joinToString()
+                if (state.isNotEmpty()) stateDescription = state
+            },
         ) {
             Box(Modifier.fillMaxSize()) {
                 if (selected && dark) {
@@ -811,7 +857,8 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                     val badge = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp)
                     Badge(
                         Modifier.align(Alignment.End)
-                            .then(if (count > 0) Modifier else Modifier.alpha(0f).clearAndSetSemantics {}),
+                            .then(if (count > 0) Modifier else Modifier.alpha(0f))
+                            .clearAndSetSemantics {},
                         containerColor = ink,
                         contentColor = Color.White,
                     ) { FitLabel(count.grouped(), badge) }
