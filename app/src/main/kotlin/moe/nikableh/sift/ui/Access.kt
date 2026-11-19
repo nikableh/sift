@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import moe.nikableh.sift.Access
@@ -209,6 +210,7 @@ private fun Steps(photosDone: Boolean, showManage: Boolean) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
         SegmentedListItem(
             shapes = ListItemDefaults.segmentedShapes(index = 0, count = count),
+            modifier = Modifier.semantics { stateDescription = if (photosDone) "Done" else "Current step" },
             colors = segmentColors(),
             leadingContent = { StepMark(1, done = photosDone, current = !photosDone) },
             supportingContent = if (photosDone) ({ Text("Allowed") }) else null,
@@ -216,6 +218,7 @@ private fun Steps(photosDone: Boolean, showManage: Boolean) {
         if (showManage) {
             SegmentedListItem(
                 shapes = ListItemDefaults.segmentedShapes(index = 1, count = count),
+                modifier = Modifier.semantics { stateDescription = if (photosDone) "Current step" else "Next step" },
                 colors = segmentColors(),
                 leadingContent = { StepMark(2, done = false, current = photosDone) },
             ) { Text("Move your photos") }
@@ -233,7 +236,7 @@ private fun StepMark(number: Int, done: Boolean, current: Boolean) {
     }
     Box(Modifier.size(40.dp).clip(CircleShape).background(container), contentAlignment = Alignment.Center) {
         if (done) {
-            Icon(Icons.Rounded.Check, "Done", Modifier.size(20.dp), tint = content)
+            Icon(Icons.Rounded.Check, null, Modifier.size(20.dp), tint = content)
         } else {
             Text("$number", style = MaterialTheme.typography.titleMedium, color = content)
         }
@@ -280,7 +283,7 @@ fun MediaManagementCard(vm: SiftViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Outlined.Info, null)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("Media management is off", style = MaterialTheme.typography.titleMedium)
+                    Text("Media management is off", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
                     Text("Android asks you to confirm every Move until it is on.", style = MaterialTheme.typography.bodyMedium)
                 }
             }
