@@ -56,7 +56,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
@@ -106,11 +111,15 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             )
             Spacer(Modifier.height(28.dp))
             Column(
-                Modifier.widthIn(max = 560.dp),
+                Modifier.widthIn(max = 560.dp).semantics { collectionInfo = CollectionInfo(3, 1) },
                 verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             ) {
                 SegmentedListItem(
                     onClick = { browse("https://$REPO") },
+                    modifier = Modifier.semantics {
+                        collectionItemInfo = CollectionItemInfo(0, 1, 0, 1)
+                        onClick(label = "Open in browser", action = null)
+                    },
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 3),
                     colors = segmentColors(),
                     leadingContent = { Icon(Icons.Rounded.Code, null) },
@@ -119,6 +128,10 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 ) { Text("Source code") }
                 SegmentedListItem(
                     onClick = { browse("https://$REPO/issues") },
+                    modifier = Modifier.semantics {
+                        collectionItemInfo = CollectionItemInfo(1, 1, 0, 1)
+                        onClick(label = "Open in browser", action = null)
+                    },
                     shapes = ListItemDefaults.segmentedShapes(index = 1, count = 3),
                     colors = segmentColors(),
                     leadingContent = { Icon(Icons.Rounded.Feedback, null) },
@@ -127,6 +140,7 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 ) { Text("Send feedback") }
                 SegmentedListItem(
                     onClick = { vm.open(Screen.Licenses) },
+                    modifier = Modifier.semantics { collectionItemInfo = CollectionItemInfo(2, 1, 0, 1) },
                     shapes = ListItemDefaults.segmentedShapes(index = 2, count = 3),
                     colors = segmentColors(),
                     leadingContent = { Icon(Icons.Rounded.Balance, null) },
@@ -196,10 +210,14 @@ fun LicensesScreen(vm: SiftViewModel) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+            Column(
+                Modifier.semantics { collectionInfo = CollectionInfo(libraries.size, 1) },
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            ) {
                 libraries.forEachIndexed { i, (name, group) ->
                     SegmentedListItem(
                         shapes = ListItemDefaults.segmentedShapes(index = i, count = libraries.size),
+                        modifier = Modifier.semantics { collectionItemInfo = CollectionItemInfo(i, 1, 0, 1) },
                         colors = segmentColors(),
                         supportingContent = { Text(group) },
                     ) { Text(name) }
