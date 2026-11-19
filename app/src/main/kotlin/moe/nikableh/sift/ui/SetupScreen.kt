@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -141,7 +142,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         }
                     },
                     trailingContent = {
-                        IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove") }
+                        IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove ${File(path).name}") }
                     },
                 ) { Text(File(path).name) }
             }
@@ -178,7 +179,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                             leadingContent = { AlbumThumb(null) },
                             supportingContent = { Text(path) },
                             trailingContent = {
-                                IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove") }
+                                IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove ${File(path).name}") }
                             },
                         ) { Text(File(path).name) }
                     }
@@ -191,7 +192,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     onCheckedChange = { vm.changeRecursive(it) },
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
                     colors = segmentColors(),
-                    modifier = Modifier.animateItem(),
+                    modifier = Modifier.animateItem().semantics { role = Role.Switch },
                     trailingContent = { Switch(checked = vm.recursive, onCheckedChange = null) },
                     supportingContent = {
                         Text(
@@ -243,13 +244,13 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { vm.moveDest(i, i - 1) }, enabled = i > 0) {
-                                Icon(Icons.Rounded.KeyboardArrowUp, "Move up")
+                                Icon(Icons.Rounded.KeyboardArrowUp, "Move ${dest.label} up")
                             }
                             IconButton(onClick = { vm.moveDest(i, i + 1) }, enabled = i < dests.size - 1) {
-                                Icon(Icons.Rounded.KeyboardArrowDown, "Move down")
+                                Icon(Icons.Rounded.KeyboardArrowDown, "Move ${dest.label} down")
                             }
                             IconButton(onClick = { vm.askRemoveDest(dest) }) {
-                                Icon(Icons.Rounded.Close, "Remove")
+                                Icon(Icons.Rounded.Close, "Remove ${dest.label}")
                             }
                         }
                     },
@@ -270,7 +271,7 @@ private fun SectionHeader(text: String, addLabel: String, modifier: Modifier = M
             text,
             style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { heading() },
         )
         FilledTonalButton(
             onClick = onAdd,
@@ -314,7 +315,7 @@ private fun OrderButtons(vm: SiftViewModel) {
         Store.ORDER_NAME to "By name",
     )
     Row(
-        Modifier.fillMaxWidth().padding(top = 8.dp),
+        Modifier.fillMaxWidth().padding(top = 8.dp).selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
     ) {
         options.forEachIndexed { i, (value, label) ->

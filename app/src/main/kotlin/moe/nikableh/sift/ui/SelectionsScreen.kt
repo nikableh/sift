@@ -225,7 +225,7 @@ private fun SelectionRow(
                 overflow = TextOverflow.StartEllipsis,
             )
         }
-        IconButton(onClick = onRemove, enabled = enabled) { Icon(Icons.Rounded.Close, "Remove from selections") }
+        IconButton(onClick = onRemove, enabled = enabled) { Icon(Icons.Rounded.Close, "Remove ${row.file.name} from selections") }
     }
 }
 
