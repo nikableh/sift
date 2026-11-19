@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -546,7 +547,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                     .weight(1f)
                     // The back button's touch area keeps the highlight this far from it, and Review gets the same
                     .padding(end = 4.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(MaterialTheme.shapes.medium)
                     .clickable(enabled = idle, onClickLabel = "Open menu") { menu = true }
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
@@ -710,9 +711,9 @@ private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
 @Composable
 private fun Panel(vm: SiftViewModel, landscape: Boolean, modifier: Modifier) {
     val shape = if (landscape) {
-        RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
+        MaterialTheme.shapes.extraLarge.copy(topEnd = ZeroCornerSize, bottomEnd = ZeroCornerSize)
     } else {
-        RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        MaterialTheme.shapes.extraLarge.copy(bottomStart = ZeroCornerSize, bottomEnd = ZeroCornerSize)
     }
     val sides = if (landscape) {
         WindowInsetsSides.Vertical + WindowInsetsSides.End

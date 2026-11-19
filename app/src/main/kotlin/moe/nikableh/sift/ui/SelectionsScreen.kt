@@ -165,7 +165,7 @@ private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Bool
             // Opaque, so rows don't show through while the header is pinned
             .background(MaterialTheme.colorScheme.background)
             .padding(top = 12.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", onClick = onToggle)
             .padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
     ) {
