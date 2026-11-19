@@ -76,6 +76,7 @@ import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -483,8 +484,10 @@ private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
 @Composable
 private fun Timeline(player: VideoPlayer, modifier: Modifier) {
     val duration = player.duration
+    val state = rememberSliderState()
+    state.value = if (duration > 0) (player.position / duration.toFloat()).coerceIn(0f, 1f) else 0f
     Slider(
-        value = if (duration > 0) (player.position / duration.toFloat()).coerceIn(0f, 1f) else 0f,
+        state = state,
         onValueChange = { player.scrubTo((it * duration).toLong()) },
         onValueChangeFinished = { player.scrubEnd() },
         modifier = modifier.semantics { contentDescription = "Timeline" },
