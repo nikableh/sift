@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Sift</string>
+    <string name="channel_move">Moving files</string>
 </resources>

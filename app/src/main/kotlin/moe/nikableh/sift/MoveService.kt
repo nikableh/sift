@@ -43,7 +43,7 @@ class MoveService : Service() {
         }
         if (lock != null) return START_NOT_STICKY
         getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(NotificationChannel(CHANNEL, "Moving files", NotificationManager.IMPORTANCE_LOW))
+            .createNotificationChannel(NotificationChannel(CHANNEL, getString(R.string.channel_move), NotificationManager.IMPORTANCE_LOW))
         try {
             startForeground(ID, notification(run), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } catch (e: Exception) {
