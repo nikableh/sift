@@ -63,13 +63,13 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Slider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -77,6 +77,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TwoRowsTopAppBar
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -613,7 +614,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val barWidth = maxWidth - 16.dp
+        val barWidth = maxWidth
 
         // The count drops out where it would take more than a fair share of the bar, which at large
         // font sizes would squeeze the photo details down to a few letters
@@ -639,7 +640,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
         }
         // Not tied to idle, because the system Back it mirrors works during a move too
         val back = @Composable {
-            FilledTonalIconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
+            IconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
             }
         }
@@ -674,7 +675,8 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
         // height from one swipe to the next. Review is taken at its widest so the count can't flip it
         val titleStyle = MaterialTheme.typography.titleSmall
         val titles = remember(vm.photos, folder) { vm.photos.mapTo(HashSet()) { vm.titleOf(it) } + folder }
-        val titleRoom = barWidth - 48.dp - 4.dp - 24.dp - 20.dp - maxButton
+        // The bar keeps 4dp at each end and at each side of the title
+        val titleRoom = barWidth - 48.dp - 16.dp - 24.dp - 20.dp - maxButton
         val flexible = remember(titles, titleStyle, titleRoom, density) {
             val roomPx = with(density) { titleRoom.roundToPx() }
             titles.any { measurer.measure(it, titleStyle).size.width > roomPx }
@@ -703,49 +705,38 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 windowInsets = WindowInsets(0),
             )
         } else {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                back()
-
-                // The menu hangs off the details, so the panel under the photo holds nothing but folder buttons
-                Column(
-                    Modifier
-                        .weight(1f)
-                        // The back button's touch area keeps the highlight this far from it, and Review gets the same
-                        .padding(end = 4.dp)
-                        .then(menuTarget)
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // The album leads. With several of them it is what changes from one photo to the next
-                        Text(
-                            title,
-                            Modifier.weight(1f, fill = false),
-                            style = titleStyle,
-                            maxLines = 1,
-                            // Album at the start and the photo's own folder at the end both say where it is
-                            overflow = TextOverflow.MiddleEllipsis,
-                        )
-                        Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(20.dp))
+            TopAppBar(
+                title = {
+                    // The menu hangs off the details, so the panel under the photo holds nothing but folder buttons
+                    Column(Modifier.fillMaxWidth().then(menuTarget).padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // The album leads. With several of them it is what changes from one photo to the next
+                            Text(
+                                title,
+                                Modifier.weight(1f, fill = false),
+                                style = titleStyle,
+                                maxLines = 1,
+                                // Album at the start and the photo's own folder at the end both say where it is
+                                overflow = TextOverflow.MiddleEllipsis,
+                            )
+                            Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(20.dp))
+                        }
+                        details(MaterialTheme.typography.labelMedium, MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    details(MaterialTheme.typography.bodySmall, MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-
-                review()
-            }
+                },
+                navigationIcon = back,
+                actions = { review() },
+                windowInsets = WindowInsets(0),
+            )
         }
         // Hangs off the bar as a whole, so it can be as wide as the bar. The cap keeps it a panel on a tablet
-        Box(Modifier.matchParentSize().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)) {
-            SortMenu(
-                vm,
-                photo?.file,
-                photo?.let { "${Formatter.formatShortFileSize(context, it.size)}  ·  ${timeFormat.format(Date(it.mtime))}" },
-                width = min(barWidth - 8.dp, 480.dp),
-                expanded = menu,
-            ) { menu = false }
-        }
+        SortMenu(
+            vm,
+            photo?.file,
+            photo?.let { "${Formatter.formatShortFileSize(context, it.size)}  ·  ${timeFormat.format(Date(it.mtime))}" },
+            width = min(barWidth - 24.dp, 480.dp),
+            expanded = menu,
+        ) { menu = false }
     }
 }
 
@@ -753,8 +744,8 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
 @Composable
 private fun SortMenu(vm: SiftViewModel, file: File?, details: String?, width: Dp, expanded: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    // The offset centres it under the bar, whose padding leaves 8dp at each side
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, modifier = Modifier.width(width), offset = DpOffset(4.dp, 0.dp)) {
+    // The offset centres it under the bar, 12dp in from each side
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, modifier = Modifier.width(width), offset = DpOffset(12.dp, 0.dp)) {
         @Composable
         fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
             text = { Text(label) },
