@@ -482,9 +482,9 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: 
         }
 
         Column(
-            // Beside the folder panel nothing else keeps the bar off the navigation bar
+            // Beside the folder panel nothing else keeps the pill and the bar off the navigation bar
             Modifier.align(Alignment.BottomCenter)
-                .then(if (video && landscape) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)) else Modifier)
+                .then(if (landscape) Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)) else Modifier)
                 .padding(bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
