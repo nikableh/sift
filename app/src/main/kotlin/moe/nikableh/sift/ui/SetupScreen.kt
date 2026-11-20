@@ -62,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -174,7 +175,11 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TextButton(onClick = { vm.clearSorted() }) { Text("Clear") }
-                                Icon(if (sortedOpen) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
+                                // The row is already surfaceContainer, so the open fill goes one step higher to show
+                                val fill = if (sortedOpen) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent
+                                Box(Modifier.size(32.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
+                                    Icon(if (sortedOpen) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
+                                }
                             }
                         },
                     ) { Text(if (sorted.size == 1) "1 album sorted" else "${sorted.size} albums sorted") }
