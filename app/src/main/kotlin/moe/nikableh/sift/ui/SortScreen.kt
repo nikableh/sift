@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -64,6 +65,7 @@ import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
 
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
@@ -627,16 +629,30 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             padding.calculateLeftPadding(LayoutDirection.Ltr) - padding.calculateRightPadding(LayoutDirection.Ltr)
         val fits = vm.queued > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
         val review = @Composable {
-            Button(
-                onClick = { vm.reviewSelections() },
-                shapes = ButtonDefaults.shapes(),
-                enabled = vm.queued > 0 && idle,
-                contentPadding = padding,
-                modifier = Modifier.widthIn(max = maxButton),
-            ) {
+            val label: @Composable RowScope.() -> Unit = {
                 Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
                 FitLabel(if (fits) withCount else "Review", style)
+            }
+            // The end card has its own filled Review, and one filled action per screen is enough
+            if (vm.gate == Gate.End) {
+                FilledTonalButton(
+                    onClick = { vm.reviewSelections() },
+                    shapes = ButtonDefaults.shapes(),
+                    enabled = vm.queued > 0 && idle,
+                    contentPadding = padding,
+                    modifier = Modifier.widthIn(max = maxButton),
+                    content = label,
+                )
+            } else {
+                Button(
+                    onClick = { vm.reviewSelections() },
+                    shapes = ButtonDefaults.shapes(),
+                    enabled = vm.queued > 0 && idle,
+                    contentPadding = padding,
+                    modifier = Modifier.widthIn(max = maxButton),
+                    content = label,
+                )
             }
         }
         // Not tied to idle, because the system Back it mirrors works during a move too
