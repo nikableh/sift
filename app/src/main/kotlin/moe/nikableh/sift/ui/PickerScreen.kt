@@ -39,7 +39,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -241,7 +240,7 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 alpha = thumbnailAlpha,
-                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.size(56.dp).clip(MaterialTheme.shapes.small)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = thumbnailAlpha)),
             )
         },
