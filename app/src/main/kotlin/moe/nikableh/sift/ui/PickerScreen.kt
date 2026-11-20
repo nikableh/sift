@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -65,6 +66,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -267,7 +269,17 @@ private fun pickerCheckboxColors(): CheckboxColors {
 @Composable
 private fun OrderBadge(number: Int) {
     Box(
-        Modifier.size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+        Modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            // Never narrower than tall, so one digit stays a circle at any font scale and two make a pill
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val width = maxOf(placeable.width, placeable.height)
+                layout(width, placeable.height) { placeable.place((width - placeable.width) / 2, 0) }
+            }
+            .defaultMinSize(minWidth = 24.dp, minHeight = 24.dp)
+            .padding(horizontal = 4.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(number.toString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onPrimary)
