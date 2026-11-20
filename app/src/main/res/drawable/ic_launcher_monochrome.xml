@@ -8,8 +8,8 @@
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:scaleX="0.72"
-        android:scaleY="0.72"
+        android:scaleX="0.78"
+        android:scaleY="0.78"
         android:translateY="-1.5">
         <group>
             <clip-path android:pathData="M0,0 H108 V108 H0 Z M48.47,20.25 Q45.51,19.78 45.04,22.74 L40.91,48.82 Q40.44,51.78 43.4,52.25 L65.53,55.75 Q68.49,56.22 68.96,53.26 L73.09,27.18 Q73.56,24.22 70.6,23.75 Z" />

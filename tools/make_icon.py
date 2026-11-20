@@ -9,7 +9,7 @@ import os
 RES = os.path.join(os.path.dirname(__file__), '..', 'app', 'src', 'main', 'res')
 
 # Everything is drawn on the 108 x 108 adaptive icon canvas, then shrunk into the safe zone
-SCALE, SHIFT_Y = 0.72, -1.5
+SCALE, SHIFT_Y = 0.78, -1.5
 
 BLUE, AMBER, CORAL = '#5B8DF8', '#FFC247', '#FF7B6B'
 LEFT, RIGHT, BOTTOM = 23.0, 85.0, 92.0
