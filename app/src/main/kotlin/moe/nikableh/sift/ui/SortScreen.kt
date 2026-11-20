@@ -472,10 +472,10 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: 
                 if (vm.queued > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
             }
             else -> when {
-                video && player.failed -> Status(Modifier.align(Alignment.Center), "Can't play this video") {}
+                video && player.failed -> Status(Modifier.align(Alignment.Center), "Can't play this video", "You can still sort it with the folder buttons") {}
                 // A video without a still frame can play all the same, and then it shows itself
                 vm.decodeFailed && !(video && player.showing) -> {
-                    Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}") {}
+                    Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}", "You can still sort it with the folder buttons") {}
                 }
             }
         }
