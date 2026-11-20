@@ -17,7 +17,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- Never asked for. Declared so the switch in Android's settings can be turned on by whoever wants the progress shown -->
+    <!-- Asked for when Move is tapped, for the progress notification -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application

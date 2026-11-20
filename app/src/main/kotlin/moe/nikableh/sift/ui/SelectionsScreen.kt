@@ -1,6 +1,11 @@
 package moe.nikableh.sift.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
@@ -79,6 +84,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -384,6 +390,9 @@ private val FabHeight = 80.dp
 /** FABs have no disabled state, so it steps away while a scan or a move is running, and shows the wait before one. */
 @Composable
 private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
+    val context = LocalContext.current
+    // The answer only decides whether the progress notification shows, so the move starts either way
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.move() }
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
         MediumExtendedFloatingActionButton(
             text = { Text(if (vm.preparing) "Getting ready to move" else "Move ${vm.queued.grouped()}") },
@@ -398,7 +407,17 @@ private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
                     Icon(Icons.Rounded.DoneAll, null, size)
                 }
             },
-            onClick = { if (!vm.preparing) vm.move() },
+            onClick = {
+                if (!vm.preparing) {
+                    if (Build.VERSION.SDK_INT >= 33 &&
+                        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        vm.move()
+                    }
+                }
+            },
             modifier = Modifier.semantics { traversalIndex = -1f },
             expanded = expanded,
             containerColor = MaterialTheme.colorScheme.primary,
