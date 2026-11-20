@@ -12,9 +12,11 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.expressiveLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import androidx.compose.ui.platform.LocalContext
+import kotlin.math.abs
 
 /** Follows the system light or dark setting, there is no in-app switch. */
 @Composable
@@ -51,10 +53,36 @@ fun segmentColors(): ListItemColors {
 fun folderColor(index: Int): Color = folderPalette[index.mod(folderPalette.size)]
 
 /**
- * Fill of a folder button, its pill and its dot on the other screens. The same in light and dark,
- * so what sits on it has fixed colours too
+ * Fill of a folder button and its pill, and the text and icons on it.
+ * Each is a tone of the folder's hue, light tiles with dark ink in light theme and the reverse in dark,
+ * like a container and on-container role pair. HCT tone is CIELAB L*, so Lab keeps the hue while the tone moves
  */
-fun Color.tile(): Color = lerp(this, Color.White, 0.45f)
+@Composable
+@ReadOnlyComposable
+fun Color.tile(): Color = atTone(if (isSystemInDarkTheme()) 30f else 80f)
 
 /** Text and icons on [tile]. */
-fun Color.ink(): Color = lerp(this, Color.Black, 0.78f)
+@Composable
+@ReadOnlyComposable
+fun Color.ink(): Color = atTone(if (isSystemInDarkTheme()) 90f else 10f)
+
+/**
+ * A folder's dot or swatch on the other screens. It stands on the page rather than holding content,
+ * so it keeps the light tile tone in both themes, which in dark is well above 3:1 on the surface
+ */
+fun Color.dot(): Color = atTone(80f)
+
+/** Chroma shrinks until the colour fits sRGB, so the tone stays exact. */
+private fun Color.atTone(tone: Float): Color {
+    val lab = convert(ColorSpaces.CieLab)
+    var scale = 1f
+    while (true) {
+        val a = lab.green * scale
+        val b = lab.blue * scale
+        val rgb = Color(tone, a, b, 1f, ColorSpaces.CieLab).convert(ColorSpaces.Srgb)
+        val back = rgb.convert(ColorSpaces.CieLab)
+        val fits = abs(back.red - tone) < 0.5f && abs(back.green - a) < 1f && abs(back.blue - b) < 1f
+        if (fits || scale <= 0f) return rgb
+        scale -= 0.05f
+    }
+}

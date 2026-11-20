@@ -331,7 +331,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                                 }
                             },
                         leadingContent = {
-                            Box(Modifier.size(18.dp).clip(CircleShape).background(folderColor(i).tile()))
+                            Box(Modifier.size(18.dp).clip(CircleShape).background(folderColor(i).dot()))
                         },
                         supportingContent = { PathText(dest.path) },
                         trailingContent = {

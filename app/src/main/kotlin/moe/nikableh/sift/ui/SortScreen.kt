@@ -999,7 +999,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                             .then(if (count > 0) Modifier else Modifier.alpha(0f))
                             .clearAndSetSemantics {},
                         containerColor = ink,
-                        contentColor = Color.White,
+                        contentColor = color.tile(),
                     ) {
                         FitLabel(
                             if (count > 999) "999+" else count.grouped(),
