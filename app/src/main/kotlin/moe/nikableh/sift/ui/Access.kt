@@ -38,7 +38,7 @@ import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -299,13 +299,8 @@ private fun Note(text: String) {
 fun MediaManagementCard(vm: SiftViewModel) {
     if (vm.manageMedia) return
     val context = LocalContext.current
-    Card(
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        ),
-    ) {
+    // Default card colours, so the tonal button keeps its container contrast
+    Card(shape = MaterialTheme.shapes.extraLarge) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Outlined.Info, null)
@@ -316,7 +311,7 @@ fun MediaManagementCard(vm: SiftViewModel) {
             }
             Row(Modifier.fillMaxWidth()) {
                 Spacer(Modifier.weight(1f))
-                Button(onClick = { openManageMedia(context) }, shapes = ButtonDefaults.shapes()) { Text("Turn on") }
+                FilledTonalButton(onClick = { openManageMedia(context) }, shapes = ButtonDefaults.shapes()) { Text("Turn on") }
             }
         }
     }
