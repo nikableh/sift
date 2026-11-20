@@ -73,6 +73,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorPosition
@@ -522,32 +523,21 @@ private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
     ) {
         // A video starts by itself, so until the player has it the button already shows what is about to happen
         val playing = player.playing || player.path == null
-        // The timeline's two colours, so the bar reads as one piece: a button that is on has the
-        // colour of the played part, one that is off the colour of the part still to come. All four
-        // are set, because the defaults of the ones left out follow the ones given
-        val scheme = MaterialTheme.colorScheme
-        val colors = IconButtonDefaults.filledIconToggleButtonColors(
-            containerColor = scheme.secondaryContainer,
-            contentColor = scheme.primary,
-            checkedContainerColor = scheme.primary,
-            checkedContentColor = scheme.onPrimary,
-        )
         FilledIconToggleButton(
             checked = playing,
             onCheckedChange = { player.toggle() },
             shapes = IconButtonDefaults.toggleableShapes(),
-            colors = colors,
         ) {
             if (playing) Icon(Icons.Rounded.Pause, "Playing") else Icon(Icons.Rounded.PlayArrow, "Playing")
         }
         Timeline(player, Modifier.weight(1f).padding(horizontal = 8.dp))
         Elapsed(player, Modifier.align(Alignment.CenterVertically))
         val sound = !vm.videoMuted
-        FilledIconToggleButton(
+        // Unfilled, so play and pause stays the one emphasized action on the bar
+        IconToggleButton(
             checked = sound,
             onCheckedChange = { vm.changeMuted(!it) },
             shapes = IconButtonDefaults.toggleableShapes(),
-            colors = colors,
         ) {
             if (sound) Icon(Icons.AutoMirrored.Rounded.VolumeUp, "Sound")
             else Icon(Icons.AutoMirrored.Rounded.VolumeOff, "Sound")
