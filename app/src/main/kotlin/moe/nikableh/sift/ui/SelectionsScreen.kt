@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -76,6 +77,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -264,7 +266,12 @@ private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Bool
                 heading()
                 stateDescription = if (collapsed) "Collapsed" else "Expanded"
             },
-        leadingContent = { Dot(color) },
+        // The default centers short headers and top-aligns ones with a wrapped path, so the dot jumped between them
+        verticalAlignment = Alignment.Top,
+        leadingContent = {
+            val line = with(LocalDensity.current) { MaterialTheme.typography.titleMediumEmphasized.lineHeight.toDp() }
+            Box(Modifier.height(line), contentAlignment = Alignment.Center) { Dot(color) }
+        },
         trailingContent = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
