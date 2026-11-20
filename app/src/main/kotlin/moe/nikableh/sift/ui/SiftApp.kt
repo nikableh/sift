@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
@@ -62,7 +63,9 @@ fun SiftApp(vm: SiftViewModel) {
         goingBack?.cancel()
         val previous = vm.backStack[vm.backStack.size - 2] to vm.backStack.size - 1
         try {
-            events.collect {
+            // A swipe that cuts into a running slide waits in seekTo until that slide lets go, and
+            // the newest progress must not queue behind it
+            events.collectLatest {
                 swiping = true
                 screens.seekTo(it.progress, previous)
             }
@@ -71,7 +74,9 @@ fun SiftApp(vm: SiftViewModel) {
             // The gesture's job is already cancelled here, so the slide back from where the finger
             // left it runs in a job of its own
             goingBack = scope.launch {
-                animate(screens.fraction, 0f, animationSpec = Settle) { value, _ -> launch { screens.seekTo(value) } }
+                if (screens.fraction > 0f) {
+                    animate(screens.fraction, 0f, animationSpec = Settle) { value, _ -> launch { screens.seekTo(value) } }
+                }
                 screens.snapTo(screens.currentState)
             }
             throw e
