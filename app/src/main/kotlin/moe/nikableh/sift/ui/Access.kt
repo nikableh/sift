@@ -30,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.HideImage
@@ -194,7 +195,7 @@ private fun AccessLayout(
                 onClick = onAbout,
                 shapes = IconButtonDefaults.shapes(),
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp),
-            ) { Icon(Icons.Rounded.Info, "About") }
+            ) { Icon(Icons.Outlined.Info, "About") }
         }
     }
 }
