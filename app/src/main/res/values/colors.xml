@@ -1,0 +1,4 @@
+<resources>
+    <!-- Each config matches what SiftTheme's surface resolves to on that API level, so the splash hands over to Home without a colour change -->
+    <color name="window_surface">#FFFEF7FF</color>
+</resources>

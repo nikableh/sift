@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and 13 have no surface colour resource, so Compose derives it from neutral variant 40 at tone 98, and lStar does the same -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="@android:color/system_neutral2_600" android:lStar="98" />
+</selector>
