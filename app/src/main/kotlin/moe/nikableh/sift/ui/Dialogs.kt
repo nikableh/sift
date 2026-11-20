@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material3.AlertDialog
@@ -325,6 +326,7 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val number = value.text.toIntOrNull()?.takeIf { it in 1..max }
+    val invalid = value.text.isNotEmpty() && number == null
     val submit = { number?.let(onConfirm) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -336,12 +338,14 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
                 onValueChange = { v -> if (v.text.all { it.isDigit() } && v.text.length <= 9) value = v },
                 singleLine = true,
                 suffix = { Text("/ $max") },
-                isError = value.text.isNotEmpty() && number == null,
+                isError = invalid,
+                // No description, the field's error semantics already announce it
+                trailingIcon = if (invalid) { { Icon(Icons.Rounded.Error, null) } } else null,
                 supportingText = { Text("From 1 to $max") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { submit() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics {
-                    if (value.text.isNotEmpty() && number == null) error("Enter a number from 1 to $max")
+                    if (invalid) error("Enter a number from 1 to $max")
                 },
             )
         },
