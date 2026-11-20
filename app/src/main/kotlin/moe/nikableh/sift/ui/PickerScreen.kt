@@ -394,9 +394,9 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                         shapes = ButtonDefaults.shapes(),
                         modifier = Modifier.weight(1f).height(size),
                     ) {
-                        Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(ButtonDefaults.IconSize))
-                        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                        FitLabel(if (newFolder.album) "New album" else "New folder")
+                        Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
+                        Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
+                        FitLabel(if (newFolder.album) "New album" else "New folder", ButtonDefaults.textStyleFor(size))
                     }
                 }
                 Button(
@@ -414,7 +414,8 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                             !forSource -> "Add $added"
                             added == 1 -> "Add 1 album"
                             else -> "Add $added albums"
-                        }
+                        },
+                        ButtonDefaults.textStyleFor(size),
                     )
                 }
             }
