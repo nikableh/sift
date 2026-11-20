@@ -11,6 +11,7 @@ import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -172,38 +173,47 @@ fun SortScreen(vm: SiftViewModel, settled: Boolean) {
     DisposableEffect(player) {
         onDispose { player.release() }
     }
-    Playback(vm, player, settled)
+    // Reading, Empty, End and None all show the sorter, so a read doesn't slide it in over itself
+    val step = when (vm.gate) {
+        Gate.Permission -> Step.Access
+        Gate.Setup -> Step.Welcome
+        else -> Step.Content
+    }
+    val steps = updateTransition(step, label = "step")
+    Playback(vm, player, settled && !steps.isRunning)
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-        when (vm.gate) {
-            Gate.Permission -> AccessScreen(vm)
+        PaneSwap(step, steps) { shown ->
+            when (shown) {
+                Step.Access -> AccessScreen(vm)
 
-            Gate.Setup -> Welcome(
-                icon = Icons.Rounded.PhotoLibrary,
-                title = "Pick your folders",
-                body = "Choose the albums to sort and the folders their photos can go to.",
-                action = "Set up folders",
-            ) { vm.open(Screen.Setup) }
+                Step.Welcome -> Welcome(
+                    icon = Icons.Rounded.PhotoLibrary,
+                    title = "Pick your folders",
+                    body = "Choose the albums to sort and the folders their photos can go to.",
+                    action = "Set up folders",
+                ) { vm.open(Screen.Setup) }
 
-            else -> BoxWithConstraints(Modifier.fillMaxSize()) {
-                // From the window width, not the orientation, so a portrait tablet gets the side panel
-                // and a narrow landscape window doesn't
-                val wide = maxWidth >= 600.dp
-                // Under the header and the folder buttons and as large as the screen, so an open photo
-                // can come up over them. Shared by the two layouts, so turning the phone keeps the zoom
-                val stage = remember { Stage() }
-                Media(vm, player, stage)
-                if (wide) {
-                    // The fixed pane is 360dp at expanded window widths
-                    val panelWidth = if (maxWidth >= 840.dp) 360.dp else 280.dp
-                    Row(Modifier.fillMaxSize()) {
-                        Viewer(vm, player, stage, landscape = true, Modifier.weight(1f).fillMaxHeight())
-                        Panel(vm, landscape = true, Modifier.width(panelWidth).fillMaxHeight())
-                    }
-                } else {
-                    Column(Modifier.fillMaxSize()) {
-                        Viewer(vm, player, stage, landscape = false, Modifier.weight(1f).fillMaxWidth())
-                        Panel(vm, landscape = false, Modifier.fillMaxWidth())
+                Step.Content -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                    // From the window width, not the orientation, so a portrait tablet gets the side panel
+                    // and a narrow landscape window doesn't
+                    val wide = maxWidth >= 600.dp
+                    // Under the header and the folder buttons and as large as the screen, so an open photo
+                    // can come up over them. Shared by the two layouts, so turning the phone keeps the zoom
+                    val stage = remember { Stage() }
+                    Media(vm, player, stage)
+                    if (wide) {
+                        // The fixed pane is 360dp at expanded window widths
+                        val panelWidth = if (maxWidth >= 840.dp) 360.dp else 280.dp
+                        Row(Modifier.fillMaxSize()) {
+                            Viewer(vm, player, stage, landscape = true, Modifier.weight(1f).fillMaxHeight())
+                            Panel(vm, landscape = true, Modifier.width(panelWidth).fillMaxHeight())
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            Viewer(vm, player, stage, landscape = false, Modifier.weight(1f).fillMaxWidth())
+                            Panel(vm, landscape = false, Modifier.fillMaxWidth())
+                        }
                     }
                 }
             }

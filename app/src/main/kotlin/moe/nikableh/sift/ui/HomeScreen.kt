@@ -1,11 +1,17 @@
 package moe.nikableh.sift.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -104,6 +110,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
@@ -115,17 +122,57 @@ import moe.nikableh.sift.SiftViewModel
 /** Where the app opens and where Back from sorting lands. */
 @Composable
 fun HomeScreen(vm: SiftViewModel) {
-    when {
-        !vm.allowed -> AccessScreen(vm, onAbout = { vm.open(Screen.About) })
+    val step = when {
+        !vm.allowed -> Step.Access
+        vm.sources.isEmpty() || vm.dests.isEmpty() -> Step.Welcome
+        else -> Step.Content
+    }
+    PaneSwap(step) {
+        when (it) {
+            Step.Access -> AccessScreen(vm, onAbout = { vm.open(Screen.About) })
 
-        vm.sources.isEmpty() || vm.dests.isEmpty() -> Welcome(
-            icon = Icons.Rounded.PhotoLibrary,
-            title = "Pick your folders",
-            body = "Choose the albums to sort and the folders their photos can go to.",
-            action = "Set up folders",
-        ) { vm.open(Screen.Setup) }
+            Step.Welcome -> Welcome(
+                icon = Icons.Rounded.PhotoLibrary,
+                title = "Pick your folders",
+                body = "Choose the albums to sort and the folders their photos can go to.",
+                action = "Set up folders",
+            ) { vm.open(Screen.Setup) }
 
-        else -> Home(vm)
+            Step.Content -> Home(vm)
+        }
+    }
+}
+
+/** The steps before a screen shows its content, in the order the user goes through them. */
+enum class Step { Access, Welcome, Content }
+
+/**
+ * Slides between the steps the way screens slide in SiftApp: forward when access or folders come in,
+ * back when they go away
+ */
+@Composable
+fun PaneSwap(
+    step: Step,
+    transition: Transition<Step> = updateTransition(step, label = "step"),
+    content: @Composable (Step) -> Unit,
+) {
+    val animationsOn = rememberAnimationsOn()
+    val slide = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+    val surface = MaterialTheme.colorScheme.surface
+    transition.AnimatedContent(
+        transitionSpec = {
+            if (!animationsOn) {
+                fadeIn() togetherWith fadeOut()
+            } else if (targetState > initialState) {
+                slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 3 }
+            } else {
+                (slideInHorizontally(slide) { -it / 3 } togetherWith slideOutHorizontally(slide) { it })
+                    .apply { targetContentZIndex = -1f }
+            }
+        },
+    ) {
+        // Opaque, or the step sliding away shows through the one coming in
+        Box(Modifier.fillMaxSize().background(surface)) { content(it) }
     }
 }
 

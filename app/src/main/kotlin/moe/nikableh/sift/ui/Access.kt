@@ -51,6 +51,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,9 +107,14 @@ fun AccessScreen(vm: SiftViewModel, onAbout: (() -> Unit)? = null) {
         launcher.launch(vm.photoPermissions())
     }
 
-    when (vm.access) {
+    // Ready slides this pane out, and it keeps the last question on screen until it is gone
+    var lastAsked by remember { mutableStateOf(vm.access) }
+    val access = vm.access.takeIf { it != Access.Ready } ?: lastAsked
+    SideEffect { lastAsked = access }
+
+    when (access) {
         Access.AskPhotos, Access.AskManage -> {
-            val photosDone = vm.access == Access.AskManage
+            val photosDone = access == Access.AskManage
             AccessLayout(
                 icon = Icons.Rounded.PhotoLibrary,
                 title = "Let Sift sort your photos",
