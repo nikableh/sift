@@ -982,7 +982,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (selected) {
-                            Icon(Icons.Rounded.Check, null, Modifier.size(18.dp))
+                            Icon(Icons.Rounded.Check, null, Modifier.size(ButtonDefaults.SmallIconSize))
                             Spacer(Modifier.width(4.dp))
                         }
                         // A line height relative to the size, so two shrunk lines fit where two full ones would not
