@@ -2,6 +2,7 @@ package moe.nikableh.sift.ui
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.animate
@@ -130,7 +131,13 @@ fun SiftApp(vm: SiftViewModel) {
                         Screen.Selections -> SelectionsScreen(vm, host)
                         Screen.About -> AboutScreen(vm, host)
                         Screen.Licenses -> LicensesScreen(vm)
-                        is Screen.Picker -> PickerScreen(vm, screen.forSource, host)
+                        // Not isRunning: on a screen's first frame its slide hasn't started yet, so it isn't running either
+                        is Screen.Picker -> PickerScreen(
+                            vm,
+                            screen.forSource,
+                            host,
+                            settled = transition.currentState == EnterExitState.Visible && transition.targetState == EnterExitState.Visible,
+                        )
                     }
                 }
             }

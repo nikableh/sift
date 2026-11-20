@@ -66,7 +66,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,9 +106,14 @@ import java.io.File
  * ones unticked here are taken out at the same moment.
  */
 @Composable
-fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostState) {
+fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostState, settled: Boolean) {
     val browsing = vm.browsing
     val dir = vm.browseDir
+    // The album rows wait until the screen has slid in. They take about 9ms each to compose on a slow phone, and
+    // all of them landing in one frame halfway through the slide stalls it. Kept once true, so the rows stay
+    // while the screen slides out
+    var rowsShown by remember { mutableStateOf(false) }
+    LaunchedEffect(settled) { if (settled) rowsShown = true }
     BackHandler(enabled = browsing || vm.picked.isNotEmpty() || vm.unticked.isNotEmpty()) {
         if (browsing) vm.browseUp() else vm.leavePicker()
     }
@@ -160,7 +169,7 @@ fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostSt
                         }
                         FolderList(vm, forSource, padding, margin, pane.dir, kept.folders, kept.here)
                     } else {
-                        AlbumList(vm, forSource, padding, margin)
+                        AlbumList(vm, if (rowsShown) vm.albums else null, forSource, padding, margin)
                     }
                 }
             }
@@ -176,8 +185,7 @@ private data class Pane(val browsing: Boolean, val dir: File?) {
 private class Kept(var folders: List<Folder>, var here: Scanner.Count)
 
 @Composable
-private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingValues, margin: Dp) {
-    val albums = vm.albums
+private fun AlbumList(vm: SiftViewModel, albums: List<Album>?, forSource: Boolean, padding: PaddingValues, margin: Dp) {
     LazyColumn(
         contentPadding = PaddingValues(
             start = padding.calculateStartPadding(LocalLayoutDirection.current) + margin,
