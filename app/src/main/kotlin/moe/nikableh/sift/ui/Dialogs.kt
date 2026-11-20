@@ -116,7 +116,7 @@ fun Dialogs(vm: SiftViewModel) {
         } else {
             Confirm(
                 title = "The move didn't finish",
-                confirm = "Continue",
+                confirm = if (d.moved == 0) "Move them" else "Move the rest",
                 dismiss = "Not now",
                 onConfirm = {
                     close()
@@ -134,12 +134,12 @@ fun Dialogs(vm: SiftViewModel) {
             Confirm(
                 icon = Icons.Rounded.History,
                 title = "Moving back didn't finish",
-                confirm = "Continue",
+                confirm = "Move the rest back",
                 dismiss = "Not now",
                 onConfirm = { vm.undoBatch(b) },
                 onDismiss = close,
             ) {
-                Text("Sift was closed while moving ${files(b.moved)} back. Continue to return the rest and put them all back in the queue.")
+                Text("Sift was closed while moving ${files(b.moved)} back. Move the rest back to return them and put them all back in the queue.")
             }
         }
 
