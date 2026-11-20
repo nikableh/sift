@@ -13,7 +13,9 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.view.GestureDetector
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.VelocityTracker
@@ -110,6 +112,9 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private var canDismiss = false
     private var dismissing = false
     private var speed: VelocityTracker? = null
+
+    /** Whether the drag in progress would turn the page or close the image if let go now. */
+    private var pastCommit = false
 
     /** True from the tap that opened the image until the next finger comes down. */
     private var openTap = false
@@ -609,6 +614,20 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         return true
     }
 
+    /** Ticks once each time the drag crosses the distance that commits it, either way. Below API 34 there is no such tick */
+    private fun feelCommit() {
+        val moved = dragX - downDragX
+        val past = when {
+            dismissing -> abs(panY) > height * DISMISS_PART
+            raised -> false
+            else -> abs(moved) > frame.width() * 0.2f && (if (moved < 0) canNext else canPrev)
+        }
+        if (past == pastCommit) return
+        pastCommit = past
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        performHapticFeedback(if (past) HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE else HapticFeedbackConstants.GESTURE_THRESHOLD_DEACTIVATE)
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         val action = event.actionMasked
@@ -618,6 +637,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             flingDir = 0
             settle?.cancel()
             downDragX = dragX
+            pastCommit = false
             downX = event.x
             downY = event.y
             // An image still on its way open can be dragged shut already, or the swipe that follows a tap closely is lost
@@ -637,6 +657,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         val single = event.pointerCount == 1
         if (action == MotionEvent.ACTION_MOVE && single && tracking && isZoomed && glide == null) pan(lastX - event.x, lastY - event.y)
         if (action == MotionEvent.ACTION_MOVE && single && canDismiss && zoom == 1f && (glide == null || settling)) dismiss(event)
+        if (action == MotionEvent.ACTION_MOVE) feelCommit()
         // The finger left over from a pinch starts from where it is now
         tracking = single
         lastX = event.x
@@ -648,7 +669,12 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             if (dismissing) {
                 val away = abs(panY) > height * DISMISS_PART || flickedAway()
                 dismissing = false
-                if (action == MotionEvent.ACTION_UP && away) close() else glideTo(1f, 1f, 0f, 0f)
+                if (action == MotionEvent.ACTION_UP && away) {
+                    performHapticFeedback(HapticFeedbackConstants.GESTURE_END)
+                    close()
+                } else {
+                    glideTo(1f, 1f, 0f, 0f)
+                }
             }
             speed?.recycle()
             speed = null
@@ -660,7 +686,10 @@ class ZoomImageView(ctx: Context) : View(ctx) {
                 else -> 0
             }
             if ((dir > 0 && !canNext) || (dir < 0 && !canPrev)) dir = 0
-            if (dir != 0) turn(dir)
+            if (dir != 0) {
+                performHapticFeedback(HapticFeedbackConstants.GESTURE_END)
+                turn(dir)
+            }
             settle()
             // Unless the detector has just started a fling, which sees to the edges itself
             if (isZoomed && glide == null && scroller.isFinished) springBack()
