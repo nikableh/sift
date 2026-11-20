@@ -31,8 +31,9 @@ import kotlin.math.roundToInt
 /**
  * Covers the whole screen. The image starts out fitted to its slot, the room the header and the
  * folder buttons leave, where a horizontal swipe pages to the neighbour and reports prev or next.
- * A tap spreads it over the screen on black, the way Telegram opens a photo from a message. Only
- * there do pinch and double tap zoom, and dragging it up or down at 1x sends it back to its slot.
+ * A tap spreads it over the screen on black, the way Telegram opens a photo from a message, and so
+ * does a pinch, which zooms while it opens. Only there does double tap zoom, and dragging it up or
+ * down at 1x sends it back to its slot.
  *
  * The timing of the animations, the 3x double tap and the drag past an edge copy Telegram's photo
  * viewer. The fling does not, see [onFling]
@@ -121,6 +122,13 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     /** True while a glide runs that only brings an image at 1x to rest, open: the opening itself, and the return from a drag that fell short. */
     private var settling = false
+
+    /** True while a glide runs that a pinch in the slot started. It only spreads the image, and the pinch keeps the zoom and the pan */
+    private var pinchOpening = false
+
+    /** The pinch's focus at its last step. */
+    private var pinchX = 0f
+    private var pinchY = 0f
     private var zoomReported = false
     private val slot = RectF()
 
@@ -386,7 +394,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
      * exception is the drag that closes the image, which takes the pan away from a glide that is
      * only [settling]
      */
-    private fun glideTo(toSpread: Float, toZoom: Float, toX: Float, toY: Float) {
+    private fun glideTo(toSpread: Float, toZoom: Float, toX: Float, toY: Float, pinch: Boolean = false) {
         if (spread == toSpread && zoom == toZoom && panX == toX && panY == toY) return
         scroller.forceFinished(true)
         glide?.cancel()
@@ -396,12 +404,18 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         val fromY = panY
         if (toZoom > fromZoom) reportZoomIn()
         closing = toSpread == 0f
-        settling = toSpread == 1f && toZoom == 1f && fromZoom == 1f
+        pinchOpening = pinch
+        settling = !pinch && toSpread == 1f && toZoom == 1f && fromZoom == 1f
         glide = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = GLIDE_MS
             interpolator = DecelerateInterpolator(1.5f)
             addUpdateListener {
                 val f = it.animatedValue as Float
+                if (pinch) {
+                    spreadUnderPinch(fromSpread + (toSpread - fromSpread) * f)
+                    invalidate()
+                    return@addUpdateListener
+                }
                 spread = fromSpread + (toSpread - fromSpread) * f
                 zoom = fromZoom + (toZoom - fromZoom) * f
                 if (!dismissing) {
@@ -422,7 +436,10 @@ class ZoomImageView(ctx: Context) : View(ctx) {
                     glide = null
                     closing = false
                     settling = false
-                    if (!cancelled) {
+                    pinchOpening = false
+                    if (pinch) {
+                        if (!cancelled) spreadUnderPinch(toSpread)
+                    } else if (!cancelled) {
                         spread = toSpread
                         zoom = toZoom
                         if (!dismissing) {
@@ -437,6 +454,23 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         }
         raise()
         glide?.start()
+    }
+
+    /** [zoomTo] measures from the frame, which grows as the image opens, so without this the photo would slide out from under the fingers. */
+    private fun spreadUnderPinch(to: Float) {
+        val b = bitmap
+        val before = if (b == null) 0f else fitScale(b) * zoom
+        if (b == null || before == 0f) {
+            spread = to
+            return
+        }
+        val x = (pinchX - frame.centerX() - panX) / before
+        val y = (pinchY - frame.centerY() - panY) / before
+        spread = to
+        val after = fitScale(b) * zoom
+        panX = pinchX - frame.centerX() - x * after
+        panY = pinchY - frame.centerY() - y * after
+        clampPan()
     }
 
     /** Moves a zoomed image with the finger. Telegram's rules: a third of the speed once past an edge, and no slack to take up first */
@@ -492,25 +526,23 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     }
 
     private val scaleDetector = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        private var lastFocusX = 0f
-        private var lastFocusY = 0f
-
         override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
-            lastFocusX = d.focusX
-            lastFocusY = d.focusY
+            pinchX = d.focusX
+            pinchY = d.focusY
             return true
         }
 
         override fun onScale(d: ScaleGestureDetector): Boolean {
             // Two fingers moving together pan the image in the same gesture as the pinch
-            val moveX = d.focusX - lastFocusX
-            val moveY = d.focusY - lastFocusY
-            lastFocusX = d.focusX
-            lastFocusY = d.focusY
-            if (bitmap == null || !zoomable || glide != null || dismissing) return true
+            val moveX = d.focusX - pinchX
+            val moveY = d.focusY - pinchY
+            pinchX = d.focusX
+            pinchY = d.focusY
+            if (bitmap == null || !zoomable || (glide != null && !pinchOpening) || dismissing) return true
             dragX = 0f
-            // A pinch in the slot opens the image first, and goes on zooming once it is open
-            if (spread < 1f) open() else zoomTo(zoom * d.scaleFactor, d.focusX, d.focusY, moveX, moveY)
+            // A pinch in the slot opens the image and zooms it on the way, so the first step already counts
+            if (spread == 0f && glide == null) glideTo(1f, zoom, panX, panY, pinch = true)
+            zoomTo(zoom * d.scaleFactor, d.focusX, d.focusY, moveX, moveY)
             return true
         }
     }).apply {
