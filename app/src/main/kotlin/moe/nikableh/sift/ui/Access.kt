@@ -30,10 +30,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Collections
 import androidx.compose.material.icons.rounded.HideImage
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -194,7 +194,7 @@ private fun AccessLayout(
                 onClick = onAbout,
                 shapes = IconButtonDefaults.shapes(),
                 modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp),
-            ) { Icon(Icons.Outlined.Info, "About") }
+            ) { Icon(Icons.Rounded.Info, "About") }
         }
     }
 }
@@ -313,7 +313,7 @@ fun MediaManagementCard(vm: SiftViewModel) {
     Card(shape = MaterialTheme.shapes.extraLarge) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Icon(Icons.Outlined.Info, null)
+                Icon(Icons.Rounded.Info, null)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Media management is off", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
                     Text("Android asks you to confirm every Move until it is on", style = MaterialTheme.typography.bodyMedium)
