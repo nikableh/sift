@@ -11,7 +11,6 @@ import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -841,10 +840,11 @@ private fun Pill(
 private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
     val flash = vm.flash ?: return
     val alpha = remember { Animatable(0f) }
+    val fade = MaterialTheme.motionScheme.fastEffectsSpec<Float>()
     LaunchedEffect(flash.id) {
         alpha.snapTo(1f)
         delay(250)
-        alpha.animateTo(0f, tween(200))
+        alpha.animateTo(0f, fade)
         // Consumed, so coming back to this spot later doesn't replay a stale confirmation
         vm.flashShown(flash.id)
     }
