@@ -130,7 +130,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.min
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.content.FileProvider
@@ -970,14 +969,13 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                 Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)) {
                     // The badge row is laid out even at zero, so a label never moves when its first count shows up,
                     // and the badge sits above the label instead of over it
-                    val badge = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 14.sp)
                     Badge(
                         Modifier.align(Alignment.End)
                             .then(if (count > 0) Modifier else Modifier.alpha(0f))
                             .clearAndSetSemantics {},
                         containerColor = ink,
                         contentColor = Color.White,
-                    ) { FitLabel(count.grouped(), badge) }
+                    ) { FitLabel(if (count > 999) "999+" else count.grouped()) }
                     Row(
                         Modifier.weight(1f).fillMaxWidth().padding(end = 4.dp),
                         horizontalArrangement = Arrangement.Center,
