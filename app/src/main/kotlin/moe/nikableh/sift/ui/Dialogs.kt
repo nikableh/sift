@@ -1,5 +1,6 @@
 package moe.nikableh.sift.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +53,22 @@ import moe.nikableh.sift.Mover
 import moe.nikableh.sift.SiftViewModel
 
 @Composable
+private fun MoveProgress(run: MoveRunner.Run) {
+    val done = MoveRunner.done
+    val progress by animateFloatAsState(
+        targetValue = if (run.total == 0) 0f else done / run.total.toFloat(),
+        animationSpec = WavyProgressIndicatorDefaults.ProgressAnimationSpec,
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LinearWavyProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = run.title },
+        )
+        Text("${done.grouped()} of ${run.total.grouped()}")
+    }
+}
+
+@Composable
 fun Dialogs(vm: SiftViewModel) {
     val close = { vm.dialog = null }
     val haptic = LocalHapticFeedback.current
@@ -61,15 +79,7 @@ fun Dialogs(vm: SiftViewModel) {
             onDismissRequest = {},
             properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
             title = { Text(run.title) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LinearWavyProgressIndicator(
-                        progress = { if (run.total == 0) 0f else MoveRunner.done / run.total.toFloat() },
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = run.title },
-                    )
-                    Text("${MoveRunner.done.grouped()} of ${run.total.grouped()}")
-                }
-            },
+            text = { MoveProgress(run) },
             confirmButton = {
                 if (run.cancellable) TextButton(onClick = { vm.stopMove() }) { Text("Stop") }
             },
