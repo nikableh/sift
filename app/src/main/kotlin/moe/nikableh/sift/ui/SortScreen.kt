@@ -76,7 +76,10 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.TwoRowsTopAppBar
 import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
@@ -117,6 +120,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -598,68 +602,19 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
 
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)) {
-        val barWidth = maxWidth
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // Not tied to idle, because the system Back it mirrors works during a move too
-            FilledTonalIconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
-            }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val barWidth = maxWidth - 16.dp
 
-            // The menu hangs off the details, so the panel under the photo holds nothing but folder buttons
-            Column(
-                Modifier
-                    .weight(1f)
-                    // The back button's touch area keeps the highlight this far from it, and Review gets the same
-                    .padding(end = 4.dp)
-                    .clip(MaterialTheme.shapes.medium)
-                    .clickable(enabled = idle, onClickLabel = "Open menu", role = Role.Button) { menu = true }
-                    .semantics { stateDescription = if (menu) "Expanded" else "Collapsed" }
-                    .padding(horizontal = 12.dp, vertical = 4.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // The album leads. With several of them it is what changes from one photo to the next
-                    Text(
-                        if (photo == null) folder else vm.titleOf(photo),
-                        Modifier.weight(1f, fill = false),
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        // Album at the start and the photo's own folder at the end both say where it is
-                        overflow = TextOverflow.MiddleEllipsis,
-                    )
-                    Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(20.dp))
-                }
-                if (photo != null) {
-                    val details = MaterialTheme.typography.bodySmall
-                    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
-                    Row {
-                        // The position never gets cut. When even a line of its own is too narrow it breaks
-                        // after the slash, which a no-break space keeps with the first number
-                        Text("${(vm.index + 1).grouped()} / ${vm.photos.size.grouped()}", style = details, color = quiet)
-                        // A video's length, once its still frame is in
-                        vm.duration?.let { Text("  ·  ${clock(it)}", style = details, color = quiet, maxLines = 1) }
-                        // The date gives way first. The menu has it in full, with the name and the size
-                        Text(
-                            "  ·  ${dayFormat.format(Date(photo.mtime))}",
-                            Modifier.weight(1f, fill = false),
-                            style = details,
-                            color = quiet,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                }
-            }
-
-            // The count drops out where it would take more than a fair share of the bar, which at large
-            // font sizes would squeeze the photo details down to a few letters
-            val style = MaterialTheme.typography.labelLarge
-            val withCount = "Review ${vm.queued.grouped()}"
-            val maxButton = barWidth * 0.45f
-            val padding = ButtonDefaults.ButtonWithIconContentPadding
-            val room = maxButton - ButtonDefaults.IconSize - ButtonDefaults.IconSpacing -
-                padding.calculateLeftPadding(LayoutDirection.Ltr) - padding.calculateRightPadding(LayoutDirection.Ltr)
-            val fits = vm.queued > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
+        // The count drops out where it would take more than a fair share of the bar, which at large
+        // font sizes would squeeze the photo details down to a few letters
+        val style = MaterialTheme.typography.labelLarge
+        val withCount = "Review ${vm.queued.grouped()}"
+        val maxButton = barWidth * 0.45f
+        val padding = ButtonDefaults.ButtonWithIconContentPadding
+        val room = maxButton - ButtonDefaults.IconSize - ButtonDefaults.IconSpacing -
+            padding.calculateLeftPadding(LayoutDirection.Ltr) - padding.calculateRightPadding(LayoutDirection.Ltr)
+        val fits = vm.queued > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
+        val review = @Composable {
             Button(
                 onClick = { vm.reviewSelections() },
                 shapes = ButtonDefaults.shapes(),
@@ -672,14 +627,115 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 FitLabel(if (fits) withCount else "Review", style)
             }
         }
+        // Not tied to idle, because the system Back it mirrors works during a move too
+        val back = @Composable {
+            FilledTonalIconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) {
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
+            }
+        }
+        val title = if (photo == null) folder else vm.titleOf(photo)
+        val menuTarget = Modifier
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(enabled = idle, onClickLabel = "Open menu", role = Role.Button) { menu = true }
+            .semantics { stateDescription = if (menu) "Expanded" else "Collapsed" }
+
+        @Composable
+        fun details(style: TextStyle, color: Color) {
+            if (photo == null) return
+            Row {
+                // The position never gets cut. When even a line of its own is too narrow it breaks
+                // after the slash, which a no-break space keeps with the first number
+                Text("${(vm.index + 1).grouped()} / ${vm.photos.size.grouped()}", style = style, color = color)
+                // A video's length, once its still frame is in
+                vm.duration?.let { Text("  ·  ${clock(it)}", style = style, color = color, maxLines = 1) }
+                // The date gives way first. The menu has it in full, with the name and the size
+                Text(
+                    "  ·  ${dayFormat.format(Date(photo.mtime))}",
+                    Modifier.weight(1f, fill = false),
+                    style = style,
+                    color = color,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        // Decided from every album title in the set rather than per photo, so the photo below keeps its
+        // height from one swipe to the next. Review is taken at its widest so the count can't flip it
+        val titleStyle = MaterialTheme.typography.titleSmall
+        val titles = remember(vm.photos, folder) { vm.photos.mapTo(HashSet()) { vm.titleOf(it) } + folder }
+        val titleRoom = barWidth - 48.dp - 4.dp - 24.dp - 20.dp - maxButton
+        val flexible = remember(titles, titleStyle, titleRoom, density) {
+            val roomPx = with(density) { titleRoom.roundToPx() }
+            titles.any { measurer.measure(it, titleStyle).size.width > roomPx }
+        }
+
+        if (flexible) {
+            TwoRowsTopAppBar(
+                title = { expanded ->
+                    // The collapsed row's copy stays hidden without a scroll behaviour, so it keeps one
+                    // line and no tap target and can't make that row taller than it looks
+                    if (expanded) {
+                        Row(menuTarget, verticalAlignment = Alignment.CenterVertically) {
+                            Text(title, Modifier.weight(1f, fill = false), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Icon(Icons.Rounded.ArrowDropDown, null)
+                        }
+                    } else {
+                        Text(title, maxLines = 1)
+                    }
+                },
+                subtitle = if (photo == null) null else { expanded ->
+                    if (expanded) details(LocalTextStyle.current, LocalContentColor.current)
+                },
+                navigationIcon = back,
+                actions = { review() },
+                // The viewer already keeps clear of the status bar and the start side
+                windowInsets = WindowInsets(0),
+            )
+        } else {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                back()
+
+                // The menu hangs off the details, so the panel under the photo holds nothing but folder buttons
+                Column(
+                    Modifier
+                        .weight(1f)
+                        // The back button's touch area keeps the highlight this far from it, and Review gets the same
+                        .padding(end = 4.dp)
+                        .then(menuTarget)
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // The album leads. With several of them it is what changes from one photo to the next
+                        Text(
+                            title,
+                            Modifier.weight(1f, fill = false),
+                            style = titleStyle,
+                            maxLines = 1,
+                            // Album at the start and the photo's own folder at the end both say where it is
+                            overflow = TextOverflow.MiddleEllipsis,
+                        )
+                        Icon(Icons.Rounded.ArrowDropDown, null, Modifier.size(20.dp))
+                    }
+                    details(MaterialTheme.typography.bodySmall, MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                review()
+            }
+        }
         // Hangs off the bar as a whole, so it can be as wide as the bar. The cap keeps it a panel on a tablet
-        SortMenu(
-            vm,
-            photo?.file,
-            photo?.let { "${Formatter.formatShortFileSize(context, it.size)}  ·  ${timeFormat.format(Date(it.mtime))}" },
-            width = min(barWidth - 8.dp, 480.dp),
-            expanded = menu,
-        ) { menu = false }
+        Box(Modifier.matchParentSize().padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)) {
+            SortMenu(
+                vm,
+                photo?.file,
+                photo?.let { "${Formatter.formatShortFileSize(context, it.size)}  ·  ${timeFormat.format(Date(it.mtime))}" },
+                width = min(barWidth - 8.dp, 480.dp),
+                expanded = menu,
+            ) { menu = false }
+        }
     }
 }
 
