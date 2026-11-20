@@ -156,7 +156,7 @@ fun Dialogs(vm: SiftViewModel) {
                 onDismissRequest = close,
                 icon = { Icon(Icons.Rounded.DoneAll, null) },
                 title = { Text("Moved ${files(d.result.moved)}") },
-                text = { applyDetails(d.result)?.let { Text(it) } },
+                text = { applyDetails(d.result)?.let { Column(Modifier.verticalScroll(rememberScrollState())) { Text(it) } } },
                 confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
                 dismissButton = {
                     val batch = d.batch
@@ -185,7 +185,11 @@ fun Dialogs(vm: SiftViewModel) {
             AlertDialog(
                 onDismissRequest = close,
                 title = { Text("Moved ${d.restored.grouped()} back") },
-                text = { Text("${d.failed.size.grouped()} could not be moved back:\n" + failureLines(d.failed) + "\n\nThey stay in the folders they were moved to.") },
+                text = {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        Text("${d.failed.size.grouped()} could not be moved back:\n" + failureLines(d.failed) + "\n\nThey stay in the folders they were moved to.")
+                    }
+                },
                 confirmButton = { TextButton(onClick = close) { Text("OK") } },
             )
         }
