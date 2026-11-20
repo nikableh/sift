@@ -202,29 +202,31 @@ fun LicensesScreen(vm: SiftViewModel) {
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = { BackBar("Licenses", vm) },
     ) { padding ->
-        Page(padding) {
-            SectionTitle("Libraries")
-            Text(
-                "Sift is built with these. All of them come under the Apache License 2.0, which follows the list.",
-                Modifier.padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Column(
-                Modifier.semantics { collectionInfo = CollectionInfo(libraries.size, 1) },
-                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
-            ) {
-                libraries.forEachIndexed { i, (name, group) ->
-                    SegmentedListItem(
-                        shapes = ListItemDefaults.segmentedShapes(index = i, count = libraries.size),
-                        modifier = Modifier.semantics { collectionItemInfo = CollectionItemInfo(i, 1, 0, 1) },
-                        colors = segmentColors(),
-                        supportingContent = { Text(group) },
-                    ) { Text(name) }
+        Page(padding, Alignment.CenterHorizontally) {
+            Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
+                SectionTitle("Libraries")
+                Text(
+                    "Sift is built with these. All of them come under the Apache License 2.0, which follows the list.",
+                    Modifier.padding(start = 4.dp, end = 4.dp, bottom = 12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Column(
+                    Modifier.semantics { collectionInfo = CollectionInfo(libraries.size, 1) },
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+                ) {
+                    libraries.forEachIndexed { i, (name, group) ->
+                        SegmentedListItem(
+                            shapes = ListItemDefaults.segmentedShapes(index = i, count = libraries.size),
+                            modifier = Modifier.semantics { collectionItemInfo = CollectionItemInfo(i, 1, 0, 1) },
+                            colors = segmentColors(),
+                            supportingContent = { Text(group) },
+                        ) { Text(name) }
+                    }
                 }
+                SectionTitle("Apache License 2.0")
+                LicenseText(apache)
             }
-            SectionTitle("Apache License 2.0")
-            LicenseText(apache)
         }
     }
 }
