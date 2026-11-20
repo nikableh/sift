@@ -370,7 +370,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         settle?.cancel()
         glide?.end()
         scroller.forceFinished(true)
-        matchHdr(on = false)
+        matchHdr(allowed = false)
         super.onDetachedFromWindow()
     }
 
@@ -378,8 +378,9 @@ class ZoomImageView(ctx: Context) : View(ctx) {
      * The window draws an Ultra HDR photo's extra brightness only in HDR mode. That mode raises the
      * screen's brightness and can dim the rest of the app, so it lasts only while such a photo is the current page
      */
-    private fun matchHdr(on: Boolean = isAttachedToWindow && bitmap?.hasGainmap() == true) {
+    private fun matchHdr(allowed: Boolean = true) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        val on = allowed && isAttachedToWindow && bitmap?.hasGainmap() == true
         val window = activity()?.window ?: return
         val mode = if (on) ActivityInfo.COLOR_MODE_HDR else ActivityInfo.COLOR_MODE_DEFAULT
         if (window.colorMode != mode) window.colorMode = mode
