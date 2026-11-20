@@ -487,11 +487,16 @@ private fun Details(vm: SiftViewModel, albums: List<AlbumStat>, enabled: Boolean
                 fadeOut(motion.fastEffectsSpec()),
         ) {
             Column {
+                // The checked subfolder row keeps the card's colours too, since its switch already shows the state
                 val colors = ListItemDefaults.colors(
                     containerColor = Color.Transparent,
                     contentColor = content,
                     supportingContentColor = content,
                     trailingContentColor = content,
+                    selectedContainerColor = Color.Transparent,
+                    selectedContentColor = content,
+                    selectedSupportingContentColor = content,
+                    selectedTrailingContentColor = content,
                 )
                 val sorted = vm.sortedAlbums
                 Column(Modifier.padding(top = 4.dp, bottom = 8.dp)) {
