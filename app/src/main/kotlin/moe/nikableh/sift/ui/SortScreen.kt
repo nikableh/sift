@@ -62,7 +62,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -554,17 +553,8 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 Spacer(Modifier.width(iconSpacing))
                 FitLabel(if (fits) withCount else "Review", MaterialTheme.typography.labelMedium, style)
             }
-            // The end card has its own filled Review, and one filled action per screen is enough
-            if (vm.gate == Gate.End) {
-                FilledTonalButton(
-                    onClick = { vm.reviewSelections() },
-                    shapes = ButtonDefaults.shapes(),
-                    enabled = vm.queued > 0 && idle,
-                    contentPadding = padding,
-                    modifier = Modifier.widthIn(max = maxButton),
-                    content = label,
-                )
-            } else {
+            // The end card has its own Review, and two buttons for one action is one too many
+            if (vm.gate != Gate.End) {
                 Button(
                     onClick = { vm.reviewSelections() },
                     shapes = ButtonDefaults.shapes(),
@@ -582,7 +572,9 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             }
         }
         val title = if (photo == null) folder else vm.titleOf(photo)
+        // With no photo the details line is gone, and the title alone would make a thin pressed shape
         val menuTarget = Modifier
+            .heightIn(min = 48.dp)
             .clip(MaterialTheme.shapes.medium)
             .clickable(enabled = idle, onClickLabel = "Open menu", role = Role.Button) { menu = true }
             .semantics { stateDescription = if (menu) "Expanded" else "Collapsed" }
@@ -646,7 +638,10 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             TopAppBar(
                 title = {
                     // The menu hangs off the details, so the panel under the photo holds nothing but folder buttons
-                    Column(Modifier.fillMaxWidth().then(menuTarget).padding(horizontal = 12.dp, vertical = 4.dp)) {
+                    Column(
+                        Modifier.fillMaxWidth().then(menuTarget).padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // The album leads. With several of them it is what changes from one photo to the next
                             Text(
