@@ -113,10 +113,10 @@ private fun Home(vm: SiftViewModel) {
             // Padding before the scroll ends the viewport above the buttons, which have no background
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(
-                Modifier.padding(start = 4.dp, top = 20.dp, bottom = 2.dp),
+                Modifier.padding(start = 4.dp, top = 20.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -130,7 +130,7 @@ private fun Home(vm: SiftViewModel) {
             AlbumCard(vm)
             DestinationsCard(vm)
             vm.lastBatchInfo?.let { batch ->
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "Last batch moved ${files(batch.moved)}",
                         style = MaterialTheme.typography.bodyMedium,
@@ -140,7 +140,7 @@ private fun Home(vm: SiftViewModel) {
                     TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch) }) { Text("Undo") }
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
