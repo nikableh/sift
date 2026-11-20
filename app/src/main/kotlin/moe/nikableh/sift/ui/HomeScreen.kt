@@ -78,6 +78,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -170,11 +171,17 @@ private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
         // A window this wide is most often a phone on its side, too short for the two-row bar, so a
         // single row slides fully away instead
         val wide = maxWidth >= 600.dp
+        val content = rememberScrollState()
+        // The bar only folds while the cards really scroll, so a page that fits holds still
+        val fits = { content.maxValue > 0 }
         val scroll = if (wide) {
-            TopAppBarDefaults.enterAlwaysScrollBehavior()
+            TopAppBarDefaults.enterAlwaysScrollBehavior(canScroll = fits)
         } else {
-            TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+            TopAppBarDefaults.exitUntilCollapsedScrollBehavior(canScroll = fits)
         }
+        // Folding the album list can leave a folded bar over a page that no longer scrolls back to open it
+        val overflows = content.maxValue > 0
+        LaunchedEffect(overflows) { if (!overflows) scroll.state.heightOffset = 0f }
         val direction = LocalLayoutDirection.current
         val title = @Composable { Text("Sift", Modifier.semantics { heading() }) }
         val about = @Composable {
@@ -204,7 +211,7 @@ private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 // Top padding inside it lets the cards pass under the collapsing bar
                 Modifier.fillMaxSize()
                     .padding(start = start, end = end, bottom = padding.calculateBottomPadding())
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(content)
                     .padding(top = padding.calculateTopPadding())
                     .padding(horizontal = margin),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
