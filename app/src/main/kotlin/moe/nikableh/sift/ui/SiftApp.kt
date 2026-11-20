@@ -105,18 +105,22 @@ fun SiftApp(vm: SiftViewModel) {
                             .apply { targetContentZIndex = -1f }
                     }
                 },
-            ) { (screen) ->
+            ) { (screen, depth) ->
+                // Only the screen on top of the back stack shows the snackbar, so the one sliding out never
+                // draws a second copy, and a back swipe that is called off leaves it where it was
+                val idle = remember { SnackbarHostState() }
+                val host = if (screen == vm.screen && depth == vm.backStack.size) snackbar else idle
                 // Opaque even where a screen draws no background of its own, or the one under it shows through
                 Box(Modifier.fillMaxSize().background(surface)) {
                     when (screen) {
                         Screen.Home -> saved.SaveableStateProvider("home") { HomeScreen(vm) }
                         // A video waits for the slide to end, so its picture never comes in halfway through one
                         Screen.Sort -> SortScreen(vm, settled = !transition.isRunning)
-                        Screen.Setup -> SetupScreen(vm, snackbar)
+                        Screen.Setup -> SetupScreen(vm, host)
                         Screen.Selections -> SelectionsScreen(vm)
-                        Screen.About -> AboutScreen(vm, snackbar)
+                        Screen.About -> AboutScreen(vm, host)
                         Screen.Licenses -> LicensesScreen(vm)
-                        is Screen.Picker -> PickerScreen(vm, screen.forSource, snackbar)
+                        is Screen.Picker -> PickerScreen(vm, screen.forSource, host)
                     }
                 }
             }
