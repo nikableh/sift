@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Done
@@ -35,6 +34,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
@@ -124,7 +124,11 @@ private fun Home(vm: SiftViewModel) {
                     style = MaterialTheme.typography.displaySmallEmphasized,
                     modifier = Modifier.weight(1f).semantics { heading() },
                 )
-                IconButton(onClick = { vm.open(Screen.About) }) { Icon(Icons.Outlined.Info, "About") }
+                IconButton(
+                    onClick = { vm.open(Screen.About) },
+                    shapes = IconButtonDefaults.shapes(),
+                    colors = IconButtonDefaults.iconButtonVibrantColors(),
+                ) { Icon(Icons.Rounded.Info, "About") }
             }
             MediaManagementCard(vm)
             AlbumCard(vm)
