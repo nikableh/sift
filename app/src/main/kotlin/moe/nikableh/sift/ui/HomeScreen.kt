@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -157,18 +158,17 @@ private fun Home(vm: SiftViewModel) {
             },
             bottomBar = { Actions(vm) },
         ) { padding ->
+            val start = padding.calculateStartPadding(direction)
+            val end = padding.calculateEndPadding(direction)
+            val margin = pageMargins(maxWidth - start - end)
             Column(
                 // Bottom padding before the scroll ends the viewport above the buttons, which have no background.
                 // Top padding inside it lets the cards pass under the collapsing bar
                 Modifier.fillMaxSize()
-                    .padding(
-                        start = padding.calculateStartPadding(direction),
-                        end = padding.calculateEndPadding(direction),
-                        bottom = padding.calculateBottomPadding(),
-                    )
+                    .padding(start = start, end = end, bottom = padding.calculateBottomPadding())
                     .verticalScroll(rememberScrollState())
                     .padding(top = padding.calculateTopPadding())
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = margin),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 MediaManagementCard(vm)
@@ -497,10 +497,13 @@ private fun Actions(vm: SiftViewModel) {
     val ready = !vm.scanning && !vm.busy
     BoxWithConstraints {
         val wide = maxWidth >= 600.dp
+        val insets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+        val direction = LocalLayoutDirection.current
+        val sides = insets.asPaddingValues().let { it.calculateStartPadding(direction) + it.calculateEndPadding(direction) }
         Column(
             Modifier.fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .windowInsetsPadding(insets)
+                .padding(horizontal = pageMargins(maxWidth - sides), vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             val review = @Composable { modifier: Modifier, interactions: MutableInteractionSource? ->

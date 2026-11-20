@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -79,6 +80,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -130,31 +132,35 @@ fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostSt
     ) { padding ->
         val slide = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
         val surface = MaterialTheme.colorScheme.surface
-        AnimatedContent(
-            targetState = Pane(browsing, dir),
-            // Same slides as between screens, deeper folders come in from the end
-            transitionSpec = {
-                if (targetState.depth >= initialState.depth) {
-                    slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 3 }
-                } else {
-                    (slideInHorizontally(slide) { -it / 3 } togetherWith slideOutHorizontally(slide) { it })
-                        .apply { targetContentZIndex = -1f }
-                }
-            },
-            label = "picker",
-        ) { pane ->
-            Box(Modifier.fillMaxSize().background(surface)) {
-                if (pane.browsing) {
-                    // The view model already holds the next folder's rows, so the pane sliding out keeps its own
-                    val live = pane == Pane(vm.browsing, vm.browseDir)
-                    val kept = remember { Kept(vm.folders, vm.mediaHere) }
-                    if (live) {
-                        kept.folders = vm.folders
-                        kept.here = vm.mediaHere
+        val direction = LocalLayoutDirection.current
+        BoxWithConstraints {
+            val margin = pageMargins(maxWidth - padding.calculateStartPadding(direction) - padding.calculateEndPadding(direction))
+            AnimatedContent(
+                targetState = Pane(browsing, dir),
+                // Same slides as between screens, deeper folders come in from the end
+                transitionSpec = {
+                    if (targetState.depth >= initialState.depth) {
+                        slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 3 }
+                    } else {
+                        (slideInHorizontally(slide) { -it / 3 } togetherWith slideOutHorizontally(slide) { it })
+                            .apply { targetContentZIndex = -1f }
                     }
-                    FolderList(vm, forSource, padding, pane.dir, kept.folders, kept.here)
-                } else {
-                    AlbumList(vm, forSource, padding)
+                },
+                label = "picker",
+            ) { pane ->
+                Box(Modifier.fillMaxSize().background(surface)) {
+                    if (pane.browsing) {
+                        // The view model already holds the next folder's rows, so the pane sliding out keeps its own
+                        val live = pane == Pane(vm.browsing, vm.browseDir)
+                        val kept = remember { Kept(vm.folders, vm.mediaHere) }
+                        if (live) {
+                            kept.folders = vm.folders
+                            kept.here = vm.mediaHere
+                        }
+                        FolderList(vm, forSource, padding, margin, pane.dir, kept.folders, kept.here)
+                    } else {
+                        AlbumList(vm, forSource, padding, margin)
+                    }
                 }
             }
         }
@@ -169,12 +175,12 @@ private data class Pane(val browsing: Boolean, val dir: File?) {
 private class Kept(var folders: List<Folder>, var here: Scanner.Count)
 
 @Composable
-private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingValues) {
+private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingValues, margin: Dp) {
     val albums = vm.albums
     LazyColumn(
         contentPadding = PaddingValues(
-            start = padding.calculateStartPadding(LocalLayoutDirection.current) + 16.dp,
-            end = padding.calculateEndPadding(LocalLayoutDirection.current) + 16.dp,
+            start = padding.calculateStartPadding(LocalLayoutDirection.current) + margin,
+            end = padding.calculateEndPadding(LocalLayoutDirection.current) + margin,
             top = padding.calculateTopPadding() + 4.dp,
             bottom = padding.calculateBottomPadding() + 16.dp,
         ),
@@ -315,14 +321,15 @@ private fun FolderList(
     vm: SiftViewModel,
     forSource: Boolean,
     padding: PaddingValues,
+    margin: Dp,
     dir: File?,
     folders: List<Folder>,
     here: Scanner.Count,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(
-            start = padding.calculateStartPadding(LocalLayoutDirection.current) + 16.dp,
-            end = padding.calculateEndPadding(LocalLayoutDirection.current) + 16.dp,
+            start = padding.calculateStartPadding(LocalLayoutDirection.current) + margin,
+            end = padding.calculateEndPadding(LocalLayoutDirection.current) + margin,
             top = padding.calculateTopPadding() + 4.dp,
             bottom = padding.calculateBottomPadding() + 16.dp,
         ),
