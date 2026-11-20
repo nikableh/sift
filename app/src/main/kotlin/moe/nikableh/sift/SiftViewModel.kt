@@ -96,6 +96,9 @@ class SelectionGroup(val dest: String, val rows: List<Selection>)
 /** One Move's journal. */
 data class Batch(val journal: File, val moved: Int)
 
+/** The sorting screen's claim on [ImageLoader]'s decodes. */
+private const val SORT = "sort"
+
 /** Screen state in front of [Store], which Compose can't observe on its own. Main thread only. */
 class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
@@ -557,7 +560,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun showImage(path: String?) {
         if (path == null) {
-            ImageLoader.wanted = emptySet()
+            ImageLoader.want(SORT, emptySet())
             prevBitmap = null
             nextBitmap = null
         }
@@ -625,7 +628,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         }
         val want = HashSet<String>()
         for (d in intArrayOf(0, 1, 2, 3, -1)) photos.getOrNull(index + d)?.let { want.add(it.path) }
-        ImageLoader.wanted = want
+        ImageLoader.want(SORT, want)
         if (bitmapPath != p.path) {
             showImage(p.path)
             bitmap = ImageLoader.cached(p.file)

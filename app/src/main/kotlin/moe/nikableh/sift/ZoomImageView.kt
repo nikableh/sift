@@ -68,6 +68,12 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     /** True once the image is opening or open, false as soon as it starts back to its slot. */
     var onOpen: ((Boolean) -> Unit)? = null
 
+    /**
+     * For a viewer that opens over a list, where the slot is only the thumbnail it grows out of.
+     * A sideways swipe pages while the image is open, and a page with nothing to show stays open
+     */
+    var gallery = false
+
     private var bitmap: Bitmap? = null
     private var prev: Bitmap? = null
     private var next: Bitmap? = null
@@ -110,6 +116,9 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private var lastY = 0f
     private var tracking = false
 
+    /** Whether this touch turns pages while the image is open. Decided by its first move, so it never closes the image too */
+    private var paging = false
+
     /** Where the drag that closes the image is measured from, and whether this touch may still become one. */
     private var downX = 0f
     private var downY = 0f
@@ -146,6 +155,9 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private val bounce = (BOUNCE_DP * resources.displayMetrics.density).roundToInt()
 
     val isZoomed get() = zoom > 1.01f
+
+    /** True while the image is out of its slot, see [onRaise]. */
+    val isRaised get() = raised
 
     private val page get() = frame.width() + gap
 
@@ -195,7 +207,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             dragX = 0f
             unzoom()
             // Nothing to show, and whatever stands in for it is under this view
-            if (b == null) {
+            if (b == null && !gallery) {
                 spread = 0f
                 setOpened(false)
                 raise()
@@ -231,8 +243,9 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         )
     }
 
-    private fun open() {
-        if (bitmap == null || glide != null || spread != 0f) return
+    /** Spreads the image over the screen. [evenEmpty] opens the black alone when there is no image to show. */
+    fun open(evenEmpty: Boolean = false) {
+        if ((bitmap == null && !evenEmpty) || glide != null || spread != 0f) return
         glideTo(1f, 1f, 0f, 0f)
     }
 
@@ -645,8 +658,17 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         }
 
         override fun onScroll(e1: MotionEvent?, e2: MotionEvent, dx: Float, dy: Float): Boolean {
-            // Pages turn in the slot only. An open image is closed before the next one is looked at
-            if (scaleDetector.isInProgress || e2.pointerCount > 1 || raised) return true
+            if (scaleDetector.isInProgress || e2.pointerCount > 1) return true
+            // Pages turn in the slot only, where an open image is closed before the next one is looked at.
+            // In a gallery a move that starts out more sideways than up or down turns them open too
+            if (raised) {
+                if (!gallery || dismissing || isZoomed || glide != null) return true
+                if (!paging) {
+                    if (abs(e2.x - downX) <= abs(e2.y - downY)) return true
+                    paging = true
+                    canDismiss = false
+                }
+            }
             val to = dragX - dx
             // Resists when there is no page on that side
             val blocked = (to > 0f && !canPrev) || (to < 0f && !canNext)
@@ -674,7 +696,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
                     if (x == 0) 0 else bounce, if (y == 0) 0 else bounce,
                 )
                 postInvalidateOnAnimation()
-            } else if (!raised && abs(vx) > FLICK_DP * resources.displayMetrics.density && abs(vx) > abs(vy) * 1.5f) {
+            } else if ((!raised || paging) && abs(vx) > FLICK_DP * resources.displayMetrics.density && abs(vx) > abs(vy) * 1.5f) {
                 flingDir = if (vx < 0) 1 else -1
             }
             return true
@@ -730,7 +752,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         val moved = dragX - downDragX
         val past = when {
             dismissing -> abs(panY) > height * DISMISS_PART
-            raised -> false
+            raised && !paging -> false
             else -> abs(moved) > frame.width() * 0.2f && (if (moved < 0) canNext else canPrev)
         }
         if (past == pastCommit) return
@@ -746,6 +768,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             // In its slot the image has the header and the buttons lying over the rest of the view, and what they let through isn't for it
             if (!raised && !slot.contains(event.x, event.y)) return false
             flingDir = 0
+            paging = false
             settle?.cancel()
             downDragX = dragX
             pastCommit = false
@@ -790,7 +813,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             speed?.recycle()
             speed = null
             var dir = when {
-                raised || action == MotionEvent.ACTION_CANCEL -> 0
+                (raised && !paging) || action == MotionEvent.ACTION_CANCEL -> 0
                 // A flick back after peeking at the neighbour returns to the current photo
                 flingDir != 0 -> if (moved * flingDir > 0f) 0 else flingDir
                 abs(moved) > frame.width() * 0.2f -> if (moved < 0) 1 else -1

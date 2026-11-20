@@ -30,7 +30,17 @@ object ImageLoader {
 
     /** Paths worth decoding right now. Queued work for anything else is dropped, so fast tapping doesn't pile up. */
     @Volatile
-    var wanted: Set<String> = emptySet()
+    private var wanted: Set<String> = emptySet()
+    private val wantedBy = HashMap<String, Set<String>>()
+
+    /**
+     * Sets the paths one viewer wants. The sorting screen keeps its photos wanted while the review
+     * viewer pages, so neither drops the other's decodes and their callbacks with them. Main thread only
+     */
+    fun want(owner: String, paths: Set<String>) {
+        if (paths.isEmpty()) wantedBy.remove(owner) else wantedBy[owner] = paths
+        wanted = wantedBy.values.singleOrNull() ?: wantedBy.values.flatMapTo(HashSet()) { it }
+    }
 
     fun setScreen(w: Int, h: Int) {
         screenLong = max(w, h)

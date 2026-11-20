@@ -3,47 +3,33 @@ package moe.nikableh.sift.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import android.view.SurfaceView
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.BoundsTransform
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -56,7 +42,6 @@ import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.UnfoldMore
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -70,28 +55,26 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
@@ -105,13 +88,12 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import coil3.compose.AsyncImage
-import java.io.File
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.MoveRunner
 import moe.nikableh.sift.Scanner
 import moe.nikableh.sift.Selection
+import moe.nikableh.sift.SelectionGroup
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
 import moe.nikableh.sift.VideoPlayer
@@ -123,26 +105,27 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val ready = !vm.busy && !vm.scanning
     var collapsed by rememberSaveable(stateSaver = KeySetSaver) { mutableStateOf(emptySet<String>()) }
     val allCollapsed = groups.all { it.dest in collapsed }
-    var preview by remember { mutableStateOf<Selection?>(null) }
+    val stage = remember { ReviewStage() }
     val layoutDirection = LocalLayoutDirection.current
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
-    val motion = MaterialTheme.motionScheme
     val list = rememberLazyListState()
     val context = LocalContext.current
     val player = remember { VideoPlayer(context.applicationContext) }
     DisposableEffect(player) {
         onDispose { player.release() }
     }
-    val previews = updateTransition(preview, label = "preview")
-    // Starts once the still frame has grown into place, and closes the moment the preview starts to
-    // shrink back, so the picture never rides on the animation
-    val settled = previews.currentState == previews.targetState && !previews.isRunning
-    VideoPlayback(player, preview?.takeIf { settled && Scanner.isVideo(it.file.name) }?.file?.path, vm.videoMuted)
-
-    BackHandler(enabled = preview != null) { preview = null }
+    // Paging in the viewer brings its row into the list, so closing shrinks the picture back into the thumbnail
+    LaunchedEffect(stage.row) {
+        val row = stage.row ?: return@LaunchedEffect
+        if (!stage.raised || list.layoutInfo.visibleItemsInfo.any { it.key == row.key() }) return@LaunchedEffect
+        val item = itemIndexOf(groups, collapsed, row) ?: return@LaunchedEffect
+        list.scrollToItem(item)
+        // Clear of the app bar and the pinned folder header
+        list.scrollBy(-list.layoutInfo.viewportSize.height / 3f)
+    }
 
     // In the tree rather than a dialog window, so the photo can grow out of its thumbnail
-    SharedTransitionLayout {
+    Box(Modifier.fillMaxSize()) {
         // The defaults cover system bars only, so in landscape the list and app bar ran under the camera cutout
         Scaffold(
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -222,15 +205,16 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                                     collapsed = if (folded) collapsed - dest else collapsed + dest
                                 }
                             }
-                            if (!folded) itemsIndexed(rows, key = { _, row -> row.file.path }, contentType = { _, _ -> "photo" }) { i, row ->
+                            // One photo can wait in several groups, so the path alone repeats
+                            if (!folded) itemsIndexed(rows, key = { _, row -> row.key() }, contentType = { _, _ -> "photo" }) { i, row ->
                                 SelectionRow(
                                     row,
                                     vm.placeOf(row.file),
                                     ready,
                                     i,
                                     rows.size,
-                                    previewing = preview?.file?.path == row.file.path,
-                                    onPreview = { preview = row },
+                                    stage,
+                                    onPreview = { stage.row = row },
                                 ) { vm.dropSelection(row) }
                             }
                         }
@@ -238,22 +222,22 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 }
             }
         }
-        previews.AnimatedContent(
-            transitionSpec = {
-                (fadeIn(motion.defaultEffectsSpec()) togetherWith fadeOut(motion.defaultEffectsSpec())).using(null)
-            },
-        ) { shown ->
-            if (shown != null) {
-                Preview(shown, vm.placeOf(shown.file), this, player, vm.videoMuted, vm::changeMuted) { preview = null }
-            }
-        }
+        ReviewViewer(vm, groups, stage, player)
     }
 }
 
-@Composable
-private fun spatialBounds(): BoundsTransform {
-    val spec = MaterialTheme.motionScheme.defaultSpatialSpec<Rect>()
-    return BoundsTransform { _, _ -> spec }
+/** Where [row] sits in the list, counting the group headers, or null while its group is folded. */
+private fun itemIndexOf(groups: List<SelectionGroup>, collapsed: Set<String>, row: Selection): Int? {
+    var item = 0
+    for (group in groups) {
+        val folded = group.dest in collapsed
+        if (group.dest == row.dest) {
+            val at = group.rows.indexOf(row)
+            return if (folded || at < 0) null else item + 1 + at
+        }
+        item += 1 + if (folded) 0 else group.rows.size
+    }
+    return null
 }
 
 /** Folders that are no longer buttons get no colour. */
@@ -312,16 +296,19 @@ fun Dot(color: Color?) {
 }
 
 @Composable
-private fun SharedTransitionScope.SelectionRow(
+private fun SelectionRow(
     row: Selection,
     place: String?,
     enabled: Boolean,
     index: Int,
     count: Int,
-    previewing: Boolean,
+    stage: ReviewStage,
     onPreview: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    // Hidden only once the viewer is up, so the thumbnail stays while the full picture decodes
+    val previewing = stage.row === row && stage.raised
+    DisposableEffect(stage, row) { onDispose { stage.thumbs.remove(row) } }
     SegmentedListItem(
         onClick = onPreview,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
@@ -333,14 +320,19 @@ private fun SharedTransitionScope.SelectionRow(
             .semantics { onClick(label = "Preview") { onPreview(); true } },
         leadingContent = {
             // List spec leading media sizes: 114x64dp for a video, 56dp for an image
-            Box(if (Scanner.isVideo(row.file.name)) Modifier.size(width = 114.dp, height = 64.dp) else Modifier.size(56.dp)) {
+            Box(
+                (if (Scanner.isVideo(row.file.name)) Modifier.size(width = 114.dp, height = 64.dp) else Modifier.size(56.dp))
+                    .onGloballyPositioned {
+                        stage.thumbs[row] = it
+                        if (stage.row === row) stage.place()
+                    },
+            ) {
                 AnimatedVisibility(!previewing, enter = fadeIn(), exit = fadeOut()) {
                     AsyncImage(
                         model = row.file,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .sharedBounds(rememberSharedContentState(row.file.path), this, boundsTransform = spatialBounds())
                             .fillMaxSize()
                             .clip(MaterialTheme.shapes.small)
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest),
@@ -355,136 +347,6 @@ private fun SharedTransitionScope.SelectionRow(
         supportingContent = place?.let { { Text(it, maxLines = 1, overflow = TextOverflow.StartEllipsis) } },
     ) { Text(row.file.name, maxLines = 3, overflow = TextOverflow.Ellipsis) }
 }
-
-/** The whole photo or video fitted to the screen, so a thumbnail's crop doesn't hide what is being moved. */
-@Composable
-private fun SharedTransitionScope.Preview(
-    row: Selection,
-    place: String?,
-    scope: AnimatedVisibilityScope,
-    player: VideoPlayer,
-    muted: Boolean,
-    onMuted: (Boolean) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val file = row.file
-    val video = Scanner.isVideo(file.name)
-    val failed = video && player.failed && player.path == file.path
-    // TalkBack reads the file name from the caption, so the picture says where it goes
-    val description = "${if (video) "Video" else "Photo"} going to ${Store.labelFor(row.dest)}"
-    Box(Modifier.fillMaxSize()) {
-        // Beside the content instead of around it, so a touch on the video or its bar doesn't close the preview
-        Spacer(
-            Modifier.matchParentSize()
-                // The dim the dialog window used to draw
-                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClickLabel = "Close preview",
-                    onClick = onDismiss,
-                ),
-        )
-        Column(
-            Modifier.fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            val picture = Modifier.weight(1f, fill = false)
-            if (video) {
-                VideoPicture(file, description, scope, player, picture)
-            } else {
-                AsyncImage(
-                    model = file,
-                    contentDescription = description,
-                    contentScale = ContentScale.Fit,
-                    modifier = picture
-                        .sharedBounds(rememberSharedContentState(file.path), scope, boundsTransform = spatialBounds())
-                        .fillMaxWidth(),
-                )
-            }
-            if (video && !failed) {
-                VideoBar(
-                    player,
-                    muted,
-                    onMuted,
-                    // The toolbar takes no touches between its buttons, which would reach the dim and close the preview
-                    Modifier.widthIn(max = 480.dp).fillMaxWidth().pointerInput(Unit) {},
-                )
-            }
-            // The list row cuts the name and place short, here they are shown whole
-            Surface(
-                Modifier.fillMaxWidth(),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.inverseSurface,
-            ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(file.name, style = MaterialTheme.typography.bodyMedium)
-                    if (place != null) Text(place, style = MaterialTheme.typography.bodySmall)
-                    if (failed) Text("Can't play this video", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-    }
-}
-
-/**
- * The still frame, which grows out of the list row, with the playing picture over it once the
- * first frame is in. A tap plays or pauses, as on the sorting screen
- */
-@Composable
-private fun SharedTransitionScope.VideoPicture(
-    file: File,
-    description: String,
-    scope: AnimatedVisibilityScope,
-    player: VideoPlayer,
-    modifier: Modifier,
-) {
-    var still by remember { mutableFloatStateOf(0f) }
-    val mine = player.path == file.path
-    // The still frame's shape stands in until the decoder reports the video's own
-    val aspect = player.aspect.takeIf { mine && it > 0f } ?: still
-    Box(
-        modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClickLabel = if (mine && player.playing) "Pause" else "Play",
-            ) { player.toggle() }
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        AsyncImage(
-            model = file,
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            onSuccess = {
-                val size = it.painter.intrinsicSize
-                if (size.width > 0f && size.height > 0f) still = size.width / size.height
-            },
-            // Without a still frame the box would have no height for the picture to play in
-            onError = { still = 16f / 9f },
-            modifier = Modifier
-                .sharedBounds(rememberSharedContentState(file.path), scope, boundsTransform = spatialBounds())
-                .fillMaxWidth(),
-        )
-        AndroidView(
-            factory = { SurfaceView(it).also(player::attach) },
-            // Moved out of sight instead of hidden. Hiding a SurfaceView destroys its surface, and the
-            // first frame needs one to land on
-            update = { it.translationX = if (mine && player.showing) 0f else AWAY },
-            onRelease = player::detach,
-            // Fitted the way the still frame is, so the picture covers it exactly
-            modifier = if (aspect > 0f) Modifier.aspectRatio(aspect) else Modifier.matchParentSize(),
-        )
-    }
-}
-
-/** Farther than any screen is wide. */
-private const val AWAY = 100_000f
 
 /** Height of the small extended FAB, which material3 doesn't expose. */
 private val FabHeight = 56.dp

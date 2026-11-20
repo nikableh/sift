@@ -19,6 +19,7 @@ class MediaView(ctx: Context) : ViewGroup(ctx) {
     /** Where the pager draws its current page, the still frame the picture covers. */
     private val page = RectF()
     private val slot = RectF()
+    private val full = RectF()
     private var aspect = 0f
     private var shown = false
 
@@ -59,12 +60,16 @@ class MediaView(ctx: Context) : ViewGroup(ctx) {
     /**
      * Fits the picture into the still frame the way the pager fits the still into its room, so it
      * covers the still exactly however far it is zoomed, panned or dragged. A video without a still
-     * frame sits in the slot
+     * frame sits in the slot, or fills the screen once open
      */
     private fun place() {
         val w = width
         val h = height
-        val room = if (page.isEmpty) slot else page
+        val room = when {
+            !page.isEmpty -> page
+            pager.isRaised -> full.apply { set(0f, 0f, w.toFloat(), h.toFloat()) }
+            else -> slot
+        }
         // Moved out of sight instead of hidden. Hiding a SurfaceView destroys its surface, and the
         // player would have to set its decoder up again for the next video
         if (!shown || w == 0 || h == 0 || room.isEmpty) {

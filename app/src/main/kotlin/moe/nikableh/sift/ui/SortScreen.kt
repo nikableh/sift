@@ -380,7 +380,7 @@ private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
 
 /** The light theme's dark clock and status icons can't be seen on the black behind an open photo. */
 @Composable
-private fun PaleBarIcons() {
+fun PaleBarIcons() {
     val window = LocalActivity.current?.window ?: return
     val view = LocalView.current
     DisposableEffect(window) {
