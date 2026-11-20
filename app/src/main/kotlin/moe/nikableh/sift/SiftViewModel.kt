@@ -805,7 +805,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         // A folder read counts against the queue from another thread, so the queue holds still until it ends
         if (busy || scanning) return
         preparing = true
-        // Every way in is a dialog button
+        // Most ways in are dialog buttons, the clean move snackbar is the other
         dialog = null
         viewModelScope.launch {
             val moved = withContext(Dispatchers.IO) { Mover.readJournal(batch.journal).map { it.second } }
