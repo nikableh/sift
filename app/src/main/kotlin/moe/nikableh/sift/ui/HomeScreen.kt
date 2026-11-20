@@ -2,6 +2,7 @@ package moe.nikableh.sift.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -41,6 +42,8 @@ import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroup
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledIconButton
@@ -61,6 +64,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -471,11 +475,12 @@ private fun Actions(vm: SiftViewModel) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            val review = @Composable { modifier: Modifier ->
+            val review = @Composable { modifier: Modifier, interactions: MutableInteractionSource? ->
                 FilledTonalButton(
                     onClick = { vm.reviewSelections() },
                     enabled = ready,
                     shapes = ButtonDefaults.shapes(),
+                    interactionSource = interactions,
                     modifier = modifier.height(size),
                 ) {
                     Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
@@ -484,13 +489,14 @@ private fun Actions(vm: SiftViewModel) {
                     FitLabel(reviewLabel(vm), style)
                 }
             }
-            val start = @Composable { modifier: Modifier ->
+            val start = @Composable { modifier: Modifier, interactions: MutableInteractionSource? ->
                 // With nothing to sort the button leads to more albums, like the one on the sorting screen
                 val add = !vm.scanning && vm.photos.isEmpty()
                 Button(
                     onClick = { if (add) vm.pickAlbums() else vm.open(Screen.Sort) },
                     enabled = ready,
                     shapes = ButtonDefaults.shapes(),
+                    interactionSource = interactions,
                     modifier = modifier.height(size),
                 ) {
                     Icon(
@@ -520,13 +526,31 @@ private fun Actions(vm: SiftViewModel) {
                 )
             }
             if (wide) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (queued > 0) review(Modifier.weight(1f))
-                    start(Modifier.weight(1f))
+                val reviewInteractions = remember { MutableInteractionSource() }
+                val startInteractions = remember { MutableInteractionSource() }
+                // Two buttons always fit the width, so the overflow menu never shows
+                ButtonGroup(
+                    overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(it) },
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (queued > 0) {
+                        customItem(
+                            buttonGroupContent = {
+                                review(Modifier.weight(1f).animateWidth(reviewInteractions), reviewInteractions)
+                            },
+                            menuContent = {},
+                        )
+                    }
+                    customItem(
+                        buttonGroupContent = {
+                            start(Modifier.weight(1f).animateWidth(startInteractions), startInteractions)
+                        },
+                        menuContent = {},
+                    )
                 }
             } else {
-                if (queued > 0) review(Modifier.fillMaxWidth())
-                start(Modifier.fillMaxWidth())
+                if (queued > 0) review(Modifier.fillMaxWidth(), null)
+                start(Modifier.fillMaxWidth(), null)
             }
         }
     }
