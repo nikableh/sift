@@ -38,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SnackbarHost
@@ -47,7 +48,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +72,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
@@ -134,8 +140,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     leadingContent = { AlbumThumb(stat?.cover) },
                     supportingContent = {
                         Column {
-                            // Paths wrap instead of being cut, the whole path matters here
-                            Text(path)
+                            PathText(path)
                             // An album added a moment ago has no counts until it has been read
                             if (stat != null && !vm.scanning) {
                                 // What is queued only gets a mention when there is something, or the line says one number twice
@@ -180,7 +185,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                             colors = segmentColors(),
                             modifier = Modifier.animateItem(),
                             leadingContent = { AlbumThumb(null) },
-                            supportingContent = { Text(path) },
+                            supportingContent = { PathText(path) },
                             trailingContent = {
                                 IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove ${File(path).name}") }
                             },
@@ -243,7 +248,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     leadingContent = {
                         Box(Modifier.size(18.dp).clip(CircleShape).background(folderColor(i).tile()))
                     },
-                    supportingContent = { Text(dest.path) },
+                    supportingContent = { PathText(dest.path) },
                     trailingContent = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { vm.moveDest(i, i - 1) }, enabled = i > 0) {
@@ -286,6 +291,18 @@ private fun SectionHeader(text: String, addLabel: String, modifier: Modifier = M
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             Text("Add")
         }
+    }
+}
+
+/** One line cut in the middle, so the storage root and the folder stay. A long press shows the whole path. */
+@Composable
+private fun PathText(path: String) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(path) } },
+        state = rememberTooltipState(),
+    ) {
+        Text(path, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
     }
 }
 
