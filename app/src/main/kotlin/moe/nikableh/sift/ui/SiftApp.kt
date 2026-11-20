@@ -2,14 +2,11 @@ package moe.nikableh.sift.ui
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -94,20 +91,15 @@ fun SiftApp(vm: SiftViewModel) {
                 // A slide instead of a fade: the first fade after launch stutters for a third of a
                 // second while the GPU sets up drawing at partial alpha, and opaque screens need none
                 transitionSpec = {
-                    if (!animationsOn) {
-                        // Reduced motion asks for a plain fade, never a slide
-                        fadeIn() togetherWith fadeOut()
-                    } else if (targetState.second >= initialState.second) {
-                        slideInHorizontally(tween(400, easing = EmphasizedDecelerate)) { it } togetherWith
-                            slideOutHorizontally(tween(400, easing = Emphasized)) { -it / 3 }
-                    } else {
-                        // The screen being left slides off on top of the one it came from. During a back
-                        // swipe both move in step with the finger, which the curves would run ahead of
+                    val forward = targetState.second >= initialState.second
+                    if (animationsOn && swiping && !forward) {
+                        // During a back swipe both screens move in step with the finger, which the curves
+                        // would run ahead of
                         val follow = tween<IntOffset>(400, easing = LinearEasing)
-                        val reveal = if (swiping) follow else tween(400, easing = EmphasizedDecelerate)
-                        val leave = if (swiping) follow else tween(200, easing = EmphasizedAccelerate)
-                        (slideInHorizontally(reveal) { -it / 3 } togetherWith slideOutHorizontally(leave) { it })
+                        (slideInHorizontally(follow) { -it / 3 } togetherWith slideOutHorizontally(follow) { it })
                             .apply { targetContentZIndex = -1f }
+                    } else {
+                        screenSlide(forward, animationsOn)
                     }
                 },
             ) { (screen, depth) ->
@@ -152,11 +144,6 @@ fun KeepScreenOn() {
         }
     }
 }
-
-// Material's emphasized easing curves. The library keeps its own copies internal
-private val Emphasized = CubicBezierEasing(0.2f, 0f, 0f, 1f)
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
-private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
 /** Runs a back swipe's slide on to its end, or back to its start, once the finger lets go */
 private val Settle = tween<Float>(400, easing = EmphasizedDecelerate)

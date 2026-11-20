@@ -9,9 +9,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -112,7 +109,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
@@ -159,19 +155,9 @@ fun PaneSwap(
     content: @Composable (Step) -> Unit,
 ) {
     val animationsOn = rememberAnimationsOn()
-    val slide = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
     val surface = MaterialTheme.colorScheme.surface
     transition.AnimatedContent(
-        transitionSpec = {
-            if (!animationsOn) {
-                fadeIn() togetherWith fadeOut()
-            } else if (targetState > initialState) {
-                slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 3 }
-            } else {
-                (slideInHorizontally(slide) { -it / 3 } togetherWith slideOutHorizontally(slide) { it })
-                    .apply { targetContentZIndex = -1f }
-            }
-        },
+        transitionSpec = { screenSlide(targetState > initialState, animationsOn) },
     ) {
         // Opaque, or the step sliding away shows through the one coming in
         Box(Modifier.fillMaxSize().background(surface)) { content(it) }
