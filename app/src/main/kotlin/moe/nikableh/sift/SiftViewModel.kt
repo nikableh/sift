@@ -669,12 +669,13 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         syncPosition()
     }
 
-    fun assign(dest: Dest) {
-        val p = current ?: return
-        if (busy || scanning) return
+    /** Returns whether the photo got the folder, so a buzz only comes with a visible change. */
+    fun assign(dest: Dest): Boolean {
+        val p = current ?: return false
+        if (busy || scanning) return false
         // Swallows the second half of an accidental double tap, which would file the next photo unseen
         val now = SystemClock.uptimeMillis()
-        if (now - lastAssignAt < 120) return
+        if (now - lastAssignAt < 120) return false
         lastAssignAt = now
 
         setPending(p.path, dest.path)
@@ -682,6 +683,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         // Jumps past photos that already have a folder, so fixing an old choice returns to where you left off
         index = firstUnsorted(index + 1)
         syncPosition()
+        return true
     }
 
     fun changeMuted(muted: Boolean) {
@@ -694,11 +696,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (flash?.id == id) flash = null
     }
 
-    fun clearAssignment() {
-        if (busy || scanning) return
-        val p = current ?: return
+    fun clearAssignment(): Boolean {
+        if (busy || scanning) return false
+        val p = current ?: return false
         setPending(p.path, null)
         syncPosition()
+        return true
     }
 
     fun reload() {

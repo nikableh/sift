@@ -416,6 +416,7 @@ private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, landsca
 /** What lies over the photo. The photo itself is [Media], under all of this. */
 @Composable
 private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: String, landscape: Boolean, modifier: Modifier) {
+    val view = LocalView.current
     val gate = vm.gate
     val video = gate == Gate.None && vm.current?.video == true
     val dayFormat = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
@@ -496,7 +497,7 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: 
                     color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
                     contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
                     modifier = Modifier,
-                    onClear = { vm.clearAssignment() },
+                    onClear = { if (vm.clearAssignment()) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) },
                 )
             } else {
                 FlashPill(vm, Modifier)
@@ -938,8 +939,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
     Box(modifier) {
         Button(
             onClick = {
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                vm.assign(dest)
+                if (vm.assign(dest)) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             },
             // Past about 16dp the corner curve reaches the badge and the selection ring cuts through it
             shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp), pressedShape = RoundedCornerShape(6.dp)),
