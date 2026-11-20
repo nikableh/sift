@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -39,13 +40,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FolderOpen
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Button
@@ -60,7 +61,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -72,7 +72,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +81,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -90,6 +90,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -109,6 +110,7 @@ import coil3.compose.AsyncImage
 import java.io.File
 import moe.nikableh.sift.AlbumStat
 import moe.nikableh.sift.Dialog
+import moe.nikableh.sift.R
 import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
 
@@ -160,40 +162,33 @@ fun PaneSwap(
 }
 
 @Composable
+private fun AppIcon(modifier: Modifier) {
+    // The drawing fills only the middle 58 of the adaptive foreground's 108 units, so zoom it to the given height
+    Image(painterResource(R.drawable.ic_launcher_foreground), null, modifier.scale(108f / 58f))
+}
+
+@Composable
 private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        // A window this wide is most often a phone on its side, too short for the two-row bar, so a
-        // single row slides fully away instead
-        val wide = maxWidth >= 600.dp
         val content = rememberScrollState()
-        // The bar only folds while the cards really scroll, so a page that fits holds still
-        val fits = { content.maxValue > 0 }
-        val scroll = if (wide) {
-            TopAppBarDefaults.enterAlwaysScrollBehavior(canScroll = fits)
-        } else {
-            TopAppBarDefaults.exitUntilCollapsedScrollBehavior(canScroll = fits)
-        }
-        // Folding the album list can leave a folded bar over a page that no longer scrolls back to open it
-        val overflows = content.maxValue > 0
-        LaunchedEffect(overflows) { if (!overflows) scroll.state.heightOffset = 0f }
+        val scroll = TopAppBarDefaults.pinnedScrollBehavior()
         val direction = LocalLayoutDirection.current
-        val title = @Composable { Text("Sift", Modifier.semantics { heading() }) }
+        val title = @Composable {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                AppIcon(Modifier.size(28.dp))
+                Text("Sift", Modifier.semantics { heading() })
+            }
+        }
         val about = @Composable {
             IconButton(
                 onClick = { vm.open(Screen.About) },
                 shapes = IconButtonDefaults.shapes(),
                 colors = IconButtonDefaults.iconButtonVibrantColors(),
-            ) { Icon(Icons.Rounded.Info, "About") }
+            ) { Icon(Icons.Outlined.Info, "About") }
         }
         Scaffold(
             modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-            topBar = {
-                if (wide) {
-                    TopAppBar(title = title, actions = { about() }, scrollBehavior = scroll)
-                } else {
-                    LargeFlexibleTopAppBar(title = title, actions = { about() }, scrollBehavior = scroll)
-                }
-            },
+            topBar = { TopAppBar(title = title, actions = { about() }, scrollBehavior = scroll) },
             bottomBar = { Actions(vm) },
             snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
@@ -202,7 +197,7 @@ private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
             val margin = pageMargins(maxWidth - start - end)
             Column(
                 // Bottom padding before the scroll ends the viewport above the buttons, which have no background.
-                // Top padding inside it lets the cards pass under the collapsing bar
+                // Top padding inside it lets the cards pass under the bar
                 Modifier.fillMaxSize()
                     .padding(start = start, end = end, bottom = padding.calculateBottomPadding())
                     .verticalScroll(content)
