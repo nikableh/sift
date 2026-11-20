@@ -229,11 +229,11 @@ private fun SelectionRow(
                 .clickable(onClickLabel = "Preview", role = Role.Image, onClick = onPreview),
         )
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(row.file.name, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Text(row.file.name, style = MaterialTheme.typography.bodyLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
             // With several albums the one it comes from. With subfolders included, the folders under that
             if (place != null) Text(
                 place,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.StartEllipsis,
