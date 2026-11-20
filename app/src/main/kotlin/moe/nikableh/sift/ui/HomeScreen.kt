@@ -74,6 +74,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -121,7 +123,7 @@ import moe.nikableh.sift.SiftViewModel
 
 /** Where the app opens and where Back from sorting lands. */
 @Composable
-fun HomeScreen(vm: SiftViewModel) {
+fun HomeScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val step = when {
         !vm.allowed -> Step.Access
         vm.sources.isEmpty() || vm.dests.isEmpty() -> Step.Welcome
@@ -138,7 +140,7 @@ fun HomeScreen(vm: SiftViewModel) {
                 action = "Set up folders",
             ) { vm.open(Screen.Setup) }
 
-            Step.Content -> Home(vm)
+            Step.Content -> Home(vm, snackbar)
         }
     }
 }
@@ -177,7 +179,7 @@ fun PaneSwap(
 }
 
 @Composable
-private fun Home(vm: SiftViewModel) {
+private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         // A window this wide is most often a phone on its side, too short for the two-row bar, so a
         // single row slides fully away instead
@@ -206,6 +208,7 @@ private fun Home(vm: SiftViewModel) {
                 }
             },
             bottomBar = { Actions(vm) },
+            snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             val start = padding.calculateStartPadding(direction)
             val end = padding.calculateEndPadding(direction)

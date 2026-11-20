@@ -65,6 +65,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -107,7 +109,7 @@ import moe.nikableh.sift.Store
 
 /** Every queued photo, with where it goes. A list, so long folder names have room. */
 @Composable
-fun SelectionsScreen(vm: SiftViewModel) {
+fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val groups = vm.selectionGroups
     val ready = !vm.busy && !vm.scanning
     var collapsed by rememberSaveable(stateSaver = KeySetSaver) { mutableStateOf(emptySet<String>()) }
@@ -160,6 +162,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     expanded = vm.preparing || !list.lastScrolledForward,
                 )
             },
+            snackbarHost = { SnackbarHost(snackbar) },
         ) { padding ->
             if (groups.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {

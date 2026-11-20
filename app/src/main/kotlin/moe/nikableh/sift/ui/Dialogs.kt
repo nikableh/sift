@@ -22,6 +22,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.WavyProgressIndicatorDefaults
@@ -30,7 +32,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -48,6 +52,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import moe.nikableh.sift.Batch
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.MoveRunner
 import moe.nikableh.sift.Mover
@@ -70,8 +78,10 @@ private fun MoveProgress(run: MoveRunner.Run) {
 }
 
 @Composable
-fun Dialogs(vm: SiftViewModel) {
+fun Dialogs(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val close = { vm.dialog = null }
+    // Clearing the dialog ends a Report, so its snackbar runs in this longer scope
+    val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     // Back leaves Sift instead of cancelling, the work goes on while it is away
     val activity = LocalActivity.current
@@ -95,13 +105,7 @@ fun Dialogs(vm: SiftViewModel) {
         null, is Dialog.Preparing -> {}
 
         is Dialog.MoveInterrupted -> if (d.left == 0) {
-            AlertDialog(
-                onDismissRequest = close,
-                icon = { Icon(Icons.Rounded.DoneAll, null) },
-                title = { Text("Moved ${files(d.moved)}") },
-                text = { Text("Sift was closed just as the move ended") },
-                confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
-            )
+            Report(vm, snackbar, scope, d, "Moved ${files(d.moved)} before Sift was closed", null)
         } else {
             Confirm(
                 title = "The move didn't finish",
@@ -137,19 +141,24 @@ fun Dialogs(vm: SiftViewModel) {
             LaunchedEffect(d) {
                 haptic.performHapticFeedback(if (d.result.failed.isEmpty()) HapticFeedbackType.Confirm else HapticFeedbackType.Reject)
             }
-            AlertDialog(
-                onDismissRequest = close,
-                icon = { Icon(Icons.Rounded.DoneAll, null) },
-                title = { Text("Moved ${files(d.result.moved)}") },
-                text = { applyDetails(d.result)?.let { Column(Modifier.verticalScroll(rememberScrollState())) { Text(it) } } },
-                confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
-                dismissButton = {
-                    val batch = d.batch
-                    if (batch != null) {
-                        TextButton(onClick = { vm.undoBatch(batch) }) { Text("Undo this batch") }
-                    }
-                },
-            )
+            val details = applyDetails(d.result)
+            if (details == null) {
+                Report(vm, snackbar, scope, d, "Moved ${files(d.result.moved)}", d.batch)
+            } else {
+                AlertDialog(
+                    onDismissRequest = close,
+                    icon = { Icon(Icons.Rounded.DoneAll, null) },
+                    title = { Text("Moved ${files(d.result.moved)}") },
+                    text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(details) } },
+                    confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
+                    dismissButton = {
+                        val batch = d.batch
+                        if (batch != null) {
+                            TextButton(onClick = { vm.undoBatch(batch) }) { Text("Undo this batch") }
+                        }
+                    },
+                )
+            }
         }
 
         is Dialog.ConfirmUndoBatch -> {
@@ -357,6 +366,33 @@ fun reviewLabel(vm: SiftViewModel): String = "Review ${selections(vm.queued)}"
 private fun failureLines(failed: List<Pair<String, String>>): String {
     val lines = failed.take(8).joinToString("\n") { "${it.first}: ${it.second}" }
     return if (failed.size > 8) "$lines\nand ${(failed.size - 8).grouped()} more" else lines
+}
+
+/**
+ * A clean finish only reports status, so it goes to a snackbar instead of a dialog. It goes away with
+ * the screen it came up on: left up, it would follow to screens where Undo means nothing and hold back
+ * their own snackbars, and Home keeps an Undo for the last batch anyway
+ */
+@Composable
+private fun Report(
+    vm: SiftViewModel,
+    snackbar: SnackbarHostState,
+    scope: CoroutineScope,
+    dialog: Dialog,
+    message: String,
+    batch: Batch?,
+) {
+    LaunchedEffect(dialog) {
+        vm.dialog = null
+        val shownOn = vm.screen to vm.backStack.size
+        val report = scope.launch {
+            val result = snackbar.showSnackbar(message, actionLabel = batch?.let { "Undo" }, withDismissAction = true)
+            if (result == SnackbarResult.ActionPerformed && batch != null) vm.undoBatch(batch)
+        }
+        val left = scope.launch { snapshotFlow { vm.screen to vm.backStack.size }.first { it != shownOn } }
+        left.invokeOnCompletion { report.cancel() }
+        report.invokeOnCompletion { left.cancel() }
+    }
 }
 
 private fun applyDetails(r: Mover.Result): String? {

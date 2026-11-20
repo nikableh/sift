@@ -118,18 +118,18 @@ fun SiftApp(vm: SiftViewModel) {
                 // Opaque even where a screen draws no background of its own, or the one under it shows through
                 Box(Modifier.fillMaxSize().background(surface)) {
                     when (screen) {
-                        Screen.Home -> saved.SaveableStateProvider("home") { HomeScreen(vm) }
+                        Screen.Home -> saved.SaveableStateProvider("home") { HomeScreen(vm, host) }
                         // A video waits for the slide to end, so its picture never comes in halfway through one
                         Screen.Sort -> SortScreen(vm, settled = !transition.isRunning)
                         Screen.Setup -> SetupScreen(vm, host)
-                        Screen.Selections -> SelectionsScreen(vm)
+                        Screen.Selections -> SelectionsScreen(vm, host)
                         Screen.About -> AboutScreen(vm, host)
                         Screen.Licenses -> LicensesScreen(vm)
                         is Screen.Picker -> PickerScreen(vm, screen.forSource, host)
                     }
                 }
             }
-            Dialogs(vm)
+            Dialogs(vm, snackbar)
             WriteRequests(vm)
             VideoAccess(vm)
         }
