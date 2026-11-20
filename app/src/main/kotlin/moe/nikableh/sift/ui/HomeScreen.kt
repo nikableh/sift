@@ -385,33 +385,32 @@ private fun AlbumRows(albums: List<AlbumStat>) {
         ) { Text("By album") }
         if (expanded) {
             Column(
-                Modifier.padding(start = 16.dp, top = 4.dp, end = 16.dp, bottom = 16.dp)
+                Modifier.padding(top = 4.dp, bottom = 16.dp)
                     .semantics { collectionInfo = CollectionInfo(albums.size, 1) },
-                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                albums.forEachIndexed { index, album -> AlbumRow(album, index) }
+                albums.forEachIndexed { index, album -> AlbumRow(album, index, content) }
             }
         }
     }
 }
 
 @Composable
-private fun AlbumRow(album: AlbumStat, index: Int) {
-    Row(
-        Modifier.semantics(mergeDescendants = true) { collectionItemInfo = CollectionItemInfo(index, 1, 0, 1) },
-        verticalAlignment = Alignment.CenterVertically,
+private fun AlbumRow(album: AlbumStat, index: Int, content: Color) {
+    ListItem(
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            collectionItemInfo = CollectionItemInfo(index, 1, 0, 1)
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = content,
+            trailingContentColor = content,
+        ),
+        leadingContent = {
+            Cover(album.cover, Icons.Rounded.PhotoLibrary, Modifier.size(56.dp), MaterialTheme.shapes.small)
+        },
+        trailingContent = { Text(items(album.total)) },
     ) {
-        Cover(album.cover, Icons.Rounded.PhotoLibrary, Modifier.size(36.dp), RoundedCornerShape(10.dp))
-        Spacer(Modifier.width(12.dp))
-        Text(
-            album.name,
-            Modifier.weight(1f),
-            style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(items(album.total), style = MaterialTheme.typography.bodyMedium)
+        Text(album.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
