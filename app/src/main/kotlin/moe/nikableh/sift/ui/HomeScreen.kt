@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -294,11 +296,7 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
                     if (vm.scanning) {
                         val reading = if (single != null) "Reading the album" else "Reading the albums"
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            // As tall as the line of the count that replaces it, so the card keeps its height
-                            Loading(
-                                Modifier.size(with(LocalDensity.current) { count.lineHeight.toDp() })
-                                    .semantics { contentDescription = reading },
-                            )
+                            Loading(Modifier.size(24.dp).semantics { contentDescription = reading })
                             Spacer(Modifier.width(6.dp))
                             Text(reading, style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -308,7 +306,14 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
                             total == 0 -> "No items"
                             else -> items(total)
                         }
-                        Text(holds, style = count, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // As tall as the reading line it replaces, so the card keeps its height
+                        Text(
+                            holds,
+                            modifier = Modifier.heightIn(min = 24.dp).wrapContentHeight(Alignment.CenterVertically),
+                            style = count,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
                 if (single != null) {
