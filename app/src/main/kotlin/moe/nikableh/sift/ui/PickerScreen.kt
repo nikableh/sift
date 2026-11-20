@@ -1,6 +1,10 @@
 package moe.nikableh.sift.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -48,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,10 +60,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Album
 import moe.nikableh.sift.Dialog
+import moe.nikableh.sift.Folder
+import moe.nikableh.sift.Scanner
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
 import java.io.File
@@ -98,9 +106,45 @@ fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostSt
         bottomBar = { PickedBar(vm, forSource, browsing, dir) },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        if (browsing) FolderList(vm, forSource, padding) else AlbumList(vm, forSource, padding)
+        val slide = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
+        val surface = MaterialTheme.colorScheme.surface
+        AnimatedContent(
+            targetState = Pane(browsing, dir),
+            // Same slides as between screens, deeper folders come in from the end
+            transitionSpec = {
+                if (targetState.depth >= initialState.depth) {
+                    slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 3 }
+                } else {
+                    (slideInHorizontally(slide) { -it / 3 } togetherWith slideOutHorizontally(slide) { it })
+                        .apply { targetContentZIndex = -1f }
+                }
+            },
+            label = "picker",
+        ) { pane ->
+            Box(Modifier.fillMaxSize().background(surface)) {
+                if (pane.browsing) {
+                    // The view model already holds the next folder's rows, so the pane sliding out keeps its own
+                    val live = pane == Pane(vm.browsing, vm.browseDir)
+                    val kept = remember { Kept(vm.folders, vm.mediaHere) }
+                    if (live) {
+                        kept.folders = vm.folders
+                        kept.here = vm.mediaHere
+                    }
+                    FolderList(vm, forSource, padding, pane.dir, kept.folders, kept.here)
+                } else {
+                    AlbumList(vm, forSource, padding)
+                }
+            }
+        }
     }
 }
+
+/** What the picker shows. [dir] is null at the list of storage volumes. */
+private data class Pane(val browsing: Boolean, val dir: File?) {
+    val depth: Int get() = if (browsing) 1 + generateSequence(dir) { it.parentFile }.count() else 0
+}
+
+private class Kept(var folders: List<Folder>, var here: Scanner.Count)
 
 @Composable
 private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingValues) {
@@ -218,9 +262,14 @@ private fun OrderBadge(number: Int) {
 }
 
 @Composable
-private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingValues) {
-    val folders = vm.folders
-    val dir = vm.browseDir
+private fun FolderList(
+    vm: SiftViewModel,
+    forSource: Boolean,
+    padding: PaddingValues,
+    dir: File?,
+    folders: List<Folder>,
+    here: Scanner.Count,
+) {
     LazyColumn(
         contentPadding = PaddingValues(
             start = 16.dp,
@@ -233,7 +282,6 @@ private fun FolderList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVa
     ) {
         if (dir != null) {
             item {
-                val here = vm.mediaHere
                 Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp)) {
                     Text(dir.path, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
                     Text(
