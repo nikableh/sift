@@ -36,7 +36,8 @@ import kotlin.math.roundToInt
  * folder buttons leave, where a horizontal swipe pages to the neighbour and reports prev or next.
  * A tap spreads it over the screen on black, the way Telegram opens a photo from a message, and so
  * does a pinch, which zooms while it opens. Only there does double tap zoom, and dragging it up or
- * down at 1x sends it back to its slot.
+ * down at 1x sends it back to its slot. A video's still frame does all the same, and [onPlace]
+ * lets the picture laid over it follow.
  *
  * The timing of the animations, the 3x double tap and the drag past an edge copy Telegram's photo
  * viewer. The fling does not, see [onFling]
@@ -49,17 +50,23 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     /** Fired once per image when the user first zooms in, to fetch a sharper bitmap. */
     var onZoomIn: (() -> Unit)? = null
 
-    /** A tap on a page that doesn't open, which is a video. It can't be the start of a double tap, so it fires at once */
+    /** A single tap on the open image, reported once it can no longer turn into a double tap. */
     var onTap: (() -> Unit)? = null
 
-    /** The current page's offset from rest, whenever it changes. The video picture laid over the page follows it */
-    var onDrag: ((Float) -> Unit)? = null
+    /**
+     * Where the current page is drawn, whenever that changes, or an empty rect with nothing drawn.
+     * The video picture laid over the page follows it. Valid only during the call
+     */
+    var onPlace: ((RectF) -> Unit)? = null
 
     /** Fired when a swipe makes the neighbour the current page, before [onSwipe]. */
     var onTurn: (() -> Unit)? = null
 
     /** True from the moment the image leaves its slot until it is back. Meanwhile it draws over the rest of the screen and takes every touch */
     var onRaise: ((Boolean) -> Unit)? = null
+
+    /** True once the image is opening or open, false as soon as it starts back to its slot. */
+    var onOpen: ((Boolean) -> Unit)? = null
 
     private var bitmap: Bitmap? = null
     private var prev: Bitmap? = null
@@ -70,7 +77,6 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private var canPrev = false
     private var canNext = false
     private var key: String? = null
-    private var zoomable = true
 
     /** 0 with the image in its slot, 1 with it spread over the screen. */
     private var spread = 0f
@@ -92,13 +98,6 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     /** Offset of the current page from rest. The neighbours sit one page to either side of it. */
     private var dragX = 0f
-        set(value) {
-            if (field == value) return
-            field = value
-            onDrag?.invoke(value)
-        }
-
-    val dragOffset get() = dragX
     private var downDragX = 0f
     private var flingDir = 0
     private var settle: ValueAnimator? = null
@@ -106,6 +105,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     private var closing = false
     private val scroller = OverScroller(ctx)
     private var raised = false
+    private var opened = false
     private var lastX = 0f
     private var lastY = 0f
     private var tracking = false
@@ -137,6 +137,9 @@ class ZoomImageView(ctx: Context) : View(ctx) {
 
     /** The room the image is fitted to. It grows from the slot to the whole view with [spread]. */
     private val frame = RectF()
+
+    /** Where the current page was drawn last, as [onPlace] reported it. */
+    private val placed = RectF()
     private val drawMatrix = Matrix()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val gap = 16 * resources.displayMetrics.density
@@ -149,8 +152,8 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     /**
      * Shows [b] for the photo [newKey], with its neighbours ready to slide in. A new bitmap for the
      * same photo keeps zoom and pan. A new photo arriving as the bitmap already on screen is the
-     * echo of a swipe this view turned itself, so the slide carries on. A page that isn't [zoomable]
-     * reports taps instead of opening. [animation] plays on the current page in place of [b].
+     * echo of a swipe this view turned itself, so the slide carries on. [animation] plays on the
+     * current page in place of [b].
      */
     fun show(
         newKey: String?,
@@ -159,10 +162,8 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         next: Bitmap?,
         canPrev: Boolean,
         canNext: Boolean,
-        zoomable: Boolean,
         animation: AnimatedImageDrawable?,
     ) {
-        this.zoomable = zoomable
         this.prev = prev
         this.next = next
         this.canPrev = canPrev
@@ -196,6 +197,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             // Nothing to show, and whatever stands in for it is under this view
             if (b == null) {
                 spread = 0f
+                setOpened(false)
                 raise()
             }
         }
@@ -256,6 +258,28 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         if (dragX < 0f) drawPage(canvas, next, dragX + page)
         drawPage(canvas, bitmap, dragX, zoom, panX, panY, animation)
         canvas.restoreToCount(count)
+        place()
+    }
+
+    /**
+     * Reports the current page from the draw itself, because a fling moves it here and nowhere
+     * else. The picture laid over it moves in the same frame
+     */
+    private fun place() {
+        val b = bitmap
+        if (b == null) {
+            if (placed.isEmpty) return
+            placed.setEmpty()
+        } else {
+            val scale = fitScale(b) * zoom
+            val left = frame.centerX() - b.width * scale / 2f + panX + dragX
+            val top = frame.centerY() - b.height * scale / 2f + panY
+            val right = left + b.width * scale
+            val bottom = top + b.height * scale
+            if (placed.left == left && placed.top == top && placed.right == right && placed.bottom == bottom) return
+            placed.set(left, top, right, bottom)
+        }
+        onPlace?.invoke(placed)
     }
 
     private fun drawPage(
@@ -393,6 +417,12 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         onRaise?.invoke(now)
     }
 
+    private fun setOpened(now: Boolean) {
+        if (now == opened) return
+        opened = now
+        onOpen?.invoke(now)
+    }
+
     private fun reportZoomIn() {
         if (zoomReported) return
         zoomReported = true
@@ -435,6 +465,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         val fromY = panY
         if (toZoom > fromZoom) reportZoomIn()
         closing = toSpread == 0f
+        setOpened(!closing)
         pinchOpening = pinch
         settling = !pinch && toSpread == 1f && toZoom == 1f && fromZoom == 1f
         glide = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -569,7 +600,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             val moveY = d.focusY - pinchY
             pinchX = d.focusX
             pinchY = d.focusY
-            if (bitmap == null || !zoomable || (glide != null && !pinchOpening) || dismissing) return true
+            if (bitmap == null || (glide != null && !pinchOpening) || dismissing) return true
             dragX = 0f
             // A pinch in the slot opens the image and zooms it on the way, so the first step already counts
             if (spread == 0f && glide == null) glideTo(1f, zoom, panX, panY, pinch = true)
@@ -591,9 +622,15 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             return true
         }
 
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+            // Open, the first tap of a double tap would otherwise show or hide the video's controls on its way to the zoom
+            if (raised && !openTap && !closing) onTap?.invoke()
+            return true
+        }
+
         override fun onDoubleTap(e: MotionEvent): Boolean {
             // To the detector, a swipe that closely follows the tap that opened the image starts as a double tap
-            if (bitmap == null || !zoomable || glide != null || spread < 1f || dismissing || openTap) return true
+            if (bitmap == null || glide != null || spread < 1f || dismissing || openTap) return true
             if (isZoomed) {
                 glideTo(1f, 1f, 0f, 0f)
             } else {
@@ -676,18 +713,14 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     }
 
     private fun tap() {
-        if (!zoomable) {
-            onTap?.invoke()
-        } else {
-            openTap = spread == 0f
-            open()
-        }
+        openTap = spread == 0f
+        open()
     }
 
     // No click listener is set, so super plays no click sound. It only reports the click to accessibility
     override fun performClick(): Boolean {
         super.performClick()
-        tap()
+        if (raised) onTap?.invoke() else tap()
         return true
     }
 

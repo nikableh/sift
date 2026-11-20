@@ -10,8 +10,14 @@ import android.view.View
 import android.webkit.MimeTypeMap
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,6 +69,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
+import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -97,6 +104,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -207,6 +215,8 @@ fun SortScreen(vm: SiftViewModel, snackbar: SnackbarHostState, settled: Boolean)
                             Panel(vm, landscape = false, Modifier.fillMaxWidth())
                         }
                     }
+                    // Over the open video, which draws over everything above
+                    OpenVideoBar(vm, player, stage, Modifier.align(Alignment.BottomCenter).zIndex(2f))
                 }
             }
         }
@@ -295,6 +305,12 @@ private class Stage {
     var slot: LayoutCoordinates? = null
     var raised by mutableStateOf(false)
 
+    /** Opening or open, and not yet on its way back. Unlike [raised] it turns false as the close starts */
+    var open by mutableStateOf(false)
+
+    /** Whether the open video shows its bar. A tap on the video flips it */
+    var controls by mutableStateOf(true)
+
     /** Straight to the view and not through state, which would show the photo in the wrong place for a frame. */
     fun place() {
         val screen = screen?.takeIf { it.isAttached } ?: return
@@ -320,8 +336,13 @@ private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                 pager.onSwipe = { vm.go(it) }
                 pager.onZoomIn = { vm.loadSharper() }
-                pager.onTap = { player.toggle() }
+                // An open photo has no bar, so flipping it there changes nothing anyone sees
+                pager.onTap = { stage.controls = !stage.controls }
                 pager.onRaise = { stage.raised = it }
+                pager.onOpen = {
+                    stage.open = it
+                    if (it) stage.controls = true
+                }
                 player.attach(surface)
                 stage.view = this
                 stage.place()
@@ -334,11 +355,10 @@ private fun Media(vm: SiftViewModel, player: VideoPlayer, stage: Stage) {
                 vm.bitmapPath, bitmap, vm.prevBitmap, vm.nextBitmap,
                 canPrev = pages && vm.index > 0,
                 canNext = pages && vm.index < vm.photos.size,
-                zoomable = !video,
                 animation = vm.animation,
             )
-            // Only a photo opens. If the page under an open one turns into anything else, it belongs under the header
-            if (video || gate != Gate.None) it.pager.close()
+            // If the page under an open photo or video turns into a status card, it belongs under the header
+            if (gate != Gate.None) it.pager.close()
             // The still frame's shape stands in until the decoder reports the video's own
             val aspect = player.aspect.takeIf { a -> a > 0f } ?: bitmap?.let { b -> b.width / b.height.toFloat() } ?: 0f
             it.video(aspect, show = video && player.showing && player.path == vm.bitmapPath)
@@ -427,8 +447,8 @@ private fun Photo(
         if (pages && vm.index < vm.photos.size) CustomAccessibilityAction("Next") { vm.go(1); true } else null,
     )
     val tapLabel = when {
-        gate != Gate.None || current == null || raised -> null
-        video -> if (player.playing) "Pause" else "Play"
+        gate != Gate.None || current == null -> null
+        raised -> if (video && stage.open) (if (stage.controls) "Hide controls" else "Show controls") else null
         vm.bitmap == null -> null
         else -> "Open"
     }
@@ -438,7 +458,7 @@ private fun Photo(
             if (description != null) contentDescription = description
             if (turns.isNotEmpty()) customActions = turns
             if (tapLabel != null) onClick(label = tapLabel) { stage.view?.pager?.performClick() ?: false }
-            if (raised) paneTitle = "Photo viewer"
+            if (raised) paneTitle = if (video) "Video viewer" else "Photo viewer"
         },
     ) {
         when (gate) {
@@ -505,14 +525,47 @@ private fun Photo(
                 FlashPill(vm, Modifier)
             }
             if (video && !player.failed) {
+                // The open video has a bar of its own, and this one would show through its black as it comes in
+                val open = stage.open
+                val alpha by animateFloatAsState(if (open) 0f else 1f, MaterialTheme.motionScheme.fastEffectsSpec())
                 VideoBar(
                     player,
                     vm.videoMuted,
                     vm::changeMuted,
-                    Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth(),
+                    Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth()
+                        .graphicsLayer { this.alpha = alpha }
+                        .then(if (open) Modifier.clearAndSetSemantics {} else Modifier),
                 )
             }
         }
+    }
+}
+
+/** The video bar over an open video, slid away and back by a tap on the video. */
+@Composable
+private fun OpenVideoBar(vm: SiftViewModel, player: VideoPlayer, stage: Stage, modifier: Modifier) {
+    val video = vm.gate == Gate.None && vm.current?.video == true && !player.failed
+    val motion = MaterialTheme.motionScheme
+    // Reduced motion asks for a plain fade, never a slide
+    val animationsOn = rememberAnimationsOn()
+    AnimatedVisibility(
+        visible = video && stage.open && stage.controls,
+        modifier = modifier,
+        enter = if (animationsOn) slideInVertically(motion.defaultSpatialSpec()) { it } else fadeIn(motion.fastEffectsSpec()),
+        exit = if (animationsOn) slideOutVertically(motion.fastSpatialSpec()) { it } else fadeOut(motion.fastEffectsSpec()),
+    ) {
+        VideoBar(
+            player,
+            vm.videoMuted,
+            vm::changeMuted,
+            // The insets and the offset count toward the height it slides by, so it leaves the screen entirely
+            Modifier.windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 16.dp, end = 16.dp, bottom = FloatingToolbarDefaults.ScreenOffset)
+                .widthIn(max = 480.dp)
+                .fillMaxWidth()
+                // The toolbar takes no touches between its buttons, and one there would reach the video and hide the bar
+                .pointerInput(Unit) {},
+        )
     }
 }
 
