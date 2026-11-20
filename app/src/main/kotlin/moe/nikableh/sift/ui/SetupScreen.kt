@@ -171,7 +171,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                             stateDescription = if (sortedOpen) "Expanded" else "Collapsed"
                         },
                         leadingContent = { AlbumThumb(null, Icons.Rounded.Done) },
-                        supportingContent = { Text(sorted.joinToString(", ") { File(it).name }) },
+                        supportingContent = { Text(sorted.joinToString(", ") { File(it).name }, maxLines = 3, overflow = TextOverflow.Ellipsis) },
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TextButton(onClick = { vm.clearSorted() }) { Text("Clear") }
