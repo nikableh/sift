@@ -406,7 +406,9 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                 }
             }
             Row(
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                // On wide windows the buttons would stretch into long flat bars, so the row is capped and kept at the end
+                Modifier.align(Alignment.End).widthIn(max = 600.dp).fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 val size = ButtonDefaults.MediumContainerHeight
