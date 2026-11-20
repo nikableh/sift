@@ -93,14 +93,18 @@ fun AccessScreen(vm: SiftViewModel, onAbout: (() -> Unit)? = null) {
     fun refusedForGood() = vm.access != Access.AskPhotos &&
         activity?.shouldShowRequestPermissionRationale(vm.photoPermissions()[0]) == false
     var refused by remember { mutableStateOf(refusedForGood()) }
+    // A granted permission has no rationale either, so the pane sliding out after a grant keeps the variant it showed
+    fun recheck() {
+        if (vm.access != Access.Ready) refused = refusedForGood()
+    }
     // Android doesn't report rationale changes, so check again whenever Sift comes back from settings or a dialog
     LifecycleResumeEffect(vm.access) {
-        refused = refusedForGood()
+        recheck()
         onPauseOrDispose {}
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         vm.refresh()
-        refused = refusedForGood()
+        recheck()
     }
     val askPhotos = {
         vm.photosAsked()
