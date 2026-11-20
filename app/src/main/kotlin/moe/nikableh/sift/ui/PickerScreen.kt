@@ -7,6 +7,9 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,12 +69,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -206,18 +212,10 @@ private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVal
 
 @Composable
 private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index: Int, count: Int) {
-    val sorting = vm.isSource(album.path)
-    val destination = vm.isDest(album.path)
     // Tap order, because for destinations it becomes the order of the buttons on the sorting screen
     val order = vm.picked.indexOf(album.path)
     val selected = vm.isTicked(album.path, forSource)
-    // Why the row can't be ticked. A folder can't be sorted into itself
-    val taken = when {
-        sorting && !forSource -> "Being sorted"
-        destination && forSource -> "Destination folder"
-        destination -> "Already a destination"
-        else -> null
-    }
+    val taken = takenReason(vm, album.path, forSource)
     val thumbnailAlpha = if (taken != null) 0.38f else 1f
     SegmentedListItem(
         checked = selected,
@@ -225,6 +223,7 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
         enabled = vm.canTick(album.path, forSource),
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         colors = segmentColors(),
+        modifier = if (taken != null) Modifier.explainsTaken(vm, album.path, forSource, taken) else Modifier,
         leadingContent = {
             // Square like a gallery thumbnail
             AsyncImage(
@@ -246,8 +245,6 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
         },
         supportingContent = {
             Column {
-                // Full strength on a greyed row, or the reason is the hardest thing to read
-                if (taken != null) Text(taken, color = MaterialTheme.colorScheme.primary)
                 Text(media(album.count, album.videos))
                 // Two albums can share a name and differ only in the path. The internal storage
                 // root is the same for every album, so only the part under it is shown
@@ -256,6 +253,31 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
         },
     ) { Text(album.name) }
 }
+
+/** Why [path] can't be ticked, or null when it can. A folder can't be sorted into itself. */
+private fun takenReason(vm: SiftViewModel, path: String, forSource: Boolean): String? {
+    val destination = vm.isDest(path)
+    return when {
+        vm.isSource(path) && !forSource -> "Being sorted"
+        destination && forSource -> "Destination folder"
+        destination -> "Already a destination"
+        else -> null
+    }
+}
+
+/**
+ * For a disabled row or checkbox of a folder that can't be ticked. TalkBack reads [reason] as its
+ * state, and a tap shows the view model's message for it in the snackbar.
+ */
+private fun Modifier.explainsTaken(vm: SiftViewModel, path: String, forSource: Boolean, reason: String): Modifier =
+    semantics { stateDescription = reason }.pointerInput(vm, path, forSource) {
+        awaitEachGesture {
+            // A disabled Material control swallows the press on the main pass, so the tap is taken on the pass before it
+            awaitFirstDown(pass = PointerEventPass.Initial).consume()
+            // The view model leaves a taken folder as it is and sends the reason
+            if (waitForUpOrCancellation(PointerEventPass.Initial) != null) vm.togglePicked(path, forSource)
+        }
+    }
 
 /**
  * A disabled box is a flat fill, because a pale outline still reads as a box waiting for a tap.
@@ -344,11 +366,13 @@ private fun FolderList(
                 leadingContent = { Icon(if (dir == null) Icons.Rounded.SdStorage else Icons.Rounded.Folder, null) },
                 trailingContent = {
                     if (dir != null) {
+                        val taken = takenReason(vm, path, forSource)
                         // Ticks a subfolder without having to open it first
                         Checkbox(
                             checked = vm.isTicked(path, forSource),
                             onCheckedChange = { vm.tick(path, forSource) },
-                            modifier = Modifier.semantics { contentDescription = folder.title },
+                            modifier = Modifier.semantics { contentDescription = folder.title }
+                                .then(if (taken != null) Modifier.explainsTaken(vm, path, forSource, taken) else Modifier),
                             enabled = vm.canTick(path, forSource),
                             colors = pickerCheckboxColors(),
                         )
