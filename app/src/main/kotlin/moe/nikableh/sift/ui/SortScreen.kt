@@ -258,34 +258,38 @@ fun sharePhoto(context: Context, file: File) {
 
 @Composable
 fun Welcome(icon: ImageVector, title: String, body: String, action: String, onAction: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
+        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState()),
+        contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier.size(128.dp).clip(MaterialShapes.Cookie9Sided.toShape())
-                .background(MaterialTheme.colorScheme.primaryContainer),
-            contentAlignment = Alignment.Center,
+        Column(
+            Modifier.widthIn(max = 480.dp).padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Box(
+                Modifier.size(128.dp).clip(MaterialShapes.Cookie9Sided.toShape())
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            Spacer(Modifier.height(28.dp))
+            Text(
+                title,
+                Modifier.semantics { heading() },
+                style = MaterialTheme.typography.headlineMediumEmphasized,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                body,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(28.dp))
+            BigButton(action, onAction)
         }
-        Spacer(Modifier.height(28.dp))
-        Text(
-            title,
-            Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineMediumEmphasized,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            body,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(28.dp))
-        BigButton(action, onAction)
     }
 }
 
