@@ -47,16 +47,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
-import androidx.compose.material.icons.automirrored.rounded.VolumeOff
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Numbers
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
@@ -66,38 +62,31 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
-
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalFloatingToolbar
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorPosition
 import androidx.compose.material3.MenuDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TwoRowsTopAppBar
-import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -141,9 +130,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LifecycleStartEffect
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
@@ -228,37 +214,8 @@ private const val VIDEO_START_MS = 200L
 @Composable
 private fun Playback(vm: SiftViewModel, player: VideoPlayer, settled: Boolean) {
     val path = vm.current?.takeIf { it.video && vm.gate == Gate.None && !vm.busy && settled }?.path
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    // Counted up on every return to the app, which starts the video again after the stop below
-    var starts by remember { mutableIntStateOf(0) }
-    LifecycleStartEffect(player) {
-        starts++
-        // Closed here and not through state: nothing recomposes while the app is in the background,
-        // and a video with sound would play on
-        onStopOrDispose { player.close() }
-    }
-    LaunchedEffect(path, starts) {
-        player.close()
-        if (path != null) {
-            // Tapping through an album at speed never gets as far as setting up a decoder
-            delay(VIDEO_START_MS)
-            // The wait runs on while the app is in the background, where nothing must start playing.
-            // Coming back counts [starts] up and gets here again
-            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) player.open(File(path))
-        }
-    }
-    val muted = vm.videoMuted
-    LaunchedEffect(muted) { player.setMuted(muted) }
-
-    val running = player.playing && player.showing
-    LaunchedEffect(running) {
-        if (running) while (true) {
-            withFrameNanos {}
-            player.tick()
-        }
-    }
-    // Awake for one play through. A video on repeat would otherwise never let the screen sleep
-    if (running && !player.looped) KeepScreenOn()
+    // The delay means tapping through an album at speed never gets as far as setting up a decoder
+    VideoPlayback(player, path, vm.videoMuted, VIDEO_START_MS)
 }
 
 fun sharePhoto(context: Context, file: File) {
@@ -528,68 +485,16 @@ private fun Photo(
             } else {
                 FlashPill(vm, Modifier)
             }
-            if (video && !player.failed) VideoBar(vm, player)
+            if (video && !player.failed) {
+                VideoBar(
+                    player,
+                    vm.videoMuted,
+                    vm::changeMuted,
+                    Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth(),
+                )
+            }
         }
     }
-}
-
-/** Play or pause, the timeline, the time and sound, floating over the bottom of the viewer. */
-@Composable
-private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
-    HorizontalFloatingToolbar(
-        expanded = true,
-        modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth(),
-        // The bar sits on the video, which can be any colour, so the shadow gives it its edge
-        expandedShadowElevation = 6.dp,
-    ) {
-        // A video starts by itself, so until the player has it the button already shows what is about to happen
-        val playing = player.playing || player.path == null
-        // Unfilled like the sound button, and primary in both states because it is the bar's main control
-        IconToggleButton(
-            checked = playing,
-            onCheckedChange = { player.toggle() },
-            shapes = IconButtonDefaults.toggleableShapes(),
-            colors = IconButtonDefaults.iconToggleButtonVibrantColors(contentColor = MaterialTheme.colorScheme.primary),
-        ) {
-            if (playing) Icon(Icons.Rounded.Pause, "Playing") else Icon(Icons.Rounded.PlayArrow, "Playing")
-        }
-        Timeline(player, Modifier.weight(1f).padding(horizontal = 8.dp))
-        Elapsed(player, Modifier.align(Alignment.CenterVertically))
-        val sound = !vm.videoMuted
-        IconToggleButton(
-            checked = sound,
-            onCheckedChange = { vm.changeMuted(!it) },
-            shapes = IconButtonDefaults.toggleableShapes(),
-        ) {
-            if (sound) Icon(Icons.AutoMirrored.Rounded.VolumeUp, "Sound")
-            else Icon(Icons.AutoMirrored.Rounded.VolumeOff, "Sound")
-        }
-    }
-}
-
-/** On its own, so the position changing every frame redraws the slider and nothing around it. */
-@Composable
-private fun Timeline(player: VideoPlayer, modifier: Modifier) {
-    val duration = player.duration
-    val state = rememberSliderState()
-    state.value = if (duration > 0) (player.position / duration.toFloat()).coerceIn(0f, 1f) else 0f
-    Slider(
-        state = state,
-        onValueChange = { player.scrubTo((it * duration).toLong()) },
-        onValueChangeFinished = { player.scrubEnd() },
-        modifier = modifier.semantics { contentDescription = "Timeline" },
-    )
-}
-
-@Composable
-private fun Elapsed(player: VideoPlayer, modifier: Modifier) {
-    Text(
-        clock(player.position),
-        modifier,
-        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-    )
 }
 
 @Composable
