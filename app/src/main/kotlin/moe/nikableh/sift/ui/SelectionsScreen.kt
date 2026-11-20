@@ -18,7 +18,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,7 +26,6 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -35,7 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -49,9 +47,11 @@ import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -152,6 +152,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                         // The FAB floats over the list, so the last row needs room to scroll out from under it
                         bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
                     ),
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                     // Not content padding: a sticky header pins to the viewport's edge, which would be under the app bar
                     modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
                 ) {
@@ -165,11 +166,13 @@ fun SelectionsScreen(vm: SiftViewModel) {
                                 collapsed = if (folded) collapsed - dest else collapsed + dest
                             }
                         }
-                        if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
+                        if (!folded) itemsIndexed(rows, key = { _, row -> row.file.path }, contentType = { _, _ -> "photo" }) { i, row ->
                             SelectionRow(
                                 row,
                                 vm.placeOf(row.file),
                                 ready,
+                                i,
+                                rows.size,
                                 previewing = preview?.file?.path == row.file.path,
                                 onPreview = { preview = row },
                             ) { vm.dropSelection(row) }
@@ -249,41 +252,44 @@ private fun SharedTransitionScope.SelectionRow(
     row: Selection,
     place: String?,
     enabled: Boolean,
+    index: Int,
+    count: Int,
     previewing: Boolean,
     onPreview: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        // List spec leading media sizes: 114x64dp for a video, 56dp for an image
-        Box(if (Scanner.isVideo(row.file.name)) Modifier.size(width = 114.dp, height = 64.dp) else Modifier.size(56.dp)) {
-            // Not the RowScope overload, which only Row content may call
-            androidx.compose.animation.AnimatedVisibility(!previewing, enter = fadeIn(), exit = fadeOut()) {
-                AsyncImage(
-                    model = row.file,
-                    contentDescription = row.file.name,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .sharedBounds(rememberSharedContentState(row.file.path), this, boundsTransform = spatialBounds())
-                        .fillMaxSize()
-                        .clip(MaterialTheme.shapes.small)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                        .clickable(onClickLabel = "Preview", role = Role.Image, onClick = onPreview),
-                )
+    SegmentedListItem(
+        onClick = onPreview,
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        colors = segmentColors(),
+        modifier = Modifier
+            // Not list padding, which would also push in the header, a list item with the same inset of its own
+            .padding(horizontal = 16.dp)
+            // SegmentedListItem takes no click label, and TalkBack would otherwise announce a bare "activate"
+            .semantics { onClick(label = "Preview") { onPreview(); true } },
+        leadingContent = {
+            // List spec leading media sizes: 114x64dp for a video, 56dp for an image
+            Box(if (Scanner.isVideo(row.file.name)) Modifier.size(width = 114.dp, height = 64.dp) else Modifier.size(56.dp)) {
+                AnimatedVisibility(!previewing, enter = fadeIn(), exit = fadeOut()) {
+                    AsyncImage(
+                        model = row.file,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .sharedBounds(rememberSharedContentState(row.file.path), this, boundsTransform = spatialBounds())
+                            .fillMaxSize()
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    )
+                }
             }
-        }
-        Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(row.file.name, style = MaterialTheme.typography.bodyLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            // With several albums the one it comes from. With subfolders included, the folders under that
-            if (place != null) Text(
-                place,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.StartEllipsis,
-            )
-        }
-        IconButton(onClick = onRemove, enabled = enabled) { Icon(Icons.Rounded.Close, "Remove ${row.file.name} from selections") }
-    }
+        },
+        trailingContent = {
+            IconButton(onClick = onRemove, enabled = enabled) { Icon(Icons.Rounded.Close, "Remove ${row.file.name} from selections") }
+        },
+        // With several albums the one it comes from. With subfolders included, the folders under that
+        supportingContent = place?.let { { Text(it, maxLines = 1, overflow = TextOverflow.StartEllipsis) } },
+    ) { Text(row.file.name, maxLines = 3, overflow = TextOverflow.Ellipsis) }
 }
 
 /** The whole photo fitted to the screen, so a thumbnail's crop doesn't hide what is being moved. */
