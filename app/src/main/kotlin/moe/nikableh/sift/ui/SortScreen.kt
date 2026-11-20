@@ -49,15 +49,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Checklist
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Numbers
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -510,14 +507,9 @@ private fun Photo(
                     // The 48dp touch height would put 12dp more between rows
                     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
                         for (dest in assigned) {
-                            val i = vm.dests.indexOfFirst { it.path == dest }
-                            Pill(
-                                label = Store.labelFor(dest),
-                                color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
-                                contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
-                                modifier = Modifier,
-                                onClear = { if (vm.unassign(dest)) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) },
-                            )
+                            FolderPill(Store.labelFor(dest), vm.dests.indexOfFirst { it.path == dest }) {
+                                if (vm.unassign(dest)) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            }
                         }
                     }
                 }
@@ -804,54 +796,6 @@ private fun SortMenu(vm: SiftViewModel, file: File?, details: String?, expanded:
     }
 }
 
-/** Shows one folder the photo on screen is queued to go to. Tapping it takes that folder off. */
-@Composable
-private fun Pill(
-    label: String,
-    color: Color,
-    modifier: Modifier,
-    contentColor: Color,
-    onClear: (() -> Unit)?,
-) {
-    val content = @Composable {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, Modifier.size(18.dp))
-            Text(label, style = MaterialTheme.typography.labelLarge)
-            if (onClear != null) Icon(Icons.Rounded.Close, "Remove", Modifier.size(18.dp))
-        }
-    }
-    if (onClear != null) {
-        Surface(
-            onClick = onClear,
-            modifier = modifier.semantics {
-                role = Role.Button
-                onClick(label = "Take off this photo", action = null)
-            },
-            shape = CircleShape,
-            color = color,
-            contentColor = contentColor,
-            // The pill sits on the photo, which can be any colour, so the shadow gives it its edge
-            shadowElevation = 6.dp,
-            content = content,
-        )
-    } else {
-        // The flash pill takes no tap, so TalkBack must not find a disabled button there. The minimum
-        // size keeps it as tall as the queued pill that takes its place
-        Surface(
-            modifier = modifier.minimumInteractiveComponentSize(),
-            shape = CircleShape,
-            color = color,
-            contentColor = contentColor,
-            shadowElevation = 6.dp,
-            content = content,
-        )
-    }
-}
-
 /** Brief confirmation of the folder just tapped, placed off the middle of the next photo. */
 @Composable
 private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
@@ -865,15 +809,14 @@ private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
         // Consumed, so coming back to this spot later doesn't replay a stale confirmation
         vm.flashShown(flash.id)
     }
-    val color = folderColor(flash.colorIndex)
-    Pill(
+    FolderPill(
         flash.label,
-        color.tile(),
+        flash.colorIndex,
         modifier
+            // As tall as the queued pill that takes its place, which keeps its touch height
+            .minimumInteractiveComponentSize()
             .semantics { liveRegion = LiveRegionMode.Polite }
             .graphicsLayer { this.alpha = alpha.value },
-        color.ink(),
-        onClear = null,
     )
 }
 

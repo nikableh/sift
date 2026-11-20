@@ -20,20 +20,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -52,6 +48,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
@@ -301,7 +298,7 @@ fun ReviewViewer(vm: SiftViewModel, groups: List<SelectionGroup>, stage: ReviewS
 private fun Details(vm: SiftViewModel, row: Selection, at: Int, count: Int, onClose: () -> Unit) {
     // With one album the place is only the folders under it, and a file at its top has none
     val place = vm.placeOf(row.file) ?: row.file.parentFile?.name
-    val i = vm.dests.indexOfFirst { it.path == row.dest }
+    val label = Store.labelFor(row.dest)
     CompositionLocalProvider(LocalContentColor provides Color.White) {
         Row(
             Modifier.fillMaxWidth()
@@ -323,25 +320,11 @@ private fun Details(vm: SiftViewModel, row: Selection, at: Int, count: Int, onCl
                 if (place != null) {
                     Text(place, style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(alpha = 0.8f))
                 }
-                Surface(
-                    Modifier.padding(top = 4.dp),
-                    shape = CircleShape,
-                    color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
-                    contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
-                ) {
-                    Row(
-                        Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowForward, null, Modifier.size(16.dp))
-                        Text(
-                            Store.labelFor(row.dest),
-                            Modifier.semantics { contentDescription = "Going to ${Store.labelFor(row.dest)}" },
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                    }
-                }
+                FolderPill(
+                    label,
+                    vm.dests.indexOfFirst { it.path == row.dest },
+                    Modifier.padding(top = 4.dp).clearAndSetSemantics { contentDescription = "Going to $label" },
+                )
             }
             Text(
                 "${(at + 1).grouped()} / ${count.grouped()}",
