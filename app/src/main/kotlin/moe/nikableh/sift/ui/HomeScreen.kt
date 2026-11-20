@@ -41,8 +41,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -275,14 +275,9 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
             }
         }
         val edit = @Composable {
-            FilledTonalIconButton(
+            FilledIconButton(
                 onClick = { vm.open(Screen.Setup) },
                 shapes = IconButtonDefaults.shapes(),
-                // The default tonal container all but vanishes on the card's primaryContainer
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryFixedDim,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryFixed,
-                ),
             ) {
                 Icon(Icons.Rounded.Edit, "Change albums")
             }
