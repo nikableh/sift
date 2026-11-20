@@ -9,24 +9,24 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/home.png" width="170" alt="Home with two albums, four folders and nine selections waiting">
+  <img src="docs/images/home.png" width="170" alt="Home with two albums, four destinations and nine selections waiting">
   &nbsp;
-  <img src="docs/images/sorting.png" width="170" alt="Sorting a photo, with a button for each folder under it">
+  <img src="docs/images/sorting.png" width="170" alt="Sorting a photo, with a button for each destination under it">
   &nbsp;
-  <img src="docs/images/selections.png" width="170" alt="Selections grouped by the folder each photo goes to">
+  <img src="docs/images/selections.png" width="170" alt="Selections grouped by the destination each photo goes to">
   &nbsp;
-  <img src="docs/images/folders.png" width="170" alt="Folders, with the albums to sort and the destination folders">
+  <img src="docs/images/folders.png" width="170" alt="Destinations, with the albums to sort and the destination folders">
 </p>
 
-Sift shows your photos one at a time, with a button under each one for every folder you sort into. Tap a folder and the next photo appears
+Sift shows your photos one at a time, with a button under each one for every destination you sort into. Tap a destination and the next photo appears
 
 Nothing moves while you sort. Your picks wait in a list you can check and change, and only Move touches the files. If a batch went wrong, Undo on Home puts it back
 
 ## How it works
 
-1. **Pick your folders.** Choose the albums to sort, such as Camera or Download, and the folders their photos can go to. Each destination folder becomes a coloured button
-2. **Sort.** Tap a button to queue the photo for that folder and move on. Hold a button to send the photo to several folders. Swipe past a photo to leave it where it is
-3. **Review.** Selections lists every queued photo under its folder. Take one off, or open it full screen and swipe through the lot
+1. **Pick your destinations.** Choose the albums to sort, such as Camera or Download, and the folders their photos can go to. Each destination becomes a coloured button
+2. **Sort.** Tap a button to queue the photo for that destination and move on. Hold a button to send the photo to several destinations. Swipe past a photo to leave it where it is
+3. **Review.** Selections lists every queued photo under its destination. Take one off, or open it full screen and swipe through the lot
 4. **Move.** Sift moves the files in the background with a progress notification, so you can leave the app. Home then offers to undo the last batch
 
 ## Features
@@ -77,7 +77,7 @@ git clone https://github.com/nikableh/sift.git
 cd sift && ./gradlew assembleDebug
 ```
 
-The APK lands in `app/build/outputs/apk/debug/`. Signed release APKs will be on the [Releases](https://github.com/nikableh/sift/releases) page, built by GitHub Actions with a provenance attestation. [docs/RELEASING.md](docs/RELEASING.md) explains how to verify a download
+The APK lands in `app/build/outputs/apk/debug/`. Signed release APKs will be on the [Releases](https://github.com/nikableh/sift/releases/latest) page, built by GitHub Actions with a provenance attestation. [docs/RELEASING.md](docs/RELEASING.md) explains how to verify a download
 
 ## Feedback
 
