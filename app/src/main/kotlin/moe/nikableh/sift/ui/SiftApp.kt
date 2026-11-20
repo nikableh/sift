@@ -41,7 +41,20 @@ fun SiftApp(vm: SiftViewModel) {
     // Holds what Home keeps with rememberSaveable, such as its unfolded album list, while another screen covers it
     val saved = rememberSaveableStateHolder()
     LaunchedEffect(vm) {
-        vm.messages.collect { snackbar.showSnackbar(it) }
+        // A message already showing or waiting isn't queued again, so tapping the same greyed row many times
+        // shows it once instead of a long line of copies
+        val waiting = mutableSetOf<String>()
+        vm.messages.collect { message ->
+            if (waiting.add(message)) {
+                launch {
+                    try {
+                        snackbar.showSnackbar(message)
+                    } finally {
+                        waiting.remove(message)
+                    }
+                }
+            }
+        }
     }
     // The depth tells a step forward from a step back
     val target = vm.screen to vm.backStack.size
