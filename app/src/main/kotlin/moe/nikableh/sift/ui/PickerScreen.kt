@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -414,7 +414,7 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                     FilledTonalButton(
                         onClick = { vm.dialog = newFolder },
                         shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.weight(1f).height(size),
+                        modifier = Modifier.weight(1f).heightIn(min = size),
                     ) {
                         Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
                         Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
@@ -425,7 +425,7 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                     onClick = { vm.savePicked(forSource) },
                     enabled = added > 0 || removed > 0,
                     shapes = ButtonDefaults.shapes(),
-                    modifier = Modifier.weight(1f).height(size),
+                    modifier = Modifier.weight(1f).heightIn(min = size),
                 ) {
                     FitLabel(
                         when {
