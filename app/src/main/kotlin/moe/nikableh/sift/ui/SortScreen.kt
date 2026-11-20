@@ -68,7 +68,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
 
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
@@ -523,7 +522,6 @@ private fun Photo(
                     label = Store.labelFor(assigned),
                     color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
                     contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
-                    border = if (i >= 0) BorderStroke(1.dp, folderColor(i).ink()) else null,
                     modifier = Modifier,
                     onClear = { if (vm.clearAssignment()) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) },
                 )
@@ -540,10 +538,8 @@ private fun Photo(
 private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
     HorizontalFloatingToolbar(
         expanded = true,
-        // The bar sits on the video, which can be any colour, so it carries its own edge. A shadow is
-        // lost on a dark frame, hence the outline too
-        modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline, FloatingToolbarDefaults.ContainerShape),
+        modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth(),
+        // The bar sits on the video, which can be any colour, so the shadow gives it its edge
         expandedShadowElevation = 6.dp,
     ) {
         // A video starts by itself, so until the player has it the button already shows what is about to happen
@@ -843,8 +839,6 @@ private fun Pill(
     modifier: Modifier,
     contentColor: Color,
     onClear: (() -> Unit)?,
-    // The light tile fill alone falls under 3:1 against the light page
-    border: BorderStroke? = null,
 ) {
     val content = @Composable {
         Row(
@@ -867,7 +861,8 @@ private fun Pill(
             shape = CircleShape,
             color = color,
             contentColor = contentColor,
-            border = border,
+            // The pill sits on the photo, which can be any colour, so the shadow gives it its edge
+            shadowElevation = 6.dp,
             content = content,
         )
     } else {
@@ -878,7 +873,7 @@ private fun Pill(
             shape = CircleShape,
             color = color,
             contentColor = contentColor,
-            border = border,
+            shadowElevation = 6.dp,
             content = content,
         )
     }
@@ -906,7 +901,6 @@ private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
             .graphicsLayer { this.alpha = alpha.value },
         color.ink(),
         onClear = null,
-        border = BorderStroke(1.dp, color.ink()),
     )
 }
 
