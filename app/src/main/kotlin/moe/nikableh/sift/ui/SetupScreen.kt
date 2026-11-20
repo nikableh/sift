@@ -1,6 +1,10 @@
 package moe.nikableh.sift.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,16 +60,23 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -93,6 +104,8 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     val shown = vm.shownAlbums
     val dests = vm.dests
     var sortedOpen by rememberSaveable { mutableStateOf(false) }
+    val drag = remember { DestDrag() }
+    val gap = with(LocalDensity.current) { ListItemDefaults.SegmentedGap.roundToPx() }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -246,11 +259,50 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 )
             }
             itemsIndexed(dests, key = { _, d -> d.path }) { i, dest ->
+                val interactions = remember { MutableInteractionSource() }
+                var held by remember { mutableStateOf(false) }
+                val lifted = drag.path == dest.path
                 SegmentedListItem(
                     onClick = { vm.dialog = Dialog.RenameDest(dest) },
+                    // The long click, not a drag detector, so letting go without moving doesn't open Rename
+                    onLongClick = {
+                        if (held) {
+                            drag.start = DragInteraction.Start().also { interactions.tryEmit(it) }
+                            drag.offset = 0f
+                            drag.path = dest.path
+                        }
+                    },
+                    interactionSource = interactions,
                     shapes = ListItemDefaults.segmentedShapes(index = i, count = dests.size),
                     colors = segmentColors(),
-                    modifier = Modifier.animateItem(),
+                    modifier = (if (lifted) Modifier.animateItem(placementSpec = null) else Modifier.animateItem())
+                        .onSizeChanged { drag.heights[dest.path] = it.height }
+                        .graphicsLayer { translationY = if (drag.path == dest.path) drag.offset else 0f }
+                        .pointerInput(dest.path) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                held = true
+                                try {
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        if (drag.path == dest.path) {
+                                            event.changes.forEach {
+                                                drag.offset += it.positionChangeIgnoreConsumed().y
+                                                it.consume()
+                                            }
+                                            drag.follow(vm, dest.path, gap)
+                                        }
+                                    } while (event.changes.any { it.pressed })
+                                } finally {
+                                    held = false
+                                    if (drag.path == dest.path) {
+                                        drag.start?.let { interactions.tryEmit(DragInteraction.Stop(it)) }
+                                        drag.path = null
+                                        drag.offset = 0f
+                                    }
+                                }
+                            }
+                        },
                     leadingContent = {
                         Box(Modifier.size(18.dp).clip(CircleShape).background(folderColor(i).tile()))
                     },
@@ -269,6 +321,33 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         }
                     },
                 ) { Text(dest.label) }
+            }
+        }
+    }
+}
+
+/** The destination row lifted by a long press, and how far the finger has moved it from its slot. */
+private class DestDrag {
+    var path by mutableStateOf<String?>(null)
+    var offset by mutableFloatStateOf(0f)
+    var start: DragInteraction.Start? = null
+    val heights = mutableMapOf<String, Int>()
+
+    /** Swaps the row with a neighbour once it has passed half of it, and keeps it under the finger. */
+    fun follow(vm: SiftViewModel, path: String, gap: Int) {
+        val list = vm.dests
+        val at = list.indexOfFirst { it.path == path }
+        if (offset > 0 && at < list.size - 1) {
+            val step = (heights[list[at + 1].path] ?: return) + gap
+            if (offset > step / 2f) {
+                vm.moveDest(at, at + 1)
+                offset -= step
+            }
+        } else if (offset < 0 && at > 0) {
+            val step = (heights[list[at - 1].path] ?: return) + gap
+            if (-offset > step / 2f) {
+                vm.moveDest(at, at - 1)
+                offset += step
             }
         }
     }
