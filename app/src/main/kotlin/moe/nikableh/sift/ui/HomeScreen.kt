@@ -6,6 +6,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -507,6 +508,8 @@ private fun Actions(vm: SiftViewModel) {
                     onClick = { vm.reviewSelections() },
                     enabled = ready,
                     shapes = ButtonDefaults.shapes(),
+                    // The tonal fill barely shows on the bare page, so the outline gives it a visible edge
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     interactionSource = interactions,
                     modifier = modifier.height(size),
                 ) {
