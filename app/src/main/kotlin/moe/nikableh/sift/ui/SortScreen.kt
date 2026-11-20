@@ -781,7 +781,7 @@ private fun SortMenu(vm: SiftViewModel, file: File?, details: String?, width: Dp
             item("Share", Icons.Rounded.Share) { sharePhoto(context, file) }
         }
         if (vm.photos.isNotEmpty()) {
-            item("Go to photo…", Icons.Rounded.Numbers) {
+            item("Go to photo", Icons.Rounded.Numbers) {
                 vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
             }
         }
