@@ -628,14 +628,17 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
         val style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum")
         val withCount = "Review ${vm.queued.grouped()}"
         val maxButton = barWidth * 0.45f
-        val padding = ButtonDefaults.ButtonWithIconContentPadding
-        val room = maxButton - ButtonDefaults.IconSize - ButtonDefaults.IconSpacing -
+        val height = ButtonDefaults.MinHeight
+        val padding = ButtonDefaults.contentPaddingFor(height, hasStartIcon = true)
+        val iconSize = ButtonDefaults.iconSizeFor(height)
+        val iconSpacing = ButtonDefaults.iconSpacingFor(height)
+        val room = maxButton - iconSize - iconSpacing -
             padding.calculateLeftPadding(LayoutDirection.Ltr) - padding.calculateRightPadding(LayoutDirection.Ltr)
         val fits = vm.queued > 0 && with(density) { measurer.measure(withCount, style).size.width.toDp() } <= room
         val review = @Composable {
             val label: @Composable RowScope.() -> Unit = {
-                Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                Icon(Icons.Rounded.Checklist, null, Modifier.size(iconSize))
+                Spacer(Modifier.width(iconSpacing))
                 FitLabel(if (fits) withCount else "Review", MaterialTheme.typography.labelMedium, style)
             }
             // The end card has its own filled Review, and one filled action per screen is enough

@@ -406,11 +406,11 @@ private fun SectionHeader(text: String, addLabel: String, modifier: Modifier = M
         FilledTonalButton(
             onClick = onAdd,
             shapes = ButtonDefaults.shapes(),
-            contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight, hasStartIcon = true),
             modifier = Modifier.semantics { contentDescription = addLabel },
         ) {
-            Icon(Icons.Rounded.Add, null, Modifier.size(ButtonDefaults.IconSize))
-            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+            Icon(Icons.Rounded.Add, null, Modifier.size(ButtonDefaults.iconSizeFor(ButtonDefaults.MinHeight)))
+            Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(ButtonDefaults.MinHeight)))
             Text("Add")
         }
     }
