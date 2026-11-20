@@ -1,14 +1,9 @@
 package moe.nikableh.sift.ui
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -495,11 +490,8 @@ private fun AlbumRows(albums: List<AlbumStat>, enabled: Boolean) {
                 ) { Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(arrow)) }
             },
         ) { Text("By album") }
-        AnimatedVisibility(
-            open,
-            enter = expandVertically(motion.defaultSpatialSpec()) + fadeIn(motion.defaultEffectsSpec()),
-            exit = shrinkVertically(motion.defaultSpatialSpec()) + fadeOut(motion.fastEffectsSpec()),
-        ) {
+        // Shown at once, as it was before: growing the card frame by frame lays out the whole page every frame
+        if (open) {
             Column(
                 Modifier.padding(top = 4.dp, bottom = 16.dp)
                     .semantics { collectionInfo = CollectionInfo(albums.size, 1) },
@@ -524,7 +516,7 @@ private fun AlbumRow(album: AlbumStat, index: Int, content: Color) {
         leadingContent = {
             Cover(album.cover, Icons.Rounded.PhotoLibrary, Modifier.size(56.dp), MaterialTheme.shapes.small)
         },
-        trailingContent = { Text(items(album.total)) },
+        trailingContent = { Text(items(album.total), style = MaterialTheme.typography.bodyMedium) },
     ) {
         Text(album.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
