@@ -309,7 +309,7 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
 /** "Camera, Screenshots" while the names fit a line, otherwise the first two and how many follow. */
 private fun albumNames(sources: List<String>): String {
     val names = sources.map { File(it).name }
-    return if (names.size <= 4) names.joinToString(", ") else "${names[0]}, ${names[1]} and ${names.size - 2} more"
+    return if (names.size <= 4) names.joinToString(", ") else "${names[0]}, ${names[1]}, and ${names.size - 2} more"
 }
 
 /** One cover as it is, two or three fanned out with the first album's on top. */
