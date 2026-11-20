@@ -50,8 +50,6 @@ import androidx.compose.material.icons.rounded.SdStorage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxColors
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -247,7 +245,7 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
         trailingContent = {
             // Every row has its mark in the same place, so the right edge of the column stays even
             when {
-                taken != null -> Checkbox(checked = false, onCheckedChange = null, enabled = false, colors = pickerCheckboxColors())
+                taken != null -> Checkbox(checked = false, onCheckedChange = null, enabled = false)
                 selected && !forSource -> OrderBadge(order + 1)
                 else -> Checkbox(checked = selected, onCheckedChange = null)
             }
@@ -287,16 +285,6 @@ private fun Modifier.explainsTaken(vm: SiftViewModel, path: String, forSource: B
             if (waitForUpOrCancellation(PointerEventPass.Initial) != null) vm.togglePicked(path, forSource)
         }
     }
-
-/**
- * A disabled box is a flat fill, because a pale outline still reads as a box waiting for a tap.
- * The border matches the fill so Material draws one shape at the full checkbox size.
- */
-@Composable
-private fun pickerCheckboxColors(): CheckboxColors {
-    val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-    return CheckboxDefaults.colors(disabledUncheckedBoxColor = fill, disabledUncheckedBorderColor = fill)
-}
 
 /** The place a ticked destination gets among the sorting buttons. */
 @Composable
@@ -361,7 +349,7 @@ private fun FolderList(
                     colors = segmentColors(),
                     modifier = Modifier.padding(bottom = 10.dp),
                     trailingContent = {
-                        Checkbox(checked = ticked, onCheckedChange = null, enabled = free, colors = pickerCheckboxColors())
+                        Checkbox(checked = ticked, onCheckedChange = null, enabled = free)
                     },
                     supportingContent = { if (!free) Text("Already in use") },
                 ) { Text("Select this folder") }
@@ -384,7 +372,6 @@ private fun FolderList(
                             modifier = Modifier.semantics { contentDescription = folder.title }
                                 .then(if (taken != null) Modifier.explainsTaken(vm, path, forSource, taken) else Modifier),
                             enabled = vm.canTick(path, forSource),
-                            colors = pickerCheckboxColors(),
                         )
                     } else {
                         Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null)
