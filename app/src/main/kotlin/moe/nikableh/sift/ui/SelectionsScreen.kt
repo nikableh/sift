@@ -51,6 +51,7 @@ import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
@@ -127,17 +128,17 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                     title = { Text("Selections", Modifier.semantics { heading() }) },
                     navigationIcon = {
-                        IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+                        IconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                     },
                     actions = {
                         if (groups.isNotEmpty()) {
                             IconButton(onClick = {
                                 collapsed = if (allCollapsed) emptySet() else groups.mapTo(HashSet()) { it.dest }
-                            }) {
+                            }, shapes = IconButtonDefaults.shapes()) {
                                 if (allCollapsed) Icon(Icons.Rounded.UnfoldMore, "Expand all")
                                 else Icon(Icons.Rounded.UnfoldLess, "Collapse all")
                             }
-                            IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready) {
+                            IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready, shapes = IconButtonDefaults.shapes()) {
                                 Icon(Icons.Rounded.ClearAll, "Clear selections")
                             }
                         }
@@ -323,7 +324,7 @@ private fun SharedTransitionScope.SelectionRow(
             }
         },
         trailingContent = {
-            IconButton(onClick = onRemove, enabled = enabled) { Icon(Icons.Rounded.Close, "Remove ${row.file.name} from selections") }
+            IconButton(onClick = onRemove, enabled = enabled, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Close, "Remove ${row.file.name} from selections") }
         },
         // With several albums the one it comes from. With subfolders included, the folders under that
         supportingContent = place?.let { { Text(it, maxLines = 1, overflow = TextOverflow.StartEllipsis) } },

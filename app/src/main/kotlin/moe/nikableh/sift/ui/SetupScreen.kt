@@ -42,6 +42,7 @@ import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -125,7 +126,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 title = { Text("Folders", Modifier.semantics { heading() }) },
                 subtitle = { Text("What to sort and where it can go") },
                 navigationIcon = {
-                    IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+                    IconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                 },
                 scrollBehavior = scroll,
             )
@@ -181,7 +182,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                             }
                         },
                         trailingContent = {
-                            IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove ${File(path).name}") }
+                            IconButton(onClick = { vm.askRemoveSource(path) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Close, "Remove ${File(path).name}") }
                         },
                     ) { Text(File(path).name) }
                 }
@@ -223,7 +224,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                                 leadingContent = { AlbumThumb(null) },
                                 supportingContent = { PathText(path) },
                                 trailingContent = {
-                                    IconButton(onClick = { vm.askRemoveSource(path) }) { Icon(Icons.Rounded.Close, "Remove ${File(path).name}") }
+                                    IconButton(onClick = { vm.askRemoveSource(path) }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.Rounded.Close, "Remove ${File(path).name}") }
                                 },
                             ) { Text(File(path).name) }
                         }
@@ -336,13 +337,13 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         supportingContent = { PathText(dest.path) },
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { vm.moveDest(i, i - 1) }, enabled = i > 0) {
+                                IconButton(onClick = { vm.moveDest(i, i - 1) }, enabled = i > 0, shapes = IconButtonDefaults.shapes()) {
                                     Icon(Icons.Rounded.KeyboardArrowUp, "Move ${dest.label} up")
                                 }
-                                IconButton(onClick = { vm.moveDest(i, i + 1) }, enabled = i < dests.size - 1) {
+                                IconButton(onClick = { vm.moveDest(i, i + 1) }, enabled = i < dests.size - 1, shapes = IconButtonDefaults.shapes()) {
                                     Icon(Icons.Rounded.KeyboardArrowDown, "Move ${dest.label} down")
                                 }
-                                IconButton(onClick = { vm.askRemoveDest(dest) }) {
+                                IconButton(onClick = { vm.askRemoveDest(dest) }, shapes = IconButtonDefaults.shapes()) {
                                     Icon(Icons.Rounded.Close, "Remove ${dest.label}")
                                 }
                             }

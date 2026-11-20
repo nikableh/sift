@@ -56,6 +56,7 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -124,7 +125,7 @@ fun PickerScreen(vm: SiftViewModel, forSource: Boolean, snackbar: SnackbarHostSt
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { if (browsing) vm.browseUp() else vm.leavePicker() }) {
+                    IconButton(onClick = { if (browsing) vm.browseUp() else vm.leavePicker() }, shapes = IconButtonDefaults.shapes()) {
                         Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back")
                     }
                 },
