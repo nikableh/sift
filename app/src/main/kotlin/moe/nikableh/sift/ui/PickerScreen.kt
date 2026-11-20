@@ -450,7 +450,7 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                 if (newFolder != null) {
                     FilledTonalButton(
                         onClick = { vm.dialog = newFolder },
-                        shapes = ButtonDefaults.shapes(),
+                        shapes = ButtonDefaults.shapesFor(size),
                         modifier = Modifier.weight(1f).fillMaxHeight().heightIn(min = size),
                     ) {
                         Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
@@ -461,7 +461,7 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                 Button(
                     onClick = { vm.savePicked(forSource) },
                     enabled = added > 0 || removed > 0,
-                    shapes = ButtonDefaults.shapes(),
+                    shapes = ButtonDefaults.shapesFor(size),
                     modifier = Modifier.weight(1f).fillMaxHeight().heightIn(min = size),
                 ) {
                     ButtonLabel(

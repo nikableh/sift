@@ -565,7 +565,7 @@ private fun Actions(vm: SiftViewModel) {
                 FilledTonalButton(
                     onClick = { vm.reviewSelections() },
                     enabled = ready,
-                    shapes = ButtonDefaults.shapes(),
+                    shapes = ButtonDefaults.shapesFor(size),
                     // The tonal fill barely shows on the bare page, so the outline gives it a visible edge
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     interactionSource = interactions,
@@ -583,7 +583,7 @@ private fun Actions(vm: SiftViewModel) {
                 Button(
                     onClick = { if (add) vm.pickAlbums() else vm.open(Screen.Sort) },
                     enabled = ready,
-                    shapes = ButtonDefaults.shapes(),
+                    shapes = ButtonDefaults.shapesFor(size),
                     interactionSource = interactions,
                     modifier = modifier.heightIn(min = size),
                 ) {

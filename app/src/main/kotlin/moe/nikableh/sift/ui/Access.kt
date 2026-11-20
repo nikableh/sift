@@ -281,7 +281,7 @@ private fun BigAction(label: String, onClick: () -> Unit) {
     val size = ButtonDefaults.MediumContainerHeight
     Button(
         onClick = onClick,
-        shapes = ButtonDefaults.shapes(),
+        shapes = ButtonDefaults.shapesFor(size),
         modifier = Modifier.heightIn(size),
         contentPadding = ButtonDefaults.contentPaddingFor(size),
     ) {
