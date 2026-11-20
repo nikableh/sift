@@ -237,17 +237,19 @@ private fun AlbumCard(vm: SiftViewModel) {
     val active = vm.activeAlbums
     // A sorted album holds nothing to count
     val albums = vm.albumStats.filter { it.path in active }
-    // One album is the whole card already. The rows match the albums only once those have been read
-    val rows = !vm.scanning && active.size > 1 && albums.map { it.path } == active
+    // The rows match the albums only once those have been read. Until then the row waits disabled, so the
+    // cards below don't jump when reading ends
+    val read = !vm.scanning && albums.map { it.path } == active
     Card(
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         AlbumHeader(vm, Modifier.padding(16.dp))
-        if (rows) {
+        // One album is the whole card already
+        if (active.size > 1) {
             // The default outlineVariant all but vanishes on the card's primaryContainer
             HorizontalDivider(color = MaterialTheme.colorScheme.background)
-            AlbumRows(albums)
+            AlbumRows(albums, enabled = read)
         }
     }
 }
@@ -397,32 +399,40 @@ private fun Cover(file: File?, placeholder: ImageVector?, modifier: Modifier, sh
  * the same height at any number of albums and Home fits a screen. Whether it is unfolded is kept
  */
 @Composable
-private fun AlbumRows(albums: List<AlbumStat>) {
+private fun AlbumRows(albums: List<AlbumStat>, enabled: Boolean) {
     var expanded by rememberSaveable { mutableStateOf(false) }
+    // A row that waits for the albums stays folded, whatever was kept
+    val open = expanded && enabled
     val content = MaterialTheme.colorScheme.onPrimaryContainer
-    val label = if (expanded) "Hide the albums" else "Show each album"
+    // The default disabled onSurface reads as grey on the card's primaryContainer
+    val disabled = content.copy(alpha = 0.38f)
+    val label = if (open) "Hide the albums" else "Show each album"
     Column {
         // As wide as the card, so the label sits on the card's margin and the press highlight reaches its edges
         ListItem(
             onClick = { expanded = !expanded },
+            enabled = enabled,
             modifier = Modifier.semantics {
                 onClick(label = label, action = null)
-                stateDescription = if (expanded) "Expanded" else "Collapsed"
+                stateDescription = if (open) "Expanded" else "Collapsed"
             },
             colors = ListItemDefaults.colors(
                 containerColor = Color.Transparent,
                 contentColor = content,
                 trailingContentColor = content,
+                disabledContainerColor = Color.Transparent,
+                disabledContentColor = disabled,
+                disabledTrailingContentColor = disabled,
             ),
             trailingContent = {
                 Box(
                     Modifier.clip(CircleShape)
-                        .background(if (expanded) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent)
+                        .background(if (open) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent)
                         .padding(4.dp),
-                ) { Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null) }
+                ) { Icon(if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null) }
             },
         ) { Text("By album") }
-        if (expanded) {
+        if (open) {
             Column(
                 Modifier.padding(top = 4.dp, bottom = 16.dp)
                     .semantics { collectionInfo = CollectionInfo(albums.size, 1) },
