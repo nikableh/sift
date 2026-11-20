@@ -93,9 +93,12 @@ GROUP = ('    <group\n        android:pivotX="54"\n        android:pivotY="54"\n
          '        android:scaleX="%s"\n        android:scaleY="%s"\n        android:translateY="%s">\n' % (SCALE, SCALE, f(SHIFT_Y)))
 
 
-def shape(d, fill, pad, alpha=None, stroke=None, stroke_width=None, even_odd=False):
+def shape(d, fill, pad, alpha=None, stroke=None, stroke_width=None, even_odd=False, name=None):
     sp = ' ' * pad
-    out = '%s<path\n%s    android:fillColor="%s"\n' % (sp, sp, fill)
+    out = '%s<path\n' % sp
+    if name:
+        out += '%s    android:name="%s"\n' % (sp, name)
+    out += '%s    android:fillColor="%s"\n' % (sp, fill)
     if alpha is not None:
         out += '%s    android:fillAlpha="%s"\n' % (sp, alpha)
         if stroke:
@@ -174,13 +177,136 @@ monochrome = (HEAD + OPEN % '' + GROUP
               + folder_shape(FRONT, '#000000', 8)
               + '    </group>\n</vector>\n')
 
+# ---- animated splash icon ----
+# The base vector is the first frame. The animators bring every shape to the pose of the colour
+# foreground, so the last frame is the launcher icon. Android 11 gets the still copy instead,
+# because its splash shows the first frame without starting it.
+# MainActivity keeps the splash up until this has played to the end, so every extra millisecond here
+# is added to a fast start.
+# The system starts the animation when it creates the splash window, which is when the launcher
+# begins growing that window out of the icon (about 300 ms on the user's phone). Nothing moves for
+# the first half of that, and the rest overlaps the end of the growth to keep the wait short.
+LEAD = 150
+STAND = 200                      # how long a folder takes to stand up
+STAGGER = 40                     # gap between one folder and the next
+PHOTO_AT, PHOTO_FOR = LEAD + 70, 380   # when the print starts falling and for how long
+PHOTO_FADE = 150
+PHOTO_FROM = (-12.0, 0.7, -12.0)  # start offset up, start scale, start tilt
+DURATION = max(PHOTO_AT + PHOTO_FOR, LEAD + 2 * STAGGER + STAND)
+
+# Every shape moves one way only, so no curve may pass its end value. It also keeps moving for most
+# of its time, so the end of the animation the splash waits for doesn't look frozen.
+EASE_OUT = 'M0,0 C0.5,1 0.89,1 1,1'
+MASK = 36.0                      # radius of the splash screen's circular mask on the 108 canvas
+
+
+def on_canvas(x, y):
+    return 54 + (x - 54) * SCALE, 54 + (y - 54) * SCALE + SHIFT_Y
+
+
+def photo_corners(up, scale, angle):
+    a = math.radians(angle)
+    for dx, dy in [(-1, -1), (-1, 1), (1, 1), (1, -1)]:
+        x, y = dx * pw / 2, dy * ph / 2
+        rx, ry = x * math.cos(a) - y * math.sin(a), x * math.sin(a) + y * math.cos(a)
+        yield on_canvas(cx + rx * scale, cy + ry * scale + up)
+
+
+def ease(curve, t):
+    """Value of a one-segment cubic pathInterpolator at time t, found by bisection on x."""
+    x1, y1, x2, y2 = [float(v) for v in curve.split('C')[1].replace(' 1,1', '').replace(',', ' ').split()]
+    lo, hi = 0.0, 1.0
+    for _ in range(40):
+        s = (lo + hi) / 2
+        x = 3 * (1 - s) ** 2 * s * x1 + 3 * (1 - s) * s ** 2 * x2 + s ** 3
+        lo, hi = (s, hi) if x < t else (lo, s)
+    return 3 * (1 - s) ** 2 * s * y1 + 3 * (1 - s) * s ** 2 * y2 + s ** 3
+
+
+assert all(0 <= float(v) <= 1 for v in EASE_OUT.split('C')[1].replace(',', ' ').split()), 'curve overshoots'
+
+# The splash is clipped to a circle, so no frame may push the print past its edge
+for step in range(101):
+    move = turn = ease(EASE_OUT, step / 100)
+    up = PHOTO_FROM[0] * (1 - move)
+    scale = PHOTO_FROM[1] + (1 - PHOTO_FROM[1]) * move
+    angle = PHOTO_FROM[2] + (tilt - PHOTO_FROM[2]) * turn
+    for x, y in photo_corners(up, scale, angle):
+        assert math.hypot(x - 54, y - 54) <= MASK, 'print leaves the splash mask at %d%% of its fall' % step
+
+
+def named(name, pad, attrs, body):
+    sp = ' ' * pad
+    lines = ''.join('%s    android:%s="%s"\n' % (sp, k, v) for k, v in [('name', name)] + attrs)
+    return '%s<group\n%s>\n%s%s</group>\n' % (sp, lines[:-1], body, sp)
+
+
+def standing(name, points, colour, pad):
+    return named(name, pad, [('pivotX', '54'), ('pivotY', f(BOTTOM)), ('scaleY', '0')],
+                 folder_shape(points, colour, pad + 4))
+
+
+PHOTO_PARTS = ['print', 'window', 'sun', 'hill_back', 'hill_front']
+# Every part of the print starts see-through and fades in as it falls
+anim_print = (shape(PRINT, '#FFFFFF', 16, alpha='0', stroke='#8E9FD9', stroke_width=1.4, name='print')
+              + '                <group>\n                    <clip-path android:pathData="%s" />\n' % WINDOW
+              + shape(WINDOW, '#CFE3FF', 20, alpha='0', name='window') + shape(SUN, '#FFAE1A', 20, alpha='0', name='sun')
+              + shape(HILL_BACK, '#6FCB8C', 20, alpha='0', name='hill_back')
+              + shape(HILL_FRONT, '#3FAE6A', 20, alpha='0', name='hill_front') + '                </group>\n')
+
+up0, scale0, tilt0 = PHOTO_FROM
+anim_photo = named('photo_drop', 8, [('pivotX', f(cx)), ('pivotY', f(cy)), ('translateY', f(up0)),
+                                     ('scaleX', f(scale0)), ('scaleY', f(scale0))],
+                   named('photo_tilt', 12, [('pivotX', f(cx)), ('pivotY', f(cy)), ('rotation', f(tilt0))], anim_print))
+anim_vector = (OPEN % '' + GROUP + standing('back', BACK, BLUE, 8) + anim_photo
+               + standing('middle', MIDDLE, AMBER, 8) + standing('front', FRONT, CORAL, 8) + '    </group>\n</vector>\n')
+
+
+def animator(prop, start, end, at, length, curve=None, kind='floatType'):
+    out = ('<objectAnimator android:propertyName="%s" android:valueFrom="%s" android:valueTo="%s"'
+           ' android:valueType="%s" android:startOffset="%d" android:duration="%d"' % (prop, start, end, kind, at, length))
+    if curve is None:
+        return out + ' android:interpolator="@android:interpolator/linear" />'
+    return (out + '>\n    <aapt:attr name="android:interpolator"><pathInterpolator android:pathData="%s" /></aapt:attr>\n'
+            '</objectAnimator>' % curve)
+
+
+def target(name, animators):
+    return ('    <target android:name="%s">\n        <aapt:attr name="android:animation">\n            <set>\n%s'
+            '            </set>\n        </aapt:attr>\n    </target>\n'
+            % (name, ''.join('                ' + a.replace('\n', '\n                ') + '\n' for a in animators)))
+
+
+targets = ''
+for i, name in enumerate(['back', 'middle', 'front']):
+    at = LEAD + i * STAGGER
+    targets += target(name, [animator('scaleY', 0, 1, at, STAND, EASE_OUT)])
+targets += target('photo_drop', [animator('translateY', f(up0), 0, PHOTO_AT, PHOTO_FOR, EASE_OUT),
+                                 animator('scaleX', f(scale0), 1, PHOTO_AT, PHOTO_FOR, EASE_OUT),
+                                 animator('scaleY', f(scale0), 1, PHOTO_AT, PHOTO_FOR, EASE_OUT)])
+targets += target('photo_tilt', [animator('rotation', f(tilt0), f(tilt), PHOTO_AT, PHOTO_FOR, EASE_OUT)])
+for part in PHOTO_PARTS:
+    fades = [animator('fillAlpha', 0, 1, PHOTO_AT, PHOTO_FADE)]
+    if part == 'print':
+        fades.append(animator('strokeAlpha', 0, 1, PHOTO_AT, PHOTO_FADE))
+    targets += target(part, fades)
+
+indented = ''.join('        ' + line + '\n' if line else '\n' for line in anim_vector.rstrip('\n').split('\n'))
+animated = (HEAD + '<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+            '    xmlns:aapt="http://schemas.android.com/aapt">\n    <aapt:attr name="android:drawable">\n'
+            + indented.replace('<vector xmlns:android="http://schemas.android.com/apk/res/android"', '<vector')
+            + '    </aapt:attr>\n' + targets + '</animated-vector>\n')
+
 adaptive = (HEAD + '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
             '    <background android:drawable="@drawable/ic_launcher_background" />\n'
             '    <foreground android:drawable="@drawable/ic_launcher_foreground" />\n'
             '    <monochrome android:drawable="@drawable/ic_launcher_monochrome" />\n</adaptive-icon>\n')
 
 for name, text in [('drawable/ic_launcher_foreground.xml', foreground), ('drawable/ic_launcher_background.xml', background),
-                   ('drawable/ic_launcher_monochrome.xml', monochrome), ('mipmap-anydpi-v26/ic_launcher.xml', adaptive)]:
+                   ('drawable/ic_launcher_monochrome.xml', monochrome), ('mipmap-anydpi-v26/ic_launcher.xml', adaptive),
+                   ('drawable/splash_icon.xml', foreground), ('drawable-v31/splash_icon.xml', animated),
+                   ('values/splash.xml', HEAD + '<resources>\n    <integer name="splash_duration">%d</integer>\n</resources>\n' % DURATION)]:
+    os.makedirs(os.path.dirname(os.path.join(RES, name)), exist_ok=True)
     with open(os.path.join(RES, name), 'w', encoding='utf-8', newline='\n') as out:
         out.write(text)
-print('icon written')
+print('icon written, splash animation %d ms' % DURATION)

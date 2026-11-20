@@ -1,5 +1,6 @@
 package moe.nikableh.sift
 
+import android.animation.ValueAnimator
 import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
@@ -13,11 +14,25 @@ import coil3.SingletonImageLoader
 import coil3.video.VideoFrameDecoder
 import moe.nikableh.sift.ui.SiftApp
 
+private const val SPLASH_FADE = 150L
+
 class MainActivity : ComponentActivity() {
     private val vm: SiftViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        installSplashScreen().setOnExitAnimationListener { splash ->
+            // A cold start is often ready before the icon animation ends, and a cut-off animation reads as a
+            // twitch, so the splash stays up for the rest of it. The start time is 0 on Android 11, which
+            // leaves nothing to wait for there.
+            val length = resources.getInteger(R.integer.splash_duration).toLong()
+            val left = if (ValueAnimator.areAnimatorsEnabled()) {
+                (length - (System.currentTimeMillis() - splash.iconAnimationStartMillis)).coerceIn(0, length)
+            } else 0
+            // From Android 12 the icon is drawn apart from the splash view and ignores its alpha
+            splash.iconView.animate().alpha(0f).setStartDelay(left).setDuration(SPLASH_FADE)
+            splash.view.animate().alpha(0f).setStartDelay(left).setDuration(SPLASH_FADE)
+                .withLayer().withEndAction { splash.remove() }
+        }
         styleSystemBars()
         super.onCreate(savedInstanceState)
         val bounds = windowManager.currentWindowMetrics.bounds

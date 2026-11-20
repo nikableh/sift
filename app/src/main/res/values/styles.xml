@@ -9,7 +9,8 @@
     <!-- Android 11 has no system splash, so the compat library draws this one there -->
     <style name="Theme.Sift.Starting" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/window_surface</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <item name="windowSplashScreenAnimationDuration">@integer/splash_duration</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
     </style>
 </resources>
