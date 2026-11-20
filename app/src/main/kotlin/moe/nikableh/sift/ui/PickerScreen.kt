@@ -1,5 +1,6 @@
 package moe.nikableh.sift.ui
 
+import android.os.Environment
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.slideInHorizontally
@@ -244,8 +245,9 @@ private fun AlbumRow(vm: SiftViewModel, album: Album, forSource: Boolean, index:
                 // Full strength on a greyed row, or the reason is the hardest thing to read
                 if (taken != null) Text(taken, color = MaterialTheme.colorScheme.primary)
                 Text(media(album.count, album.videos))
-                // Whole path, wrapped. Two albums can share a name and differ only here
-                Text(album.path, style = MaterialTheme.typography.bodySmall)
+                // Two albums can share a name and differ only in the path. The internal storage
+                // root is the same for every album, so only the part under it is shown
+                Text(album.path.removePrefix(Environment.getExternalStorageDirectory().path + "/"))
             }
         },
     ) { Text(album.name) }
