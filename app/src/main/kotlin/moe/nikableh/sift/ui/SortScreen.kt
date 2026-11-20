@@ -897,7 +897,7 @@ private fun FolderGrid(vm: SiftViewModel, landscape: Boolean) {
     val rows = ceil(n / cols.toFloat()).toInt()
     // Rows grow with the font size, or a large font leaves no room for the label under the count
     val grow = fontScale.coerceAtLeast(1f).pow(0.8f)
-    val rowHeight: Dp = (if (landscape) 56.dp else if (rows == 1) 72.dp else 64.dp) * grow
+    val rowHeight: Dp = ButtonDefaults.MediumContainerHeight * grow
     val gap = 8.dp
 
     val grid = @Composable {
@@ -988,7 +988,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                             Spacer(Modifier.width(4.dp))
                         }
                         // A line height relative to the size, so two shrunk lines fit where two full ones would not
-                        val style = MaterialTheme.typography.titleMedium.copy(lineHeight = 1.25.em)
+                        val style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight).copy(lineHeight = 1.25.em)
                         Text(
                             dest.label,
                             style = style,
