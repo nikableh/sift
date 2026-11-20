@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -105,6 +106,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
     val layoutDirection = LocalLayoutDirection.current
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val motion = MaterialTheme.motionScheme
+    val list = rememberLazyListState()
 
     BackHandler(enabled = preview != null) { preview = null }
 
@@ -139,7 +141,8 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     },
                 )
             },
-            floatingActionButton = { MoveFab(vm, visible = vm.queued > 0 && ready) },
+            // Icon only while scrolling down, so it covers less of the rows passing under it
+            floatingActionButton = { MoveFab(vm, visible = vm.queued > 0 && ready, expanded = !list.lastScrolledForward) },
         ) { padding ->
             if (groups.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
@@ -161,6 +164,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 ) {
                     val margin = if (maxWidth >= 600.dp) 24.dp else 16.dp
                     LazyColumn(
+                        state = list,
                         contentPadding = PaddingValues(
                             // The header and the rows bring 16dp of the margin themselves
                             start = margin - 16.dp,
@@ -368,13 +372,14 @@ private val FabHeight = 80.dp
 
 /** FABs have no disabled state, so it steps away while a scan or a move is running. */
 @Composable
-private fun MoveFab(vm: SiftViewModel, visible: Boolean) {
+private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
         MediumExtendedFloatingActionButton(
             text = { FitLabel("Move ${vm.queued.grouped()}") },
             icon = { Icon(Icons.Rounded.DoneAll, null, Modifier.size(FloatingActionButtonDefaults.MediumIconSize)) },
             onClick = { vm.move() },
             modifier = Modifier.semantics { traversalIndex = -1f },
+            expanded = expanded,
             containerColor = MaterialTheme.colorScheme.primary,
         )
     }
