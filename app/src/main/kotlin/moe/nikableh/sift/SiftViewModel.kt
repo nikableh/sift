@@ -174,8 +174,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var counts by mutableStateOf<Map<String, Int>>(emptyMap())
         private set
 
-    /** Destination folder queued for the photo on screen. */
-    var assigned by mutableStateOf<String?>(null)
+    /** Destination folders queued for the photo on screen, empty when it has none. */
+    var assigned by mutableStateOf<List<String>>(emptyList())
         private set
     var bitmap by mutableStateOf<Bitmap?>(null)
         private set
@@ -240,6 +240,12 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** The order [photos] was read in, or -1 before the first read. */
     private var scannedOrder = -1
     private var lastAssignAt = 0L
+
+    /**
+     * The photo a folder button was held on since it came on screen. A tap there adds one more
+     * folder and goes on, where elsewhere it replaces the photo's folders
+     */
+    private var heldOn: String? = null
     private var flashId = 0
     private var browseGeneration = 0
 
@@ -294,7 +300,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
                         cut != null && !cut.undo -> listOf(cut.journal)
                         else -> emptyList()
                     }
-                    movedBefore = unnoted.flatMap { journal -> Mover.readJournal(journal).map { it.first } }
+                    movedBefore = unnoted.flatMap { journal -> Mover.readJournal(journal).filter { !it.copy }.map { it.from } }
                     queue to cut
                 }
                 Store.useQueue(queue)
@@ -586,13 +592,13 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
      * Sets or clears one photo's folder and moves the counts by the difference, where a [recount]
      * of a 200,000-photo album takes a noticeable part of a second.
      */
-    private fun setPending(path: String, dest: String?) {
-        val before = Store.pending[path]
-        if (before == dest) return
-        Store.setPending(path, dest)
+    private fun setPending(path: String, dests: List<String>) {
+        val before = Store.pending[path].orEmpty()
+        if (before == dests) return
+        Store.setPending(path, dests)
         indexOf[path]?.let { i ->
-            unsorted.set(i, dest == null)
-            val by = if (before == null) 1 else if (dest == null) -1 else 0
+            unsorted.set(i, dests.isEmpty())
+            val by = if (before.isEmpty()) 1 else if (dests.isEmpty()) -1 else 0
             if (by != 0) {
                 queuedHere += by
                 albumQueued[photos[i].album] += by
@@ -601,8 +607,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         }
         // A new map, so the folder badges see the change
         counts = HashMap(counts).also { m ->
-            before?.let { m[it] = (m[it] ?: 1) - 1 }
-            dest?.let { m[it] = (m[it] ?: 0) + 1 }
+            for (d in before) m[d] = (m[d] ?: 1) - 1
+            for (d in dests) m[d] = (m[d] ?: 0) + 1
         }
     }
 
@@ -610,7 +616,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     private fun syncPosition() {
         queued = Store.pending.size
         val p = current
-        assigned = p?.let { Store.pending[it.path] }
+        assigned = p?.let { Store.pending[it.path] }.orEmpty()
         if (p == null) {
             showImage(null)
             // The end card can still be swiped back to the last photo
@@ -660,6 +666,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         val next = (index + delta).coerceIn(0, photos.size)
         if (next == index) return
         index = next
+        heldOn = null
         flash = null
         syncPosition()
     }
@@ -667,10 +674,14 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun jumpTo(target: Int) {
         if (busy || scanning) return
         index = target.coerceIn(0, photos.size)
+        heldOn = null
         syncPosition()
     }
 
-    /** Returns whether the photo got the folder, so a buzz only comes with a visible change. */
+    /**
+     * Returns whether the photo got the folder, so a buzz only comes with a visible change. After a
+     * [hold] on this photo the folder joins the held ones, otherwise it replaces what the photo had
+     */
     fun assign(dest: Dest): Boolean {
         val p = current ?: return false
         if (busy || scanning) return false
@@ -679,10 +690,24 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (now - lastAssignAt < 120) return false
         lastAssignAt = now
 
-        setPending(p.path, dest.path)
+        val had = Store.pending[p.path].orEmpty()
+        setPending(p.path, if (heldOn == p.path) had - dest.path + dest.path else listOf(dest.path))
+        heldOn = null
         flash = Flash(++flashId, dest.label, Store.dests.indexOf(dest))
         // Jumps past photos that already have a folder, so fixing an old choice returns to where you left off
         index = firstUnsorted(index + 1)
+        syncPosition()
+        return true
+    }
+
+    /** Adds the folder to the photo on screen, or takes it off again, and stays on the photo. */
+    fun hold(dest: Dest): Boolean {
+        val p = current ?: return false
+        if (busy || scanning) return false
+        val had = Store.pending[p.path].orEmpty()
+        setPending(p.path, if (dest.path in had) had - dest.path else had + dest.path)
+        heldOn = p.path
+        flash = null
         syncPosition()
         return true
     }
@@ -697,10 +722,14 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (flash?.id == id) flash = null
     }
 
-    fun clearAssignment(): Boolean {
+    /** Takes one folder off the photo on screen. The photo stays, and a tap then adds instead of replacing */
+    fun unassign(dest: String): Boolean {
         if (busy || scanning) return false
         val p = current ?: return false
-        setPending(p.path, null)
+        val had = Store.pending[p.path].orEmpty()
+        if (dest !in had) return false
+        setPending(p.path, had - dest)
+        heldOn = p.path
         syncPosition()
         return true
     }
@@ -715,7 +744,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun loadSelections() {
         val buttons = Store.dests.map { it.path }
-        val byDest = Store.pending.entries.groupBy({ it.value }, { Selection(File(it.key), it.value) })
+        val byDest = HashMap<String, ArrayList<Selection>>()
+        for ((path, dests) in Store.pending) {
+            val file = File(path)
+            for (d in dests) byDest.getOrPut(d) { ArrayList() }.add(Selection(file, d))
+        }
         val out = ArrayList<SelectionGroup>()
         for (dest in buttons + byDest.keys.filter { it !in buttons }) byDest[dest]?.let { out.add(SelectionGroup(dest, it)) }
         selectionGroups = out
@@ -725,8 +758,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun dropSelection(row: Selection) {
         if (busy || scanning) return
         val path = row.file.path
-        val dest = Store.pending[path] ?: return
-        setPending(path, null)
+        val dest = row.dest
+        val had = Store.pending[path] ?: return
+        if (dest !in had) return
+        setPending(path, had - dest)
         // Only the row's own group changes, and the row is found by identity, so one removal costs
         // a copy of one group instead of regrouping 100,000 queued photos
         selectionGroups = selectionGroups.mapNotNull { g ->
@@ -808,7 +843,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         // Most ways in are dialog buttons, the clean move snackbar is the other
         dialog = null
         viewModelScope.launch {
-            val moved = withContext(Dispatchers.IO) { Mover.readJournal(batch.journal).map { it.second } }
+            val moved = withContext(Dispatchers.IO) { Mover.readJournal(batch.journal).map { it.to } }
             val granted = grantWrite(moved)
             if (granted) MoveRunner.undo(ctx, batch)
             preparing = false
@@ -1091,7 +1126,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     fun removeDest(dest: Dest) {
         if (scanning) return
         Store.dests.remove(dest)
-        if (Store.pending.values.removeAll { it == dest.path }) Store.compactPending()
+        var dropped = false
+        for (path in Store.pending.keys.toList()) if (Store.dropDest(Store.pending, path, dest.path)) dropped = true
+        if (dropped) Store.compactPending()
         changed(rescan = true)
     }
 

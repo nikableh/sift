@@ -17,31 +17,33 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Runs the queued moves. Never overwrites a file and never deletes a source it hasn't verified a copy of. */
 object Mover {
     class Result(
-        /** Source paths that are settled: moved, already in place, or gone. */
-        val settled: List<String>,
+        /** Source path and folder pairs that are settled: moved, copied, already in place, or gone. */
+        val settled: List<Pair<String, String>>,
         val moved: Int,
+        val copied: Int,
         val missing: Int,
         val failed: List<Pair<String, String>>,
         val cancelled: Boolean,
     )
 
     class UndoResult(
-        /** Original path to the destination folder it had been moved to. */
+        /** Original path to the destination folder it had been moved or copied to. */
         val restored: List<Pair<String, String>>,
         val failed: List<Pair<String, String>>,
     )
 
     fun move(
         ctx: Context,
-        entries: List<Pair<String, String>>,
+        entries: List<Pair<String, List<String>>>,
         journal: File,
         cancel: AtomicBoolean,
         progress: (Int) -> Unit,
     ): Result {
-        val settled = ArrayList<String>()
+        val settled = ArrayList<Pair<String, String>>()
         val failed = ArrayList<Pair<String, String>>()
         val touched = ArrayList<String>()
         var moved = 0
+        var copied = 0
         var missing = 0
         var cancelled = false
         val next = RandomAccessFile(nextFile(journal), "rw")
@@ -51,42 +53,62 @@ object Mover {
                     cancelled = true
                     break
                 }
-                val src = File(entry.first)
-                val destDir = File(entry.second)
-                try {
-                    when {
-                        !src.exists() -> {
-                            missing++
-                            settled.add(entry.first)
-                        }
-                        src.parentFile == destDir -> settled.add(entry.first)
-                        else -> {
-                            val target = move(src, destDir, src.name, next)
-                            // Flushed per file, so a crash mid-batch still leaves an undoable record
-                            log.write(line(src.path, target.path))
-                            log.flush()
-                            touched.add(src.path)
-                            touched.add(target.path)
-                            moved++
-                            settled.add(entry.first)
-                        }
-                    }
-                } catch (e: Exception) {
-                    failed.add(src.name to reason(e))
+                val (path, dests) = entry
+                val src = File(path)
+                if (!src.exists()) {
+                    missing++
+                    for (d in dests) settled.add(path to d)
+                    progress(i + 1)
+                    continue
                 }
+                val away = dests.filter { File(it) != src.parentFile }
+                for (d in dests) if (d !in away) settled.add(path to d)
+                // A photo already in one of its folders stays there, otherwise it ends up in the last one
+                val moveTo = if (away.size < dests.size) null else away.last()
+                var failure: String? = null
+                for (d in away) {
+                    if (d == moveTo) continue
+                    try {
+                        val target = copy(src, File(d), next)
+                        // Flushed per file, so a crash mid-batch still leaves an undoable record
+                        log.write(line(src.path, target.path, copy = true))
+                        log.flush()
+                        touched.add(target.path)
+                        copied++
+                        settled.add(path to d)
+                    } catch (e: Exception) {
+                        if (failure == null) failure = reason(e)
+                    }
+                }
+                // The move waits for every copy, or a folder whose copy failed would find the photo
+                // gone on the next run and silently drop it
+                if (moveTo != null && failure == null) {
+                    try {
+                        val target = move(src, File(moveTo), src.name, next)
+                        log.write(line(src.path, target.path))
+                        log.flush()
+                        touched.add(src.path)
+                        touched.add(target.path)
+                        moved++
+                        settled.add(path to moveTo)
+                    } catch (e: Exception) {
+                        failure = reason(e)
+                    }
+                }
+                failure?.let { failed.add(src.name to it) }
                 progress(i + 1)
             }
         }
         next.close()
         nextFile(journal).delete()
-        if (moved == 0) journal.delete()
+        if (moved + copied == 0) journal.delete()
         rescan(ctx, touched)
-        return Result(settled, moved, missing, failed, cancelled)
+        return Result(settled, moved, copied, missing, failed, cancelled)
     }
 
     /**
-     * Tells a move line without parsing it, for counting a 100,000-line journal. Journals from
-     * versions that could skip photos also hold skip lines, which end in a number
+     * Tells a move or copy line without parsing it, for counting a 100,000-line journal. Journals
+     * from versions that could skip photos also hold skip lines, which end in a number
      */
     fun isMoveLine(line: String) = line.endsWith("\"]")
 
@@ -106,9 +128,10 @@ object Mover {
     fun settle(log: File) {
         val next = nextFile(log)
         val owed = readJournal(next).firstOrNull()
-        if (owed != null && !File(owed.first).exists() && File(owed.second).exists() && readJournal(log).lastOrNull() != owed) {
+        // A copy only gets its own name once it is whole, and the original stays
+        if (owed != null && File(owed.to).exists() && (owed.copy || !File(owed.from).exists()) && readJournal(log).lastOrNull() != owed) {
             try {
-                FileOutputStream(log, true).use { it.write(line(owed.first, owed.second)) }
+                FileOutputStream(log, true).use { it.write(line(owed.from, owed.to, owed.copy)) }
             } catch (e: Exception) {
             }
         }
@@ -125,28 +148,51 @@ object Mover {
         val lines = readJournal(journal)
         val notes = backLog(journal)
         settle(notes)
-        // Moved-to path to the path an earlier undo put the photo back at
-        val back = readJournal(notes).toMap()
+        // Moved-to or copy path to the path an earlier undo put the photo back at
+        val back = readJournal(notes).associate { it.from to it.to }
+        // Original path to where this undo put the photo back, which a name taken meanwhile can change
+        val putBack = HashMap<String, String>()
         val restored = ArrayList<Pair<String, String>>()
         val failed = ArrayList<Pair<String, String>>()
         val touched = ArrayList<String>()
         val next = RandomAccessFile(nextFile(notes), "rw")
         FileOutputStream(notes, true).use { log ->
+            // Backwards, so a photo is back where it was before its copies are checked against it
             for ((i, m) in lines.asReversed().withIndex()) {
-                val original = File(m.first)
-                val current = File(m.second)
+                val original = File(m.from)
+                val current = File(m.to)
                 try {
                     val was = back[current.path]
-                    if (was != null) {
-                        restored.add(was to current.parent!!)
-                    } else {
-                        if (!current.exists()) throw Plain("no longer in ${current.parentFile?.name}")
-                        val to = move(current, original.parentFile!!, original.name, next)
-                        log.write(line(current.path, to.path))
-                        log.flush()
-                        touched.add(current.path)
-                        touched.add(to.path)
-                        restored.add(to.path to current.parent!!)
+                    when {
+                        was != null -> {
+                            if (!m.copy) putBack[m.from] = was
+                            restored.add(was to current.parent!!)
+                        }
+                        m.copy -> {
+                            val photo = File(putBack[m.from] ?: m.from)
+                            // A copy already deleted by hand is as good as undone
+                            if (current.exists()) {
+                                if (!photo.exists() || photo.length() != current.length()) {
+                                    throw Plain("the original isn't back, kept the copy in ${current.parentFile?.name}")
+                                }
+                                announce(next, line(current.path, photo.path))
+                                if (!current.delete()) throw Plain("can't remove the copy in ${current.parentFile?.name}")
+                                log.write(line(current.path, photo.path))
+                                log.flush()
+                                touched.add(current.path)
+                            }
+                            restored.add(photo.path to current.parent!!)
+                        }
+                        else -> {
+                            if (!current.exists()) throw Plain("no longer in ${current.parentFile?.name}")
+                            val to = move(current, original.parentFile!!, original.name, next)
+                            log.write(line(current.path, to.path))
+                            log.flush()
+                            touched.add(current.path)
+                            touched.add(to.path)
+                            putBack[m.from] = to.path
+                            restored.add(to.path to current.parent!!)
+                        }
                     }
                 } catch (e: Exception) {
                     failed.add(current.name to reason(e))
@@ -178,16 +224,26 @@ object Mover {
         }
     }
 
-    private fun line(from: String, to: String) = (JSONArray().put(from).put(to).toString() + "\n").toByteArray()
+    private fun line(from: String, to: String, copy: Boolean = false): ByteArray {
+        val a = JSONArray().put(from).put(to)
+        if (copy) a.put(COPY)
+        return (a.toString() + "\n").toByteArray()
+    }
 
-    /** Original path to new path, one pair per moved photo. */
-    fun readJournal(journal: File): List<Pair<String, String>> {
-        val out = ArrayList<Pair<String, String>>()
+    private const val COPY = "copy"
+
+    /** One journal line: a photo moved from [from] to [to], or with [copy] a copy of it made at [to]. */
+    data class Entry(val from: String, val to: String, val copy: Boolean) {
+        val destDir: String get() = File(to).parent!!
+    }
+
+    fun readJournal(journal: File): List<Entry> {
+        val out = ArrayList<Entry>()
         try {
             journal.forEachLine { line ->
                 try {
                     val a = JSONArray(line)
-                    (a.get(1) as? String)?.let { out.add(a.getString(0) to it) }
+                    (a.get(1) as? String)?.let { out.add(Entry(a.getString(0), it, a.optString(2) == COPY)) }
                 } catch (e: Exception) {
                 }
             }
@@ -196,20 +252,45 @@ object Mover {
         return out
     }
 
-    private fun move(src: File, destDir: File, name: String, next: RandomAccessFile): File {
-        if (!destDir.isDirectory && !destDir.mkdirs() && !destDir.isDirectory) {
-            throw Plain("can't create ${destDir.path}")
-        }
-        val target = freeName(destDir, name)
-        val announced = line(src.path, target.path)
+    private fun announce(next: RandomAccessFile, line: ByteArray) {
         next.seek(0)
-        next.write(announced)
-        next.setLength(announced.size.toLong())
+        next.write(line)
+        next.setLength(line.size.toLong())
+    }
+
+    private fun makeDir(dir: File) {
+        if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw Plain("can't create ${dir.path}")
+    }
+
+    private fun copy(src: File, destDir: File, next: RandomAccessFile): File {
+        makeDir(destDir)
+        val target = freeName(destDir, src.name)
+        announce(next, line(src.path, target.path, copy = true))
+        copyTo(src, target)
+        return target
+    }
+
+    private fun move(src: File, destDir: File, name: String, next: RandomAccessFile): File {
+        makeDir(destDir)
+        val target = freeName(destDir, name)
+        announce(next, line(src.path, target.path))
         // Same volume: a rename only rewrites directory entries, which is what makes a batch fast
         if (src.renameTo(target)) return target
 
         // Other volume (SD card): copy, check, then drop the original
-        val part = File(destDir, ".${target.name}.sift-part")
+        copyTo(src, target)
+        if (!src.delete()) {
+            // Roll back, so a retry doesn't pile up duplicates
+            target.delete()
+            throw Plain("the original can't be removed, left it in place")
+        }
+        return target
+    }
+
+    /** Writes under a hidden name and takes the real one only once the copy is whole. */
+    private fun copyTo(src: File, target: File) {
+        // Keeps the photo's extension last: without all-files access a photo folder only takes media files
+        val part = File(target.parentFile, ".sift-part-${target.name}")
         try {
             FileInputStream(src).use { input ->
                 FileOutputStream(part).use { output ->
@@ -223,17 +304,11 @@ object Mover {
             }
             if (part.length() != src.length()) throw Plain("copy came out a different size")
             part.setLastModified(src.lastModified())
-            if (!part.renameTo(target)) throw Plain("can't finish the copy in ${destDir.name}")
+            if (!part.renameTo(target)) throw Plain("can't finish the copy in ${target.parentFile?.name}")
         } catch (e: Exception) {
             part.delete()
             throw e
         }
-        if (!src.delete()) {
-            // Roll back, so a retry doesn't pile up duplicates
-            target.delete()
-            throw Plain("the original can't be removed, left it in place")
-        }
-        return target
     }
 
     private fun freeName(dir: File, name: String): File {

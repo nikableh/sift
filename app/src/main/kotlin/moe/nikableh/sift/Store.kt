@@ -59,8 +59,11 @@ object Store {
     /** Videos start without sound until the user turns it on, and the choice is kept. */
     var videoMuted = true
 
-    /** Photo path to destination folder path. Nothing on disk changes until Move. */
-    var pending = LinkedHashMap<String, String>()
+    /**
+     * Photo path to its destination folder paths, never an empty list. With more than one, Move
+     * copies the photo into all but the last and moves it into that one. Nothing on disk changes until Move
+     */
+    var pending = LinkedHashMap<String, List<String>>()
         private set
 
     /**
@@ -91,11 +94,11 @@ object Store {
      * line. It touches no shared state, so it can run off the main thread, where a big queue would
      * take seconds
      */
-    fun readQueue(): LinkedHashMap<String, String> {
-        val pending = LinkedHashMap<String, String>()
+    fun readQueue(): LinkedHashMap<String, List<String>> {
+        val pending = LinkedHashMap<String, List<String>>()
         val lines = readLines(pendingFile) { a ->
-            val dest = a.optString(1)
-            if (dest.isEmpty()) pending.remove(a.getString(0)) else pending[a.getString(0)] = dest
+            val dests = (1 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() }
+            if (dests.isEmpty()) pending.remove(a.getString(0)) else pending[a.getString(0)] = dests
         }
         // One line per entry means nothing to drop, and rewriting a big queue anyway costs seconds.
         // A file torn right before its last newline still parses, but the next append would join
@@ -142,7 +145,7 @@ object Store {
      * Start-up, off the main thread, on the map [readQueue] returned. A Move cut short had no
      * chance to drop what it moved from the queue, so its journal does that here
      */
-    fun recover(ctx: Context, pending: LinkedHashMap<String, String>): Interrupted? {
+    fun recover(ctx: Context, pending: LinkedHashMap<String, List<String>>): Interrupted? {
         val mark = try {
             runningFile.readLines()
         } catch (e: Exception) {
@@ -154,17 +157,25 @@ object Store {
         val moves = Mover.readJournal(journal)
         if (!undo) {
             var dropped = false
-            for (m in moves) if (pending.remove(m.first) != null) dropped = true
+            for (m in moves) if (dropDest(pending, m.from, m.destDir)) dropped = true
             if (dropped) writeAtomic(pendingFile, pendingText(pending))
             // The run tells MediaStore at its end, which it never reached
-            Mover.rescan(ctx, moves.flatMap { listOf(it.first, it.second) })
+            Mover.rescan(ctx, moves.flatMap { listOf(it.from, it.to) })
         }
         runningFile.delete()
         return Interrupted(journal, undo, moves.size)
     }
 
     /** Main thread: takes over what [readQueue] read. */
-    fun useQueue(pending: LinkedHashMap<String, String>) {
+    /** Takes one folder off a photo, and the photo off the queue with its last folder. */
+    fun dropDest(pending: MutableMap<String, List<String>>, path: String, dest: String): Boolean {
+        val dests = pending[path] ?: return false
+        if (dest !in dests) return false
+        if (dests.size == 1) pending.remove(path) else pending[path] = dests - dest
+        return true
+    }
+
+    fun useQueue(pending: LinkedHashMap<String, List<String>>) {
         this.pending = pending
         ready = true
     }
@@ -281,9 +292,9 @@ object Store {
     }
 
     /** Appends one decision to the log, so a tap costs the same at 10 or 10000 queued photos. */
-    fun setPending(path: String, dest: String?) {
-        if (dest == null) pending.remove(path) else pending[path] = dest
-        val line = JSONArray().put(path).put(dest ?: "").toString() + "\n"
+    fun setPending(path: String, dests: List<String>) {
+        if (dests.isEmpty()) pending.remove(path) else pending[path] = dests
+        val line = entryLine(path, dests.ifEmpty { listOf("") })
         io.execute {
             try {
                 FileOutputStream(pendingFile, true).use { it.write(line.toByteArray()) }
@@ -297,15 +308,23 @@ object Store {
         io.execute { writeAtomic(pendingFile, text) }
     }
 
-    private fun pendingText(pending: Map<String, String>): String {
+    /** One line per photo, the last for a path wins, and a blank folder takes the photo out. */
+    private fun entryLine(path: String, dests: List<String>): String {
+        val a = JSONArray().put(path)
+        for (d in dests) a.put(d)
+        return a.toString() + "\n"
+    }
+
+    private fun pendingText(pending: Map<String, List<String>>): String {
         val sb = StringBuilder()
-        for ((path, dest) in pending) sb.append(JSONArray().put(path).put(dest).toString()).append('\n')
+        for ((path, dests) in pending) sb.append(entryLine(path, dests))
         return sb.toString()
     }
 
+    /** Photos queued per folder. A photo going to two folders counts in both. */
     fun counts(): Map<String, Int> {
         val out = HashMap<String, Int>()
-        for (dest in pending.values) out[dest] = (out[dest] ?: 0) + 1
+        for (dests in pending.values) for (dest in dests) out[dest] = (out[dest] ?: 0) + 1
         return out
     }
 

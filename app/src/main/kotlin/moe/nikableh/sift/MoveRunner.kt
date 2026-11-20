@@ -38,14 +38,14 @@ object MoveRunner {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var cancel: AtomicBoolean? = null
 
-    fun move(ctx: Context, entries: List<Pair<String, String>>) {
+    fun move(ctx: Context, entries: List<Pair<String, List<String>>>) {
         val journal = Store.newJournal()
         val stop = AtomicBoolean(false)
         cancel = stop
         start(ctx, Run("Moving ${files(entries.size)}", entries.size, cancellable = true), journal, undo = false) { app ->
             val result = withContext(Dispatchers.IO) { Mover.move(app, entries, journal, stop, ::tick) }
-            for (path in result.settled) Store.pending.remove(path)
-            Store.noteMovedFrom(result.settled)
+            for ((path, dest) in result.settled) Store.dropDest(Store.pending, path, dest)
+            Store.noteMovedFrom(result.settled.map { it.first })
             Outcome.Moved(result)
         }
     }
@@ -54,7 +54,10 @@ object MoveRunner {
         cancel = null
         start(ctx, Run("Moving ${files(batch.moved)} back", batch.moved, cancellable = false), batch.journal, undo = true) { app ->
             val result = withContext(Dispatchers.IO) { Mover.undo(app, batch.journal, ::tick) }
-            for ((path, dest) in result.restored) Store.pending[path] = dest
+            for ((path, dest) in result.restored) {
+                val dests = Store.pending[path].orEmpty()
+                if (dest !in dests) Store.pending[path] = dests + dest
+            }
             Store.lastPath = result.restored.lastOrNull()?.first
             Outcome.Undone(result)
         }

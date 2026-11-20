@@ -143,12 +143,12 @@ fun Dialogs(vm: SiftViewModel, snackbar: SnackbarHostState) {
             }
             val details = applyDetails(d.result)
             if (details == null) {
-                Report(vm, snackbar, scope, d, "Moved ${files(d.result.moved)}", d.batch)
+                Report(vm, snackbar, scope, d, movedTitle(d.result), d.batch)
             } else {
                 AlertDialog(
                     onDismissRequest = close,
                     icon = { Icon(Icons.Rounded.DoneAll, null) },
-                    title = { Text("Moved ${files(d.result.moved)}") },
+                    title = { Text(movedTitle(d.result)) },
                     text = details?.let { text -> { Column(Modifier.verticalScroll(rememberScrollState())) { Text(text) } } },
                     confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
                     dismissButton = {
@@ -393,6 +393,11 @@ private fun Report(
         left.invokeOnCompletion { report.cancel() }
         report.invokeOnCompletion { left.cancel() }
     }
+}
+
+private fun movedTitle(r: Mover.Result): String {
+    val copies = if (r.copied == 1) "1 copy" else "${r.copied.grouped()} copies"
+    return if (r.copied == 0) "Moved ${files(r.moved)}" else "Moved ${files(r.moved)}, made $copies"
 }
 
 private fun applyDetails(r: Mover.Result): String? {

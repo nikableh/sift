@@ -16,10 +16,13 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -64,6 +67,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -78,11 +82,13 @@ import androidx.compose.material3.TwoRowsTopAppBar
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,6 +102,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -109,6 +116,7 @@ import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -134,6 +142,7 @@ import kotlin.math.ceil
 import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import moe.nikableh.sift.Dest
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Gate
@@ -470,15 +479,28 @@ private fun Photo(
             // Above the pill and the video bar, so a snackbar never covers them or the folder buttons
             SnackbarHost(snackbar)
             val assigned = vm.assigned
-            if (assigned != null) {
-                val i = vm.dests.indexOfFirst { it.path == assigned }
-                Pill(
-                    label = Store.labelFor(assigned),
-                    color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
-                    contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
-                    modifier = Modifier,
-                    onClear = { if (vm.clearAssignment()) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) },
-                )
+            if (assigned.isNotEmpty()) {
+                // Anchored at the bottom, so a pill that doesn't fit starts a row below and lifts the full ones
+                FlowRow(
+                    // The vertical padding keeps one row as tall as the flash pill, so a pill doesn't jump when it replaces it
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    // The 48dp touch height would put 12dp more between rows
+                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                        for (dest in assigned) {
+                            val i = vm.dests.indexOfFirst { it.path == dest }
+                            Pill(
+                                label = Store.labelFor(dest),
+                                color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
+                                contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
+                                modifier = Modifier,
+                                onClear = { if (vm.unassign(dest)) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) },
+                            )
+                        }
+                    }
+                }
             } else {
                 FlashPill(vm, Modifier)
             }
@@ -729,7 +751,7 @@ private fun SortMenu(vm: SiftViewModel, file: File?, details: String?, expanded:
     }
 }
 
-/** Shows where the photo on screen is queued to go. Tapping it takes the photo out of the queue. */
+/** Shows one folder the photo on screen is queued to go to. Tapping it takes that folder off. */
 @Composable
 private fun Pill(
     label: String,
@@ -754,7 +776,7 @@ private fun Pill(
             onClick = onClear,
             modifier = modifier.semantics {
                 role = Role.Button
-                onClick(label = "Take out of the queue", action = null)
+                onClick(label = "Take off this photo", action = null)
             },
             shape = CircleShape,
             color = color,
@@ -876,16 +898,35 @@ private fun FolderGrid(vm: SiftViewModel, landscape: Boolean) {
 @Composable
 private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Modifier) {
     val view = LocalView.current
-    val selected = vm.assigned == dest.path
+    val selected = dest.path in vm.assigned
     val count = vm.counts[dest.path] ?: 0
     val color = folderColor(index)
     val ink = color.ink()
 
+    // A hold adds the folder and stays on the photo, so one photo can go to several folders.
+    // The library Button has no long click, so the hold is timed from its press
+    val interactions = remember { MutableInteractionSource() }
+    var held by remember { mutableStateOf(false) }
+    val longPress = LocalViewConfiguration.current.longPressTimeoutMillis
+    val current by rememberUpdatedState(dest)
+    LaunchedEffect(interactions) {
+        interactions.interactions.collectLatest { i ->
+            if (i is PressInteraction.Press) {
+                held = false
+                delay(longPress)
+                held = true
+                if (vm.hold(current)) view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            }
+        }
+    }
+
     Box(modifier) {
         Button(
             onClick = {
-                if (vm.assign(dest)) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                if (held) held = false
+                else if (vm.assign(dest)) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             },
+            interactionSource = interactions,
             // Past about 16dp the corner curve reaches the badge and the selection ring cuts through it
             shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large, pressedShape = ButtonDefaults.mediumPressedShape),
             colors = ButtonDefaults.buttonColors(containerColor = color.tile(), contentColor = ink),
@@ -894,6 +935,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
             contentPadding = PaddingValues(0.dp),
             modifier = Modifier.fillMaxSize().semantics {
                 this.selected = selected
+                onLongClick(label = if (selected) "Take off and stay" else "Add and stay") { vm.hold(dest) }
                 val state = listOfNotNull(
                     if (selected) "This photo is queued here" else null,
                     if (count > 0) "${count.grouped()} queued" else null,
