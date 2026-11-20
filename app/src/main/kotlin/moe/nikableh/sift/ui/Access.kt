@@ -215,7 +215,7 @@ private fun AccessContent(icon: ImageVector, title: String, body: String, conten
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                Icon(icon, null, Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
             }
             Column(
                 Modifier.padding(horizontal = 16.dp),
