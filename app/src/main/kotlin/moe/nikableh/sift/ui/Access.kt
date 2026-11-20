@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.SystemClock
 import android.provider.Settings
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -51,7 +50,6 @@ import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,14 +63,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import moe.nikableh.sift.Access
 import moe.nikableh.sift.SiftViewModel
-
-/**
- * Faster than anyone answers a dialog. Android stops showing the photo dialog after it was refused
- * twice and then answers at once, so a reply this quick means the user never saw it
- */
-private const val NO_DIALOG_MS = 400L
 
 fun openAppSettings(context: Context) {
     context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
@@ -92,27 +85,23 @@ fun openManageMedia(context: Context) {
 fun AccessScreen(vm: SiftViewModel) {
     val context = LocalContext.current
     val activity = LocalActivity.current
-    var askedAt by remember { mutableLongStateOf(0L) }
-    var before by remember { mutableStateOf(vm.access) }
+    // After two refusals Android no longer offers full access: it answers at once, or with
+    // limited access only opens the photo picker again. Only the app's settings can change it then
+    fun refusedForGood() = vm.access != Access.AskPhotos &&
+        activity?.shouldShowRequestPermissionRationale(vm.photoPermissions()[0]) == false
+    var refused by remember { mutableStateOf(refusedForGood()) }
+    // Android doesn't report rationale changes, so check again whenever Sift comes back from settings or a dialog
+    LifecycleResumeEffect(vm.access) {
+        refused = refusedForGood()
+        onPauseOrDispose {}
+    }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        val quick = SystemClock.uptimeMillis() - askedAt < NO_DIALOG_MS
         vm.refresh()
-        if (quick && vm.access == before) openAppSettings(context)
+        refused = refusedForGood()
     }
     val askPhotos = {
-        val permissions = vm.photoPermissions()
-        // After two refusals Android no longer offers full access: it answers at once, or with
-        // limited access only opens the photo picker again. Only the app's settings can change it then
-        val refusedForGood = vm.access != Access.AskPhotos &&
-            activity?.shouldShowRequestPermissionRationale(permissions[0]) == false
-        if (refusedForGood) {
-            openAppSettings(context)
-        } else {
-            vm.photosAsked()
-            before = vm.access
-            askedAt = SystemClock.uptimeMillis()
-            launcher.launch(permissions)
-        }
+        vm.photosAsked()
+        launcher.launch(vm.photoPermissions())
     }
 
     when (vm.access) {
@@ -141,9 +130,16 @@ fun AccessScreen(vm: SiftViewModel) {
             title = "Sift can't see your photos",
             body = "Photo access is off. Sift needs it to show your albums.",
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                BigAction("Allow photo access", askPhotos)
-                TextButton(onClick = { openAppSettings(context) }) { Text("Open app settings") }
+            if (refused) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BigAction("Open app settings") { openAppSettings(context) }
+                    Note("Android won't ask again. In settings, open Photos and videos and allow access.")
+                }
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    BigAction("Allow photo access", askPhotos)
+                    TextButton(onClick = { openAppSettings(context) }) { Text("Open app settings") }
+                }
             }
         }
 
@@ -153,8 +149,13 @@ fun AccessScreen(vm: SiftViewModel) {
             body = "You chose limited access, so albums would be missing photos. Allow all photos to sort whole albums.",
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                BigAction("Allow all photos", askPhotos)
-                Note("Android asks again. Choose \"Allow all\".")
+                if (refused) {
+                    BigAction("Open app settings") { openAppSettings(context) }
+                    Note("Android won't ask again. In settings, open Photos and videos and choose \"Allow all\".")
+                } else {
+                    BigAction("Allow all photos", askPhotos)
+                    Note("Android asks again. Choose \"Allow all\".")
+                }
             }
         }
 
