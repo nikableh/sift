@@ -181,7 +181,7 @@ fun Dialogs(vm: SiftViewModel) {
             AlertDialog(
                 onDismissRequest = close,
                 title = { Text("Moved ${d.restored.grouped()} back") },
-                text = { Text("${d.failed.size.grouped()} could not be moved back:\n" + failureLines(d.failed)) },
+                text = { Text("${d.failed.size.grouped()} could not be moved back:\n" + failureLines(d.failed) + "\n\nThey stay in the folders they were moved to.") },
                 confirmButton = { TextButton(onClick = close) { Text("OK") } },
             )
         }

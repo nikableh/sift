@@ -2,9 +2,13 @@ package moe.nikableh.sift
 
 import android.content.Context
 import android.media.MediaScannerConnection
+import android.system.ErrnoException
+import android.system.OsConstants
+import android.util.Log
 import org.json.JSONArray
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
@@ -68,7 +72,7 @@ object Mover {
                         }
                     }
                 } catch (e: Exception) {
-                    failed.add(src.name to (e.message ?: e.javaClass.simpleName))
+                    failed.add(src.name to reason(e))
                 }
                 progress(i + 1)
             }
@@ -136,7 +140,7 @@ object Mover {
                     if (was != null) {
                         restored.add(was to current.parent!!)
                     } else {
-                        if (!current.exists()) throw IOException("no longer in ${current.parentFile?.name}")
+                        if (!current.exists()) throw Plain("no longer in ${current.parentFile?.name}")
                         val to = move(current, original.parentFile!!, original.name, next)
                         log.write(line(current.path, to.path))
                         log.flush()
@@ -145,7 +149,7 @@ object Mover {
                         restored.add(to.path to current.parent!!)
                     }
                 } catch (e: Exception) {
-                    failed.add(current.name to (e.message ?: e.javaClass.simpleName))
+                    failed.add(current.name to reason(e))
                 }
                 progress(i + 1)
             }
@@ -154,6 +158,24 @@ object Mover {
         discard(journal)
         rescan(ctx, touched)
         return UndoResult(restored, failed)
+    }
+
+    /** A failure this file describes itself, already in words the dialog can show. */
+    private class Plain(message: String) : IOException(message)
+
+    /** Turns a failure into words for the dialog. The raw message goes only to the log. */
+    private fun reason(e: Exception): String {
+        Log.w("Sift", "move failed", e)
+        if (e is Plain) return e.message!!
+        val errno = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<ErrnoException>().firstOrNull()?.errno
+        val text = e.message.orEmpty()
+        return when {
+            errno == OsConstants.ENOSPC || "ENOSPC" in text -> "Not enough space"
+            errno == OsConstants.EACCES || errno == OsConstants.EPERM || e is SecurityException ||
+                "EACCES" in text || "EPERM" in text -> "Android refused access"
+            e is FileNotFoundException -> "File is gone"
+            else -> "Couldn't be moved"
+        }
     }
 
     private fun line(from: String, to: String) = (JSONArray().put(from).put(to).toString() + "\n").toByteArray()
@@ -176,7 +198,7 @@ object Mover {
 
     private fun move(src: File, destDir: File, name: String, next: RandomAccessFile): File {
         if (!destDir.isDirectory && !destDir.mkdirs() && !destDir.isDirectory) {
-            throw IOException("can't create ${destDir.path}")
+            throw Plain("can't create ${destDir.path}")
         }
         val target = freeName(destDir, name)
         val announced = line(src.path, target.path)
@@ -199,9 +221,9 @@ object Mover {
                     output.fd.sync()
                 }
             }
-            if (part.length() != src.length()) throw IOException("copy came out a different size")
+            if (part.length() != src.length()) throw Plain("copy came out a different size")
             part.setLastModified(src.lastModified())
-            if (!part.renameTo(target)) throw IOException("can't finish the copy in ${destDir.name}")
+            if (!part.renameTo(target)) throw Plain("can't finish the copy in ${destDir.name}")
         } catch (e: Exception) {
             part.delete()
             throw e
@@ -209,7 +231,7 @@ object Mover {
         if (!src.delete()) {
             // Roll back, so a retry doesn't pile up duplicates
             target.delete()
-            throw IOException("the original can't be removed, left it in place")
+            throw Plain("the original can't be removed, left it in place")
         }
         return target
     }
