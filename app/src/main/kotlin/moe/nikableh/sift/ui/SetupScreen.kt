@@ -471,7 +471,7 @@ private fun OrderButtons(vm: SiftViewModel) {
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
-            ) { FitLabel(label) }
+            ) { FitLabel(label, MaterialTheme.typography.labelMedium) }
         }
     }
 }

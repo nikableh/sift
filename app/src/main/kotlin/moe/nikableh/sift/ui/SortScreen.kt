@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.ZeroCornerSize
@@ -625,7 +626,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             val label: @Composable RowScope.() -> Unit = {
                 Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                FitLabel(if (fits) withCount else "Review", style)
+                FitLabel(if (fits) withCount else "Review", MaterialTheme.typography.labelMedium, style)
             }
             // The end card has its own filled Review, and one filled action per screen is enough
             if (vm.gate == Gate.End) {
@@ -1001,9 +1002,14 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                         containerColor = ink,
                         contentColor = color.tile(),
                     ) {
-                        FitLabel(
+                        val badge = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                        Text(
                             if (count > 999) "999+" else count.grouped(),
-                            LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                            Modifier.wrapContentHeight(Alignment.CenterVertically, unbounded = true),
+                            style = badge,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            autoSize = shrinkToFit(badge),
                         )
                     }
                     Row(

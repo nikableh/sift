@@ -375,7 +375,7 @@ private val FabHeight = 80.dp
 private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
         MediumExtendedFloatingActionButton(
-            text = { FitLabel("Move ${vm.queued.grouped()}") },
+            text = { Text("Move ${vm.queued.grouped()}") },
             icon = { Icon(Icons.Rounded.DoneAll, null, Modifier.size(FloatingActionButtonDefaults.MediumIconSize)) },
             onClick = { vm.move() },
             modifier = Modifier.semantics { traversalIndex = -1f },

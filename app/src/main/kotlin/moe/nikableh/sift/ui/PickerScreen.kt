@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,8 +24,10 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -438,7 +441,7 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
             }
             Row(
                 // On wide windows the buttons would stretch into long flat bars, so the row is capped and kept at the end
-                Modifier.align(Alignment.End).widthIn(max = 600.dp).fillMaxWidth()
+                Modifier.align(Alignment.End).widthIn(max = 600.dp).fillMaxWidth().height(IntrinsicSize.Min)
                     .padding(start = 16.dp, end = 16.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -447,20 +450,20 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                     FilledTonalButton(
                         onClick = { vm.dialog = newFolder },
                         shapes = ButtonDefaults.shapes(),
-                        modifier = Modifier.weight(1f).heightIn(min = size),
+                        modifier = Modifier.weight(1f).fillMaxHeight().heightIn(min = size),
                     ) {
                         Icon(Icons.Rounded.CreateNewFolder, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
                         Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
-                        FitLabel(if (newFolder.album) "New album" else "New folder", ButtonDefaults.textStyleFor(size))
+                        ButtonLabel(if (newFolder.album) "New album" else "New folder", ButtonDefaults.textStyleFor(size))
                     }
                 }
                 Button(
                     onClick = { vm.savePicked(forSource) },
                     enabled = added > 0 || removed > 0,
                     shapes = ButtonDefaults.shapes(),
-                    modifier = Modifier.weight(1f).heightIn(min = size),
+                    modifier = Modifier.weight(1f).fillMaxHeight().heightIn(min = size),
                 ) {
-                    FitLabel(
+                    ButtonLabel(
                         when {
                             added > 0 && removed > 0 -> "Add $added, remove $removed"
                             removed == 1 -> "Remove 1 album"

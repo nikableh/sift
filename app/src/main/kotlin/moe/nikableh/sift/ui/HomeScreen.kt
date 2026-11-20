@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -514,12 +516,12 @@ private fun Actions(vm: SiftViewModel) {
                     // The tonal fill barely shows on the bare page, so the outline gives it a visible edge
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                     interactionSource = interactions,
-                    modifier = modifier.height(size),
+                    modifier = modifier.heightIn(min = size),
                 ) {
                     Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
                     Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                     val style = ButtonDefaults.textStyleFor(size)
-                    FitLabel(reviewLabel(vm), style)
+                    ButtonLabel(reviewLabel(vm), style)
                 }
             }
             val start = @Composable { modifier: Modifier, interactions: MutableInteractionSource? ->
@@ -530,7 +532,7 @@ private fun Actions(vm: SiftViewModel) {
                     enabled = ready,
                     shapes = ButtonDefaults.shapes(),
                     interactionSource = interactions,
-                    modifier = modifier.height(size),
+                    modifier = modifier.heightIn(min = size),
                 ) {
                     Icon(
                         if (add) Icons.Rounded.Add else Icons.Rounded.PlayArrow,
@@ -539,7 +541,7 @@ private fun Actions(vm: SiftViewModel) {
                     )
                     Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
                     val style = ButtonDefaults.textStyleFor(size)
-                    FitLabel(
+                    ButtonLabel(
                         when {
                             add -> "Add albums"
                             vm.index > 0 || vm.queuedHere > 0 -> "Continue sorting"
@@ -564,19 +566,21 @@ private fun Actions(vm: SiftViewModel) {
                 // Two buttons always fit the width, so the overflow menu never shows
                 ButtonGroup(
                     overflowIndicator = { ButtonGroupDefaults.OverflowIndicator(it) },
+                    // A label that wraps makes its button taller, and the other one matches it
+                    modifier = Modifier.height(IntrinsicSize.Min),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (queued > 0) {
                         customItem(
                             buttonGroupContent = {
-                                review(Modifier.weight(1f).animateWidth(reviewInteractions), reviewInteractions)
+                                review(Modifier.weight(1f).fillMaxHeight().animateWidth(reviewInteractions), reviewInteractions)
                             },
                             menuContent = {},
                         )
                     }
                     customItem(
                         buttonGroupContent = {
-                            start(Modifier.weight(1f).animateWidth(startInteractions), startInteractions)
+                            start(Modifier.weight(1f).fillMaxHeight().animateWidth(startInteractions), startInteractions)
                         },
                         menuContent = {},
                     )

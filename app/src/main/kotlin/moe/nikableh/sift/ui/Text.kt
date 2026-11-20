@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.TextUnit
@@ -100,18 +101,25 @@ private fun TextLayoutResult.splitsWord(text: AnnotatedString): Boolean {
     return false
 }
 
+/** A label for a button that can grow taller. It keeps its type role and wraps to a second line before it gets cut */
+@Composable
+fun ButtonLabel(text: String, style: TextStyle = LocalTextStyle.current) {
+    Text(text, style = style, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+}
+
 /**
- * A button label on one line that shrinks to the width it gets. Only the width counts: a large
- * font's line height already overflows a fixed-height button's padding without harm
+ * A button label on one line, for places that can't grow. It drops to [smaller]'s size, never a size in
+ * between, before it gets cut. Only the width counts: a large font's line height already overflows a
+ * fixed-height button's padding without harm
  */
 @Composable
-fun FitLabel(text: String, style: TextStyle = LocalTextStyle.current) {
+fun FitLabel(text: String, smaller: TextStyle, style: TextStyle = LocalTextStyle.current) {
     Text(
         text,
         Modifier.wrapContentHeight(Alignment.CenterVertically, unbounded = true),
         style = style,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        autoSize = shrinkToFit(style),
+        autoSize = TextAutoSize.StepBased(smaller.fontSize, style.fontSize, (style.fontSize.value - smaller.fontSize.value).sp),
     )
 }
