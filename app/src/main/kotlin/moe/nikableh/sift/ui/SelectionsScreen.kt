@@ -230,7 +230,7 @@ private val KeySetSaver = Saver<Set<String>, ArrayList<String>>(save = { ArrayLi
 
 @Composable
 private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Boolean, onToggle: () -> Unit) {
-    val turn by animateFloatAsState(if (collapsed) -90f else 0f, label = "chevron")
+    val turn by animateFloatAsState(if (collapsed) -90f else 0f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "chevron")
     ListItem(
         onClick = onToggle,
         modifier = Modifier
