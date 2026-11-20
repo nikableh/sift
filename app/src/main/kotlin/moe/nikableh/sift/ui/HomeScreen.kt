@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -47,12 +49,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,9 +69,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -108,43 +115,65 @@ fun HomeScreen(vm: SiftViewModel) {
 
 @Composable
 private fun Home(vm: SiftViewModel) {
-    Scaffold(bottomBar = { Actions(vm) }) { padding ->
-        Column(
-            // Padding before the scroll ends the viewport above the buttons, which have no background
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                Modifier.padding(start = 4.dp, top = 20.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Sift",
-                    style = MaterialTheme.typography.displaySmallEmphasized,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                IconButton(
-                    onClick = { vm.open(Screen.About) },
-                    shapes = IconButtonDefaults.shapes(),
-                    colors = IconButtonDefaults.iconButtonVibrantColors(),
-                ) { Icon(Icons.Rounded.Info, "About") }
-            }
-            MediaManagementCard(vm)
-            AlbumCard(vm)
-            DestinationsCard(vm)
-            vm.lastBatchInfo?.let { batch ->
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Last batch moved ${files(batch.moved)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch) }) { Text("Undo") }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // A window this wide is most often a phone on its side, too short for the two-row bar, so a
+        // single row slides fully away instead
+        val wide = maxWidth >= 600.dp
+        val scroll = if (wide) {
+            TopAppBarDefaults.enterAlwaysScrollBehavior()
+        } else {
+            TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+        }
+        val direction = LocalLayoutDirection.current
+        val title = @Composable { Text("Sift", Modifier.semantics { heading() }) }
+        val about = @Composable {
+            IconButton(
+                onClick = { vm.open(Screen.About) },
+                shapes = IconButtonDefaults.shapes(),
+                colors = IconButtonDefaults.iconButtonVibrantColors(),
+            ) { Icon(Icons.Rounded.Info, "About") }
+        }
+        Scaffold(
+            modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
+            topBar = {
+                if (wide) {
+                    TopAppBar(title = title, actions = { about() }, scrollBehavior = scroll)
+                } else {
+                    LargeFlexibleTopAppBar(title = title, actions = { about() }, scrollBehavior = scroll)
                 }
+            },
+            bottomBar = { Actions(vm) },
+        ) { padding ->
+            Column(
+                // Bottom padding before the scroll ends the viewport above the buttons, which have no background.
+                // Top padding inside it lets the cards pass under the collapsing bar
+                Modifier.fillMaxSize()
+                    .padding(
+                        start = padding.calculateStartPadding(direction),
+                        end = padding.calculateEndPadding(direction),
+                        bottom = padding.calculateBottomPadding(),
+                    )
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = padding.calculateTopPadding())
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                MediaManagementCard(vm)
+                AlbumCard(vm)
+                DestinationsCard(vm)
+                vm.lastBatchInfo?.let { batch ->
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Last batch moved ${files(batch.moved)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch) }) { Text("Undo") }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }
