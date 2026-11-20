@@ -140,14 +140,14 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     },
                     actions = {
                         if (groups.isNotEmpty()) {
+                            IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready, shapes = IconButtonDefaults.shapes()) {
+                                Icon(Icons.Rounded.ClearAll, "Clear selections")
+                            }
                             IconButton(onClick = {
                                 collapsed = if (allCollapsed) emptySet() else groups.mapTo(HashSet()) { it.dest }
                             }, shapes = IconButtonDefaults.shapes()) {
                                 if (allCollapsed) Icon(Icons.Rounded.UnfoldMore, "Expand all")
                                 else Icon(Icons.Rounded.UnfoldLess, "Collapse all")
-                            }
-                            IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready, shapes = IconButtonDefaults.shapes()) {
-                                Icon(Icons.Rounded.ClearAll, "Clear selections")
                             }
                         }
                     },
