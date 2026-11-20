@@ -4,4 +4,7 @@ local.properties
 *.iml
 .idea/
 *.apk
+*.jks
+*.keystore
+*.p12
 .claude/

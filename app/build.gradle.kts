@@ -16,14 +16,33 @@ android {
         versionCode = 11
         versionName = "0.11"
     }
+    signingConfigs {
+        // The release workflow sets these from repository secrets, see docs/RELEASING.md
+        val keystore = providers.environmentVariable("SIFT_KEYSTORE_FILE").orNull
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = providers.environmentVariable("SIFT_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("SIFT_KEY_ALIAS").get()
+                // A PKCS12 keystore has one password for the store and the key
+                keyPassword = storePassword
+            }
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Debug key, so a release build installs over earlier builds made on this PC
-            signingConfig = signingConfigs.getByName("debug")
+            // Without the production key, keep the debug key so a release build installs over
+            // earlier builds made on this PC
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
+    }
+    dependenciesInfo {
+        // F-Droid rejects this block in APKs because only Google can decrypt it. Play reads it
+        // from the bundle, so that one keeps it
+        includeInApk = false
     }
     buildFeatures {
         compose = true
