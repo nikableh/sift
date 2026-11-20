@@ -39,7 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
@@ -129,7 +128,7 @@ private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVal
         }
         when {
             albums == null -> item {
-                Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { LoadingIndicator(Modifier.semantics { contentDescription = "Loading albums" }) }
+                Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { Loading(Modifier.semantics { contentDescription = "Loading albums" }) }
             }
             albums.isEmpty() -> item {
                 Text(

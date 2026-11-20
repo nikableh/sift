@@ -2,6 +2,8 @@ package moe.nikableh.sift.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -33,6 +35,7 @@ fun SiftApp(vm: SiftViewModel) {
     BackHandler(enabled = vm.backStack.size > 1) { vm.back() }
     if (vm.busy) KeepScreenOn()
 
+    val animationsOn = rememberAnimationsOn()
     SiftTheme {
         val slide = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
         val surface = MaterialTheme.colorScheme.surface
@@ -43,7 +46,10 @@ fun SiftApp(vm: SiftViewModel) {
                 // A slide instead of a fade: the first fade after launch stutters for a third of a
                 // second while the GPU sets up drawing at partial alpha, and opaque screens need none
                 transitionSpec = {
-                    if (targetState.second >= initialState.second) {
+                    if (!animationsOn) {
+                        // Reduced motion asks for a plain fade, never a slide
+                        fadeIn() togetherWith fadeOut()
+                    } else if (targetState.second >= initialState.second) {
                         slideInHorizontally(slide) { it } togetherWith slideOutHorizontally(slide) { -it / 3 }
                     } else {
                         // The screen being left slides off on top of the one it came from

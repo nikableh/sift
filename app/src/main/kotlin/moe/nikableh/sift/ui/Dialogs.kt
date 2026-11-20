@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -83,7 +82,7 @@ fun Dialogs(vm: SiftViewModel) {
             title = { Text(d.title) },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LoadingIndicator(Modifier.size(32.dp).semantics { contentDescription = "Asking Android for access to the files" })
+                    Loading(Modifier.size(32.dp).semantics { contentDescription = "Asking Android for access to the files" })
                     Text("Asking Android for access to the files")
                 }
             },

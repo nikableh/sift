@@ -72,7 +72,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -449,7 +448,7 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: 
     ) {
         when (gate) {
             Gate.Reading -> Status(Modifier.align(Alignment.Center), "Reading $folder") {
-                LoadingIndicator(Modifier.semantics { contentDescription = "Reading $folder" })
+                Loading(Modifier.semantics { contentDescription = "Reading $folder" })
             }
             Gate.Empty -> Status(
                 Modifier.align(Alignment.Center),

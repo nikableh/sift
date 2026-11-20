@@ -48,7 +48,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -250,7 +249,7 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
                         val reading = if (single != null) "Reading the album" else "Reading the albums"
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // As tall as the line of the count that replaces it, so the card keeps its height
-                            LoadingIndicator(
+                            Loading(
                                 Modifier.size(with(LocalDensity.current) { count.lineHeight.toDp() })
                                     .semantics { contentDescription = reading },
                             )
