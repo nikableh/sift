@@ -1,5 +1,11 @@
 package moe.nikableh.sift.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -34,7 +40,6 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Done
 import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Info
@@ -70,6 +75,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -407,6 +413,8 @@ private fun AlbumRows(albums: List<AlbumStat>, enabled: Boolean) {
     // The default disabled onSurface reads as grey on the card's primaryContainer
     val disabled = content.copy(alpha = 0.38f)
     val label = if (open) "Hide the albums" else "Show each album"
+    val motion = MaterialTheme.motionScheme
+    val arrow by animateFloatAsState(if (open) 180f else 0f, motion.fastSpatialSpec())
     Column {
         // As wide as the card, so the label sits on the card's margin and the press highlight reaches its edges
         ListItem(
@@ -429,10 +437,14 @@ private fun AlbumRows(albums: List<AlbumStat>, enabled: Boolean) {
                     Modifier.clip(CircleShape)
                         .background(if (open) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent)
                         .padding(4.dp),
-                ) { Icon(if (open) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null) }
+                ) { Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(arrow)) }
             },
         ) { Text("By album") }
-        if (open) {
+        AnimatedVisibility(
+            open,
+            enter = expandVertically(motion.defaultSpatialSpec()) + fadeIn(motion.defaultEffectsSpec()),
+            exit = shrinkVertically(motion.defaultSpatialSpec()) + fadeOut(motion.fastEffectsSpec()),
+        ) {
             Column(
                 Modifier.padding(top = 4.dp, bottom = 16.dp)
                     .semantics { collectionInfo = CollectionInfo(albums.size, 1) },
