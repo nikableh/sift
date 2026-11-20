@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -71,6 +72,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -390,7 +392,14 @@ private fun PickedBar(vm: SiftViewModel, forSource: Boolean, browsing: Boolean, 
                             selected = true,
                             onClick = { vm.togglePicked(path, forSource) },
                             // The number is the button's place, which albums to sort don't have
-                            label = { Text(if (forSource) name else "${i + 1}  $name") },
+                            label = {
+                                Text(
+                                    if (forSource) name else "${i + 1}  $name",
+                                    modifier = Modifier.widthIn(max = 200.dp),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
                             trailingIcon = { Icon(Icons.Rounded.Close, "Remove", Modifier.size(18.dp)) },
                         )
                     }
