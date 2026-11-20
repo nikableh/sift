@@ -323,7 +323,7 @@ private fun Covers(files: List<File?>, placeholder: ImageVector?) {
     val side = if (n == 2) 60.dp else 56.dp
     val stepX = if (n == 2) 20.dp else 16.dp
     val stepY = if (n == 2) 12.dp else 8.dp
-    val shape = RoundedCornerShape(14.dp)
+    val shape = MaterialTheme.shapes.medium
     Box(Modifier.size(side + stepX * (n - 1), side + stepY * (n - 1))) {
         // Drawn back to front. A ring in the card's colour keeps the covers apart
         for (k in 0 until n) {
