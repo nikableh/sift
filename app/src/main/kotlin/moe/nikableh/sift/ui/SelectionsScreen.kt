@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -145,37 +147,49 @@ fun SelectionsScreen(vm: SiftViewModel) {
                     )
                 }
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(
-                        start = padding.calculateStartPadding(layoutDirection),
-                        end = padding.calculateEndPadding(layoutDirection),
-                        // The FAB floats over the list, so the last row needs room to scroll out from under it
-                        bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+                BoxWithConstraints(
                     // Not content padding: a sticky header pins to the viewport's edge, which would be under the app bar
-                    modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
+                    Modifier.fillMaxSize().padding(
+                        start = padding.calculateStartPadding(layoutDirection),
+                        top = padding.calculateTopPadding(),
+                        end = padding.calculateEndPadding(layoutDirection),
+                    ),
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    for (group in groups) {
-                        val dest = group.dest
-                        val rows = group.rows
-                        val color = destColor(vm, dest)
-                        val folded = dest in collapsed
-                        stickyHeader(key = "group:$dest", contentType = "group") {
-                            GroupHeader(dest, rows.size, color, folded) {
-                                collapsed = if (folded) collapsed - dest else collapsed + dest
+                    val margin = if (maxWidth >= 600.dp) 24.dp else 16.dp
+                    LazyColumn(
+                        contentPadding = PaddingValues(
+                            // The header and the rows bring 16dp of the margin themselves
+                            start = margin - 16.dp,
+                            end = margin - 16.dp,
+                            // The FAB floats over the list, so the last row needs room to scroll out from under it
+                            bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+                        // Rows stretched across a landscape window put the remove button far from the name
+                        modifier = Modifier.widthIn(max = 640.dp).fillMaxSize(),
+                    ) {
+                        for (group in groups) {
+                            val dest = group.dest
+                            val rows = group.rows
+                            val color = destColor(vm, dest)
+                            val folded = dest in collapsed
+                            stickyHeader(key = "group:$dest", contentType = "group") {
+                                GroupHeader(dest, rows.size, color, folded) {
+                                    collapsed = if (folded) collapsed - dest else collapsed + dest
+                                }
                             }
-                        }
-                        if (!folded) itemsIndexed(rows, key = { _, row -> row.file.path }, contentType = { _, _ -> "photo" }) { i, row ->
-                            SelectionRow(
-                                row,
-                                vm.placeOf(row.file),
-                                ready,
-                                i,
-                                rows.size,
-                                previewing = preview?.file?.path == row.file.path,
-                                onPreview = { preview = row },
-                            ) { vm.dropSelection(row) }
+                            if (!folded) itemsIndexed(rows, key = { _, row -> row.file.path }, contentType = { _, _ -> "photo" }) { i, row ->
+                                SelectionRow(
+                                    row,
+                                    vm.placeOf(row.file),
+                                    ready,
+                                    i,
+                                    rows.size,
+                                    previewing = preview?.file?.path == row.file.path,
+                                    onPreview = { preview = row },
+                                ) { vm.dropSelection(row) }
+                            }
                         }
                     }
                 }
