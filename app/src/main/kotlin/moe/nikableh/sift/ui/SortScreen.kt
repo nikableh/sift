@@ -501,6 +501,7 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: 
                     label = Store.labelFor(assigned),
                     color = if (i >= 0) folderColor(i).tile() else MaterialTheme.colorScheme.inverseSurface,
                     contentColor = if (i >= 0) folderColor(i).ink() else MaterialTheme.colorScheme.inverseOnSurface,
+                    border = if (i >= 0) BorderStroke(1.dp, folderColor(i).ink()) else null,
                     modifier = Modifier,
                     onClear = { if (vm.clearAssignment()) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) },
                 )
@@ -815,6 +816,8 @@ private fun Pill(
     modifier: Modifier,
     contentColor: Color,
     onClear: (() -> Unit)?,
+    // The light tile fill alone falls under 3:1 against the light page
+    border: BorderStroke? = null,
 ) {
     val content = @Composable {
         Row(
@@ -837,6 +840,7 @@ private fun Pill(
             shape = CircleShape,
             color = color,
             contentColor = contentColor,
+            border = border,
             content = content,
         )
     } else {
@@ -847,6 +851,7 @@ private fun Pill(
             shape = CircleShape,
             color = color,
             contentColor = contentColor,
+            border = border,
             content = content,
         )
     }
@@ -874,6 +879,7 @@ private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
             .graphicsLayer { this.alpha = alpha.value },
         color.ink(),
         onClear = null,
+        border = BorderStroke(1.dp, color.ink()),
     )
 }
 
