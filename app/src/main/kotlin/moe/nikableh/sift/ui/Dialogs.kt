@@ -223,7 +223,7 @@ fun Dialogs(vm: SiftViewModel) {
             onDismiss = close,
         ) {
             val one = vm.queued == 1
-            Text("${selections(vm.queued)} ${if (one) "is" else "are"} dropped. No files are touched.")
+            Text("${selections(vm.queued)} ${if (one) "is" else "are"} dropped and can't be restored. No files are touched.")
         }
 
         Dialog.SelectionsLocked -> AlertDialog(
@@ -251,7 +251,7 @@ fun Dialogs(vm: SiftViewModel) {
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val where = if (d.paths.size == 1) "this album" else "these albums"
-                    Text("${selections(d.queued)} in $where ${if (d.queued == 1) "is" else "are"} dropped. No files are touched.")
+                    Text("${selections(d.queued)} in $where ${if (d.queued == 1) "is" else "are"} dropped and can't be restored. No files are touched.")
                     // Counted, not listed, so the line stays one line at any number of albums
                     val others = vm.activeAlbums.count { it !in d.paths }
                     if (d.elsewhere > 0 && others > 0) {
@@ -282,8 +282,8 @@ fun Dialogs(vm: SiftViewModel) {
             onDismiss = close,
         ) {
             Text(
-                if (d.queued == 1) "1 queued file loses this choice and stays where it is"
-                else "${d.queued.grouped()} queued files lose this choice and stay where they are"
+                if (d.queued == 1) "1 queued file loses this choice and stays where it is. This can't be undone."
+                else "${d.queued.grouped()} queued files lose this choice and stay where they are. This can't be undone."
             )
         }
 
