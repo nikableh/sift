@@ -310,7 +310,7 @@ fun MediaManagementCard(vm: SiftViewModel) {
     if (vm.manageMedia) return
     val context = LocalContext.current
     // Default card colours, so the tonal button keeps its container contrast
-    Card(shape = MaterialTheme.shapes.extraLarge) {
+    Card {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Icon(Icons.Rounded.Info, null)

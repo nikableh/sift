@@ -285,7 +285,6 @@ private fun SectionTitle(text: String) {
 @Composable
 private fun LicenseText(paragraphs: List<String>) {
     Card(
-        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

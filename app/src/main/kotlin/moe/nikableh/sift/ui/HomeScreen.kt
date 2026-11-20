@@ -259,7 +259,6 @@ private fun DestinationsCard(vm: SiftViewModel) {
             role = Role.Button
             onClick(label = "Change folders", action = null)
         },
-        shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -305,7 +304,6 @@ private fun AlbumCard(vm: SiftViewModel) {
     // cards below don't jump when reading ends
     val read = !vm.scanning && albums.map { it.path } == active
     Card(
-        shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         AlbumHeader(vm, Modifier.padding(16.dp))
