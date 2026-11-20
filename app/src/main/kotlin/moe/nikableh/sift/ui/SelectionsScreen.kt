@@ -153,13 +153,10 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     },
                 )
             },
-            // Icon only while scrolling down, so it covers less of the rows passing under it
             floatingActionButton = {
                 MoveFab(
                     vm,
                     visible = vm.queued > 0 && !vm.scanning && MoveRunner.run == null,
-                    // The wait is said in the label
-                    expanded = vm.preparing || !list.lastScrolledForward,
                 )
             },
             snackbarHost = { SnackbarHost(snackbar) },
@@ -392,7 +389,7 @@ private val FabHeight = 80.dp
 
 /** FABs have no disabled state, so it steps away while a scan or a move is running, and shows the wait before one. */
 @Composable
-private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
+private fun MoveFab(vm: SiftViewModel, visible: Boolean) {
     val context = LocalContext.current
     // The answer only decides whether the progress notification shows, so the move starts either way
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.move() }
@@ -427,7 +424,7 @@ private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
                 traversalIndex = -1f
                 contentDescription = label
             },
-            expanded = expanded,
+            expanded = true,
             containerColor = MaterialTheme.colorScheme.primary,
         )
     }
