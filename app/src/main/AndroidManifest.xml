@@ -20,8 +20,13 @@
     <!-- Asked for when Move is tapped, for the progress notification -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- The queue and undo journals name files on this phone. From Android 12 some phones still
+         copy app data to a new device despite allowBackup, so the extraction rules exclude it there
+         too. Android 11 honours allowBackup fully and needs no fullBackupContent -->
     <application
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        tools:ignore="DataExtractionRules"
         android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
