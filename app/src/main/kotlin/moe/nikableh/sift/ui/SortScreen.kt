@@ -14,7 +14,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -882,7 +881,6 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
     val count = vm.counts[dest.path] ?: 0
     val color = folderColor(index)
     val ink = color.ink()
-    val dark = isSystemInDarkTheme()
 
     Box(modifier) {
         Button(
@@ -892,11 +890,8 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
             // Past about 16dp the corner curve reaches the badge and the selection ring cuts through it
             shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large, pressedShape = ButtonDefaults.mediumPressedShape),
             colors = ButtonDefaults.buttonColors(containerColor = color.tile(), contentColor = ink),
-            // A dark ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel.
-            // In dark theme a ring at the edge is either pale on a pale tile or dark on the dark panel,
-            // so there it moves inside the tile
-            border = if (selected && !dark) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
-            // The padding sits on the column inside, so the dark theme ring can sit 3dp from the tile's edge
+            // A ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel
+            border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
             contentPadding = PaddingValues(0.dp),
             modifier = Modifier.fillMaxSize().semantics {
                 this.selected = selected
@@ -907,50 +902,45 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                 if (state.isNotEmpty()) stateDescription = state
             },
         ) {
-            Box(Modifier.fillMaxSize()) {
-                if (selected && dark) {
-                    Box(Modifier.fillMaxSize().padding(3.dp).border(3.dp, ink, MaterialTheme.shapes.medium))
+            Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)) {
+                // The badge row is laid out even at zero, so a label never moves when its first count shows up,
+                // and the badge sits above the label instead of over it
+                Badge(
+                    Modifier.align(Alignment.End)
+                        .then(if (count > 0) Modifier else Modifier.alpha(0f))
+                        .clearAndSetSemantics {},
+                    containerColor = ink,
+                    contentColor = color.tile(),
+                ) {
+                    val badge = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
+                    Text(
+                        if (count > 999) "999+" else count.grouped(),
+                        Modifier.wrapContentHeight(Alignment.CenterVertically, unbounded = true),
+                        style = badge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        autoSize = shrinkToFit(badge),
+                    )
                 }
-                Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)) {
-                    // The badge row is laid out even at zero, so a label never moves when its first count shows up,
-                    // and the badge sits above the label instead of over it
-                    Badge(
-                        Modifier.align(Alignment.End)
-                            .then(if (count > 0) Modifier else Modifier.alpha(0f))
-                            .clearAndSetSemantics {},
-                        containerColor = ink,
-                        contentColor = color.tile(),
-                    ) {
-                        val badge = LocalTextStyle.current.copy(fontFeatureSettings = "tnum")
-                        Text(
-                            if (count > 999) "999+" else count.grouped(),
-                            Modifier.wrapContentHeight(Alignment.CenterVertically, unbounded = true),
-                            style = badge,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            autoSize = shrinkToFit(badge),
-                        )
+                Row(
+                    Modifier.weight(1f).fillMaxWidth().padding(end = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (selected) {
+                        Icon(Icons.Rounded.Check, null, Modifier.size(ButtonDefaults.SmallIconSize))
+                        Spacer(Modifier.width(4.dp))
                     }
-                    Row(
-                        Modifier.weight(1f).fillMaxWidth().padding(end = 4.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (selected) {
-                            Icon(Icons.Rounded.Check, null, Modifier.size(ButtonDefaults.SmallIconSize))
-                            Spacer(Modifier.width(4.dp))
-                        }
-                        // A line height relative to the size, so two shrunk lines fit where two full ones would not
-                        val style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight).copy(lineHeight = 1.25.em)
-                        Text(
-                            dest.label,
-                            style = style,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                            autoSize = shrinkToFit(style, minRatio = 0.4f),
-                        )
-                    }
+                    // A line height relative to the size, so two shrunk lines fit where two full ones would not
+                    val style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight).copy(lineHeight = 1.25.em)
+                    Text(
+                        dest.label,
+                        style = style,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        autoSize = shrinkToFit(style, minRatio = 0.4f),
+                    )
                 }
             }
         }
