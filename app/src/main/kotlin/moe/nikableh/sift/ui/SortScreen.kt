@@ -68,7 +68,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenuPopup
 
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Slider
@@ -537,17 +536,18 @@ private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
     ) {
         // A video starts by itself, so until the player has it the button already shows what is about to happen
         val playing = player.playing || player.path == null
-        FilledIconToggleButton(
+        // Unfilled like the sound button, and primary in both states because it is the bar's main control
+        IconToggleButton(
             checked = playing,
             onCheckedChange = { player.toggle() },
             shapes = IconButtonDefaults.toggleableShapes(),
+            colors = IconButtonDefaults.iconToggleButtonVibrantColors(contentColor = MaterialTheme.colorScheme.primary),
         ) {
             if (playing) Icon(Icons.Rounded.Pause, "Playing") else Icon(Icons.Rounded.PlayArrow, "Playing")
         }
         Timeline(player, Modifier.weight(1f).padding(horizontal = 8.dp))
         Elapsed(player, Modifier.align(Alignment.CenterVertically))
         val sound = !vm.videoMuted
-        // Unfilled, so play and pause stays the one emphasized action on the bar
         IconToggleButton(
             checked = sound,
             onCheckedChange = { vm.changeMuted(!it) },
