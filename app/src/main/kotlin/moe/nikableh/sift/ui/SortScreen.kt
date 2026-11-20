@@ -60,19 +60,21 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuGroup
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenuPopup
 
 import androidx.compose.material3.FilledIconToggleButton
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Slider
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorPosition
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
@@ -130,7 +132,6 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.min
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.content.FileProvider
@@ -729,12 +730,11 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
                 windowInsets = WindowInsets(0),
             )
         }
-        // Hangs off the bar as a whole, so it can be as wide as the bar. The cap keeps it a panel on a tablet
+        // Hangs off the bar as a whole
         SortMenu(
             vm,
             photo?.file,
             photo?.let { "${Formatter.formatShortFileSize(context, it.size)}  ·  ${timeFormat.format(Date(it.mtime))}" },
-            width = min(barWidth - 24.dp, 480.dp),
             expanded = menu,
         ) { menu = false }
     }
@@ -742,41 +742,60 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
 
 /** Opens from the header and leads with what the header has no room for: the photo's name, size, time and folder. */
 @Composable
-private fun SortMenu(vm: SiftViewModel, file: File?, details: String?, width: Dp, expanded: Boolean, onDismiss: () -> Unit) {
+private fun SortMenu(vm: SiftViewModel, file: File?, details: String?, expanded: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    // The offset centres it under the bar, 12dp in from each side
-    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, modifier = Modifier.width(width), offset = DpOffset(12.dp, 0.dp)) {
-        @Composable
-        fun item(label: String, icon: ImageVector, action: () -> Unit) = DropdownMenuItem(
-            text = { Text(label) },
-            leadingIcon = { Icon(icon, null) },
-            onClick = {
-                onDismiss()
-                action()
-            },
-            // An item stops at 280dp on its own, which would leave the touch feedback short of the edge
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (file != null) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                val quiet = MaterialTheme.colorScheme.onSurfaceVariant
-                Text(file.name, style = MaterialTheme.typography.titleSmall)
-                if (details != null) Text(details, style = MaterialTheme.typography.bodySmall, color = quiet)
-                // The whole path of its folder. Two albums can share a name and differ only here
-                file.parent?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = quiet) }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 4.dp))
-            item("Share", Icons.Rounded.Share) { sharePhoto(context, file) }
-        }
+    val items = buildList {
+        if (file != null) add(Triple("Share", Icons.Rounded.Share) { sharePhoto(context, file) })
         if (vm.photos.isNotEmpty()) {
-            item("Go to photo", Icons.Rounded.Numbers) {
-                vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
+            add(
+                Triple("Go to photo", Icons.Rounded.Numbers) {
+                    vm.dialog = Dialog.GoToPhoto((vm.index + 1).coerceAtMost(vm.photos.size), vm.photos.size)
+                },
+            )
+        }
+        add(Triple(if (vm.sources.size == 1) "Reload album" else "Reload albums", Icons.Rounded.Refresh) { vm.reload() })
+    }
+    val groups = if (file != null) 2 else 1
+    DropdownMenuPopup(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.widthIn(max = 280.dp),
+        // Lines it up 12dp in from the bar's start, where the full width menu used to start
+        popupPositionProvider = MenuDefaults.rememberDropdownMenuPopupPositionProvider(
+            MenuAnchorPosition.Below,
+            DpOffset(12.dp, 0.dp),
+        ),
+    ) {
+        if (file != null) {
+            DropdownMenuGroup(shapes = MenuDefaults.groupShape(0, groups), modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    val quiet = MaterialTheme.colorScheme.onSurfaceVariant
+                    Text(file.name, style = MaterialTheme.typography.titleSmall)
+                    if (details != null) Text(details, style = MaterialTheme.typography.bodySmall, color = quiet)
+                    // The whole path of its folder. Two albums can share a name and differ only here
+                    file.parent?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = quiet) }
+                }
+            }
+            Spacer(Modifier.height(MenuDefaults.GroupSpacing))
+        }
+        DropdownMenuGroup(shapes = MenuDefaults.groupShape(groups - 1, groups), modifier = Modifier.fillMaxWidth()) {
+            items.forEachIndexed { index, (label, icon, action) ->
+                DropdownMenuItem(
+                    onClick = {
+                        onDismiss()
+                        action()
+                    },
+                    text = { Text(label) },
+                    shape = MenuDefaults.itemShape(index, items.size).shape,
+                    leadingIcon = { Icon(icon, null) },
+                    // The details text can set a group wider than the item would take on its own
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
-        item(if (vm.sources.size == 1) "Reload album" else "Reload albums", Icons.Rounded.Refresh) { vm.reload() }
     }
 }
 
