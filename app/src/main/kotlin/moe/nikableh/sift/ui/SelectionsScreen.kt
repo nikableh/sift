@@ -62,7 +62,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumExtendedFloatingActionButton
+import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SnackbarHost
@@ -384,8 +384,8 @@ private fun SharedTransitionScope.PhotoPreview(
     }
 }
 
-/** Height of the medium extended FAB, which material3 doesn't expose. */
-private val FabHeight = 80.dp
+/** Height of the small extended FAB, which material3 doesn't expose. */
+private val FabHeight = 56.dp
 
 /** FABs have no disabled state, so it steps away while a scan or a move is running, and shows the wait before one. */
 @Composable
@@ -395,10 +395,10 @@ private fun MoveFab(vm: SiftViewModel, visible: Boolean) {
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.move() }
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
         val label = if (vm.preparing) "Getting ready to move" else "Move ${vm.queued.grouped()}"
-        MediumExtendedFloatingActionButton(
+        SmallExtendedFloatingActionButton(
             text = { Text(label) },
             icon = {
-                val size = Modifier.size(FloatingActionButtonDefaults.MediumIconSize)
+                val size = Modifier.size(24.dp)
                 if (vm.preparing) {
                     // The default indicator colour is primary, the colour of this FAB
                     val color = LocalContentColor.current
