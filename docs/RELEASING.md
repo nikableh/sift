@@ -8,11 +8,11 @@ Sift ships as a signed APK on [GitHub Releases](https://github.com/nikableh/sift
 2. Tag that commit as `v<versionName>` and push the tag
 
 ```sh
-git tag v0.12
-git push origin v0.12
+git tag v0.12.0
+git push origin v0.12.0
 ```
 
-The workflow stops if the tag doesn't match `versionName`. A version with a hyphen, such as `0.12-beta1`, is published as a pre-release. GitHub generates the release notes from pull requests merged since the previous tag, and the workflow adds instructions for verifying the download
+The workflow stops if the tag doesn't match `versionName`. A version with a hyphen, such as `0.12.0-beta.1`, is published as a pre-release. GitHub generates the release notes from pull requests merged since the previous tag, and the workflow adds instructions for verifying the download
 
 To test changes to the workflow, start it from the Actions tab or with `gh workflow run release.yml`. A manual run builds, signs and attests the APK and keeps it as a workflow artifact, without publishing a release
 
@@ -50,8 +50,8 @@ Gradle takes the key from the `SIFT_KEYSTORE_FILE`, `SIFT_KEYSTORE_PASSWORD` and
 ## Verifying a release
 
 ```sh
-gh attestation verify sift-0.12.apk -R nikableh/sift
-apksigner verify --print-certs sift-0.12.apk
+gh attestation verify sift-0.12.0.apk -R nikableh/sift
+apksigner verify --print-certs sift-0.12.0.apk
 ```
 
 The first command confirms that this repository's release workflow built the APK. The second prints the signing certificate, whose SHA-256 digest must match the fingerprint above
