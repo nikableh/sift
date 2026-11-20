@@ -125,7 +125,8 @@ fun Dialogs(vm: SiftViewModel) {
                 onDismiss = close,
             ) {
                 val moved = if (d.moved == 0) "before any file moved" else "after moving ${files(d.moved)}"
-                Text("Sift was closed $moved. ${d.left.grouped()} ${if (d.left == 1) "is" else "are"} still queued.")
+                val rest = if (d.left == 1) "1 is still queued. Continue moves it to its folder now" else "${d.left.grouped()} are still queued. Continue moves those ${d.left.grouped()} to their folders now"
+                Text("Sift was closed $moved. $rest, and Undo on Home then moves that last batch back.")
             }
         }
 
