@@ -80,6 +80,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TwoRowsTopAppBar
 import androidx.compose.material3.rememberSliderState
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -105,6 +106,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collectionInfo
@@ -112,6 +114,7 @@ import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.role
@@ -792,24 +795,7 @@ private fun Pill(
     contentColor: Color,
     onClear: (() -> Unit)?,
 ) {
-    Surface(
-        onClick = { onClear?.invoke() },
-        enabled = onClear != null,
-        // Only the queued pill can be tapped. The flash pill reuses it and must not claim an action
-        modifier = modifier.then(
-            if (onClear != null) {
-                Modifier.semantics {
-                    role = Role.Button
-                    onClick(label = "Take out of the queue", action = null)
-                }
-            } else {
-                Modifier
-            },
-        ),
-        shape = CircleShape,
-        color = color,
-        contentColor = contentColor,
-    ) {
+    val content = @Composable {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -819,6 +805,29 @@ private fun Pill(
             Text(label, style = MaterialTheme.typography.labelLarge)
             if (onClear != null) Icon(Icons.Rounded.Close, "Remove", Modifier.size(18.dp))
         }
+    }
+    if (onClear != null) {
+        Surface(
+            onClick = onClear,
+            modifier = modifier.semantics {
+                role = Role.Button
+                onClick(label = "Take out of the queue", action = null)
+            },
+            shape = CircleShape,
+            color = color,
+            contentColor = contentColor,
+            content = content,
+        )
+    } else {
+        // The flash pill takes no tap, so TalkBack must not find a disabled button there. The minimum
+        // size keeps it as tall as the queued pill that takes its place
+        Surface(
+            modifier = modifier.minimumInteractiveComponentSize(),
+            shape = CircleShape,
+            color = color,
+            contentColor = contentColor,
+            content = content,
+        )
     }
 }
 
@@ -838,7 +847,9 @@ private fun FlashPill(vm: SiftViewModel, modifier: Modifier) {
     Pill(
         flash.label,
         color.tile(),
-        modifier.graphicsLayer { this.alpha = alpha.value },
+        modifier
+            .semantics { liveRegion = LiveRegionMode.Polite }
+            .graphicsLayer { this.alpha = alpha.value },
         color.ink(),
         onClear = null,
     )
