@@ -193,7 +193,7 @@ private fun AlbumList(vm: SiftViewModel, forSource: Boolean, padding: PaddingVal
             albums.isEmpty() -> item {
                 Text(
                     "No albums found on this device",
-                    Modifier.padding(24.dp),
+                    Modifier.padding(horizontal = 16.dp, vertical = 24.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -309,7 +309,7 @@ private fun FolderList(
     ) {
         if (dir != null) {
             item {
-                Column(Modifier.padding(start = 4.dp, end = 4.dp, bottom = 10.dp)) {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp)) {
                     Text(dir.path, Modifier.semantics { heading() }, style = MaterialTheme.typography.titleSmall)
                     Text(
                         "${media(here.total, here.videos)} in this folder",
