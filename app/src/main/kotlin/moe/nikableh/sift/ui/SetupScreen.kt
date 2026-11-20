@@ -82,7 +82,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                title = { Text("Folders", Modifier.semantics { heading() }) },
+                title = { Text("Destinations", Modifier.semantics { heading() }) },
                 navigationIcon = {
                     IconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                 },
@@ -91,7 +91,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         },
         floatingActionButton = {
             SmallExtendedFloatingActionButton(
-                text = { Text("Add folder") },
+                text = { Text("Add destination") },
                 icon = { Icon(Icons.Rounded.Add, null) },
                 onClick = { vm.open(Screen.Picker(forSource = false)) },
             )
@@ -115,8 +115,8 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             ) {
                 item(key = "destinations:about") {
                     Text(
-                        "Each folder becomes a button under the photo. Pressing it queues the photo for that folder. " +
-                            "Nothing moves until you review and press Move. For photos you want to delete, add a folder " +
+                        "Each destination becomes a button under the photo. Pressing it queues the photo for that destination. " +
+                            "Nothing moves until you review and press Move. For photos you want to delete, add a destination " +
                             "such as \"To delete\" and empty it later.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

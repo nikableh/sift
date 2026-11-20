@@ -230,7 +230,7 @@ private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
 /** Past this many the names stop telling the folders apart at a glance, and the card outgrows the album's. */
 private const val SHOWN_DESTS = 8
 
-/** Where photos can go, in the colours of the sorting buttons. The way into folder setup. */
+/** Where photos can go, in the colours of the sorting buttons. The way into destination setup. */
 @Composable
 private fun DestinationsCard(vm: SiftViewModel) {
     val dests = vm.dests
@@ -238,14 +238,14 @@ private fun DestinationsCard(vm: SiftViewModel) {
         onClick = { vm.open(Screen.Setup) },
         modifier = Modifier.semantics {
             role = Role.Button
-            onClick(label = "Change folders", action = null)
+            onClick(label = "Change destinations", action = null)
         },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    if (dests.size == 1) "Sorting into 1 folder" else "Sorting into ${dests.size} folders",
+                    if (dests.size == 1) "Sorting into 1 destination" else "Sorting into ${dests.size} destinations",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )

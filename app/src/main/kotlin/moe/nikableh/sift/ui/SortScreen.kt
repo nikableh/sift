@@ -240,7 +240,7 @@ fun sharePhoto(context: Context, file: File) {
     context.startActivity(Intent.createChooser(send, null))
 }
 
-/** Albums come first, because Folders only holds where their photos go. */
+/** Albums come first, because Destinations only holds where their photos go. */
 @Composable
 fun SetupWelcome(vm: SiftViewModel) {
     if (vm.sources.isEmpty()) {
@@ -253,9 +253,9 @@ fun SetupWelcome(vm: SiftViewModel) {
     } else {
         Welcome(
             icon = Icons.Rounded.FolderOpen,
-            title = "Pick your folders",
-            body = "Choose the folders the photos can go to. Each one becomes a button under the photo.",
-            action = "Set up folders",
+            title = "Pick your destinations",
+            body = "Choose the folders the photos can go to. Each destination becomes a button under the photo.",
+            action = "Set up destinations",
         ) { vm.open(Screen.Setup) }
     }
 }
@@ -492,10 +492,10 @@ private fun Photo(
                 if (vm.queued > 0) BigButton(reviewLabel(vm)) { vm.reviewSelections() }
             }
             else -> when {
-                video && player.failed -> Status(Modifier.align(Alignment.Center), "Can't play this video", "You can still sort it with the folder buttons") {}
+                video && player.failed -> Status(Modifier.align(Alignment.Center), "Can't play this video", "You can still sort it with the destination buttons") {}
                 // A video without a still frame can play all the same, and then it shows itself
                 vm.decodeFailed && !(video && player.showing) -> {
-                    Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}", "You can still sort it with the folder buttons") {}
+                    Status(Modifier.align(Alignment.Center), "Can't display ${vm.current?.file?.name}", "You can still sort it with the destination buttons") {}
                 }
             }
         }
