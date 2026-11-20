@@ -112,14 +112,14 @@ fun AccessScreen(vm: SiftViewModel, onAbout: (() -> Unit)? = null) {
             AccessLayout(
                 icon = Icons.Rounded.PhotoLibrary,
                 title = "Let Sift sort your photos",
-                body = if (photosDone) "One more thing and Sift is ready." else "Sift needs two things.",
+                body = if (photosDone) "One more thing and Sift is ready" else "Sift needs two things",
                 onAbout = onAbout,
             ) {
                 Steps(photosDone, showManage = Build.VERSION.SDK_INT >= 31)
                 if (photosDone) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         BigAction("Open Media management") { openManageMedia(context) }
-                        Note("Turn on \"Allow app to manage media\", then come back.")
+                        Note("Turn on \"Allow app to manage media\", then come back")
                         TextButton(onClick = vm::skipManage) { Text("Not now") }
                     }
                 } else {
@@ -306,7 +306,7 @@ fun MediaManagementCard(vm: SiftViewModel) {
                 Icon(Icons.Outlined.Info, null)
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Media management is off", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
-                    Text("Android asks you to confirm every Move until it is on.", style = MaterialTheme.typography.bodyMedium)
+                    Text("Android asks you to confirm every Move until it is on", style = MaterialTheme.typography.bodyMedium)
                 }
             }
             Row(Modifier.fillMaxWidth()) {
