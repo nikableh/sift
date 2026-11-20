@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -184,6 +185,15 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     contentAlignment = Alignment.TopCenter,
                 ) {
                     val margin = if (maxWidth >= 600.dp) 24.dp else 16.dp
+                    // Folding a group drops its rows from the list, so they fade while the groups below slide
+                    val motion = MaterialTheme.motionScheme
+                    val itemMotion: LazyItemScope.() -> Modifier = {
+                        Modifier.animateItem(
+                            fadeInSpec = motion.defaultEffectsSpec(),
+                            placementSpec = motion.defaultSpatialSpec(),
+                            fadeOutSpec = motion.fastEffectsSpec(),
+                        )
+                    }
                     LazyColumn(
                         state = list,
                         contentPadding = PaddingValues(
@@ -203,7 +213,7 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                             val color = destColor(vm, dest)
                             val folded = dest in collapsed
                             stickyHeader(key = "group:$dest", contentType = "group") {
-                                GroupHeader(dest, rows.size, color, folded) {
+                                GroupHeader(dest, rows.size, color, folded, itemMotion()) {
                                     collapsed = if (folded) collapsed - dest else collapsed + dest
                                 }
                             }
@@ -216,6 +226,7 @@ fun SelectionsScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                                     i,
                                     rows.size,
                                     stage,
+                                    itemMotion(),
                                     onPreview = { stage.row = row },
                                 ) { vm.dropSelection(row) }
                             }
@@ -251,11 +262,11 @@ private fun destColor(vm: SiftViewModel, dest: String): Color? {
 private val KeySetSaver = Saver<Set<String>, ArrayList<String>>(save = { ArrayList(it) }, restore = { it.toSet() })
 
 @Composable
-private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Boolean, onToggle: () -> Unit) {
+private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Boolean, modifier: Modifier, onToggle: () -> Unit) {
     val turn by animateFloatAsState(if (collapsed) -90f else 0f, MaterialTheme.motionScheme.fastSpatialSpec(), label = "chevron")
     ListItem(
         onClick = onToggle,
-        modifier = Modifier
+        modifier = modifier
             // Opaque, so rows don't show through the gap while the header is pinned
             .background(MaterialTheme.colorScheme.background)
             .padding(top = 12.dp)
@@ -310,6 +321,7 @@ private fun SelectionRow(
     index: Int,
     count: Int,
     stage: ReviewStage,
+    modifier: Modifier,
     onPreview: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -320,7 +332,7 @@ private fun SelectionRow(
         onClick = onPreview,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         colors = segmentColors(),
-        modifier = Modifier
+        modifier = modifier
             // Not list padding, which would also push in the header, a list item with the same inset of its own
             .padding(horizontal = 16.dp)
             // SegmentedListItem takes no click label, and TalkBack would otherwise announce a bare "activate"
