@@ -109,7 +109,7 @@ fun Dialogs(vm: SiftViewModel) {
                 onDismissRequest = close,
                 icon = { Icon(Icons.Rounded.DoneAll, null) },
                 title = { Text("Moved ${files(d.moved)}") },
-                text = { Text("Sift was closed just as the move ended.") },
+                text = { Text("Sift was closed just as the move ended") },
                 confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
             )
         } else {
@@ -170,7 +170,7 @@ fun Dialogs(vm: SiftViewModel) {
                 onConfirm = { vm.undoBatch(b) },
                 onDismiss = close,
             ) {
-                Text("They return to the folders they came from and go back into the queue, so you can change them and apply again.")
+                Text("They return to the folders they came from and go back into the queue, so you can change them and apply again")
             }
         }
 
@@ -196,9 +196,9 @@ fun Dialogs(vm: SiftViewModel) {
         ) {
             Text(
                 when {
-                    d.unticked > 0 -> "Your albums stay as they were."
-                    d.count == 1 -> "1 ticked folder has not been added."
-                    else -> "${d.count} ticked folders have not been added."
+                    d.unticked > 0 -> "Your albums stay as they were"
+                    d.count == 1 -> "1 ticked folder has not been added"
+                    else -> "${d.count} ticked folders have not been added"
                 }
             )
         }
@@ -249,7 +249,7 @@ fun Dialogs(vm: SiftViewModel) {
                     // Counted, not listed, so the line stays one line at any number of albums
                     val others = vm.activeAlbums.count { it !in d.paths }
                     if (d.elsewhere > 0 && others > 0) {
-                        Text(if (others == 1) "Selections in the other album stay." else "Selections in the other $others albums stay.")
+                        Text(if (others == 1) "Selections in the other album stay" else "Selections in the other $others albums stay")
                     }
                 }
             },
@@ -281,8 +281,8 @@ fun Dialogs(vm: SiftViewModel) {
             onDismiss = close,
         ) {
             Text(
-                if (d.queued == 1) "1 queued file loses this choice and stays where it is."
-                else "${d.queued.grouped()} queued files lose this choice and stay where they are."
+                if (d.queued == 1) "1 queued file loses this choice and stays where it is"
+                else "${d.queued.grouped()} queued files lose this choice and stay where they are"
             )
         }
 
@@ -301,7 +301,7 @@ fun Dialogs(vm: SiftViewModel) {
         is Dialog.NewFolder -> TextPrompt(
             icon = Icons.Rounded.CreateNewFolder,
             title = if (d.album) "New album" else "New folder in ${d.parent.name}",
-            hint = if (d.album) "Created in ${d.parent.name}, where gallery apps look for albums." else null,
+            hint = if (d.album) "Created in ${d.parent.name}, where gallery apps look for albums" else null,
             initial = "",
             confirm = "Create",
             onConfirm = {
