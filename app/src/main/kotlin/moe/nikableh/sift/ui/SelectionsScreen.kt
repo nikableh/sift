@@ -19,6 +19,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -54,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -202,7 +205,7 @@ fun SelectionsScreen(vm: SiftViewModel) {
             },
             label = "preview",
         ) { shown ->
-            if (shown != null) PhotoPreview(shown, this) { preview = null }
+            if (shown != null) PhotoPreview(shown, vm.placeOf(shown.file), this) { preview = null }
         }
     }
 }
@@ -308,9 +311,14 @@ private fun SharedTransitionScope.SelectionRow(
 
 /** The whole photo fitted to the screen, so a thumbnail's crop doesn't hide what is being moved. */
 @Composable
-private fun SharedTransitionScope.PhotoPreview(row: Selection, scope: AnimatedVisibilityScope, onDismiss: () -> Unit) {
+private fun SharedTransitionScope.PhotoPreview(
+    row: Selection,
+    place: String?,
+    scope: AnimatedVisibilityScope,
+    onDismiss: () -> Unit,
+) {
     val file = row.file
-    Box(
+    Column(
         Modifier.fillMaxSize()
             // The dim the dialog window used to draw
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
@@ -322,17 +330,29 @@ private fun SharedTransitionScope.PhotoPreview(row: Selection, scope: AnimatedVi
             )
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(16.dp),
-        contentAlignment = Alignment.Center,
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
     ) {
         AsyncImage(
             model = file,
-            // The preview shows no text, so a camera file name would tell TalkBack users nothing
+            // TalkBack reads the file name from the caption, so the image says where it goes
             contentDescription = "${if (Scanner.isVideo(file.name)) "Video" else "Photo"} going to ${Store.labelFor(row.dest)}",
             contentScale = ContentScale.Fit,
             modifier = Modifier
+                .weight(1f, fill = false)
                 .sharedBounds(rememberSharedContentState(file.path), scope, boundsTransform = spatialBounds())
-                .fillMaxSize(),
+                .fillMaxWidth(),
         )
+        // The list row cuts the name and place short, here they are shown whole
+        Surface(
+            Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.inverseSurface,
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(file.name, style = MaterialTheme.typography.bodyMedium)
+                if (place != null) Text(place, style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
