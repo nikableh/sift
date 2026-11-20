@@ -397,8 +397,9 @@ private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
     // The answer only decides whether the progress notification shows, so the move starts either way
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { vm.move() }
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
+        val label = if (vm.preparing) "Getting ready to move" else "Move ${vm.queued.grouped()}"
         MediumExtendedFloatingActionButton(
-            text = { Text(if (vm.preparing) "Getting ready to move" else "Move ${vm.queued.grouped()}") },
+            text = { Text(label) },
             icon = {
                 val size = Modifier.size(FloatingActionButtonDefaults.MediumIconSize)
                 if (vm.preparing) {
@@ -421,7 +422,11 @@ private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
                     }
                 }
             },
-            modifier = Modifier.semantics { traversalIndex = -1f },
+            // This overload clears the text's semantics, so the label has to be set on the FAB itself
+            modifier = Modifier.semantics {
+                traversalIndex = -1f
+                contentDescription = label
+            },
             expanded = expanded,
             containerColor = MaterialTheme.colorScheme.primary,
         )
