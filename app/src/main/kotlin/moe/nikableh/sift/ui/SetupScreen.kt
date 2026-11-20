@@ -1,5 +1,6 @@
 package moe.nikableh.sift.ui
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
@@ -29,7 +31,6 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Done
-import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -68,6 +69,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -106,6 +108,14 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     var sortedOpen by rememberSaveable { mutableStateOf(false) }
     val drag = remember { DestDrag() }
     val gap = with(LocalDensity.current) { ListItemDefaults.SegmentedGap.roundToPx() }
+    val motion = MaterialTheme.motionScheme
+    val itemMotion: LazyItemScope.() -> Modifier = {
+        Modifier.animateItem(
+            fadeInSpec = motion.defaultEffectsSpec(),
+            placementSpec = motion.defaultSpatialSpec(),
+            fadeOutSpec = motion.fastEffectsSpec(),
+        )
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
@@ -132,7 +142,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         ) {
             // Each header carries the button that adds to its list
             item(key = "header:albums") {
-                SectionHeader("Albums to sort", "Add albums", Modifier.animateItem(), reading = vm.scanning) { vm.pickAlbums() }
+                SectionHeader("Albums to sort", "Add albums", itemMotion(), reading = vm.scanning) { vm.pickAlbums() }
             }
             if (sources.isEmpty()) {
                 item(key = "albums:none") {
@@ -140,7 +150,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         onClick = { vm.pickAlbums() },
                         shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
                         colors = segmentColors(),
-                        modifier = Modifier.animateItem(),
+                        modifier = itemMotion(),
                         leadingContent = { Icon(Icons.Rounded.PhotoLibrary, null) },
                         supportingContent = { Text("Tap to choose what to sort") },
                     ) { Text("No album chosen") }
@@ -151,7 +161,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 SegmentedListItem(
                     shapes = ListItemDefaults.segmentedShapes(index = i, count = active.size),
                     colors = segmentColors(),
-                    modifier = Modifier.animateItem(),
+                    modifier = itemMotion(),
                     leadingContent = { AlbumThumb(stat?.cover) },
                     supportingContent = {
                         Column {
@@ -171,15 +181,16 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             }
             if (sorted.isNotEmpty()) {
                 // One folded row, however many albums are done, so the albums still to sort stay the list
-                if (active.isNotEmpty()) item(key = "sorted:gap") { Spacer(Modifier.animateItem().height(4.dp)) }
+                if (active.isNotEmpty()) item(key = "sorted:gap") { Spacer(itemMotion().height(4.dp)) }
                 val rows = if (sortedOpen) sorted.size + 1 else 1
                 item(key = "sorted") {
                     val label = if (sortedOpen) "Hide the sorted albums" else "Show the sorted albums"
+                    val turn by animateFloatAsState(if (sortedOpen) 180f else 0f, motion.fastSpatialSpec())
                     SegmentedListItem(
                         onClick = { sortedOpen = !sortedOpen },
                         shapes = ListItemDefaults.segmentedShapes(index = 0, count = rows),
                         colors = segmentColors(),
-                        modifier = Modifier.animateItem().semantics {
+                        modifier = itemMotion().semantics {
                             onClick(label = label, action = null)
                             stateDescription = if (sortedOpen) "Expanded" else "Collapsed"
                         },
@@ -191,7 +202,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                                 // The row is already surfaceContainer, so the open fill goes one step higher to show
                                 val fill = if (sortedOpen) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent
                                 Box(Modifier.size(32.dp).clip(CircleShape).background(fill), contentAlignment = Alignment.Center) {
-                                    Icon(if (sortedOpen) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
+                                    Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(turn))
                                 }
                             }
                         },
@@ -202,7 +213,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         SegmentedListItem(
                             shapes = ListItemDefaults.segmentedShapes(index = i + 1, count = rows),
                             colors = segmentColors(),
-                            modifier = Modifier.animateItem(),
+                            modifier = itemMotion(),
                             leadingContent = { AlbumThumb(null) },
                             supportingContent = { PathText(path) },
                             trailingContent = {
@@ -212,14 +223,14 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     }
                 }
             }
-            item(key = "options:gap") { Spacer(Modifier.animateItem().height(8.dp)) }
+            item(key = "options:gap") { Spacer(itemMotion().height(8.dp)) }
             item(key = "options:subfolders") {
                 SegmentedListItem(
                     checked = vm.recursive,
                     onCheckedChange = { vm.changeRecursive(it) },
                     shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
                     colors = segmentColors(),
-                    modifier = Modifier.animateItem().semantics { role = Role.Switch },
+                    modifier = itemMotion().semantics { role = Role.Switch },
                     trailingContent = { Switch(checked = vm.recursive, onCheckedChange = null) },
                     supportingContent = {
                         Text(
@@ -233,7 +244,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 SegmentedListItem(
                     shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
                     colors = segmentColors(),
-                    modifier = Modifier.animateItem(),
+                    modifier = itemMotion(),
                     supportingContent = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             OrderButtons(vm)
@@ -244,7 +255,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             }
 
             item(key = "header:destinations") {
-                SectionHeader("Destination folders", "Add destinations", Modifier.animateItem()) {
+                SectionHeader("Destination folders", "Add destinations", itemMotion()) {
                     vm.open(Screen.Picker(forSource = false))
                 }
             }
@@ -255,13 +266,23 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         "such as \"To delete\" and empty it later.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.animateItem().padding(start = 4.dp, end = 4.dp, bottom = 10.dp).widthIn(max = 480.dp),
+                    modifier = itemMotion().padding(start = 4.dp, end = 4.dp, bottom = 10.dp).widthIn(max = 480.dp),
                 )
             }
             itemsIndexed(dests, key = { _, d -> d.path }) { i, dest ->
                 val interactions = remember { MutableInteractionSource() }
                 var held by remember { mutableStateOf(false) }
                 val lifted = drag.path == dest.path
+                // The lifted row follows the finger, so only the rows it passes slide
+                val rowMotion = if (lifted) {
+                    Modifier.animateItem(
+                        fadeInSpec = motion.defaultEffectsSpec(),
+                        placementSpec = null,
+                        fadeOutSpec = motion.fastEffectsSpec(),
+                    )
+                } else {
+                    itemMotion()
+                }
                 SegmentedListItem(
                     onClick = { vm.dialog = Dialog.RenameDest(dest) },
                     // The long click, not a drag detector, so letting go without moving doesn't open Rename
@@ -275,7 +296,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     interactionSource = interactions,
                     shapes = ListItemDefaults.segmentedShapes(index = i, count = dests.size),
                     colors = segmentColors(),
-                    modifier = (if (lifted) Modifier.animateItem(placementSpec = null) else Modifier.animateItem())
+                    modifier = rowMotion
                         .onSizeChanged { drag.heights[dest.path] = it.height }
                         .graphicsLayer { translationY = if (drag.path == dest.path) drag.offset else 0f }
                         .pointerInput(dest.path) {
