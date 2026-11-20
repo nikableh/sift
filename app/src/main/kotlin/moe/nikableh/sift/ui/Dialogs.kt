@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.DoneAll
@@ -218,11 +220,13 @@ fun Dialogs(vm: SiftViewModel) {
             onDismissRequest = close,
             title = { Text(if (vm.sources.size == 1) "Finish this album first" else "Finish these albums first") },
             text = {
-                val one = vm.queued == 1
-                Text(
-                    "${selections(vm.queued)} ${if (one) "is" else "are"} waiting. " +
-                        "Move or clear ${if (one) "it" else "them"} before leaving subfolders out."
-                )
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    val one = vm.queued == 1
+                    Text(
+                        "${selections(vm.queued)} ${if (one) "is" else "are"} waiting. " +
+                            "Move or clear ${if (one) "it" else "them"} before leaving subfolders out."
+                    )
+                }
             },
             confirmButton = {
                 Button(onClick = { vm.reviewSelections() }, shapes = ButtonDefaults.shapes()) { Text("Review") }
@@ -239,7 +243,7 @@ fun Dialogs(vm: SiftViewModel) {
             onDismissRequest = close,
             title = { Text(if (d.paths.size == 1) "Remove ${File(d.paths[0]).name}?" else "Remove ${d.paths.size} albums?") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val where = if (d.paths.size == 1) "this album" else "these albums"
                     Text("${selections(d.queued)} in $where ${if (d.queued == 1) "is" else "are"} dropped. No files are touched.")
                     // Counted, not listed, so the line stays one line at any number of albums
@@ -387,7 +391,8 @@ private fun Confirm(
         onDismissRequest = onDismiss,
         icon = icon?.let { { Icon(it, null) } },
         title = { Text(title) },
-        text = body,
+        // At large font scales the body can outgrow the window, and only the body should scroll
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { body() } },
         confirmButton = { Button(onClick = onConfirm, shapes = ButtonDefaults.shapes()) { Text(confirm) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(dismiss) } },
     )
