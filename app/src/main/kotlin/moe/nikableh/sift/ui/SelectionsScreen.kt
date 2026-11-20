@@ -39,12 +39,13 @@ import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.UnfoldMore
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallExtendedFloatingActionButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -268,16 +269,16 @@ private fun PhotoPreview(row: Selection, onDismiss: () -> Unit) {
     }
 }
 
-/** Height of the small extended FAB, which material3 doesn't expose. */
-private val FabHeight = 56.dp
+/** Height of the medium extended FAB, which material3 doesn't expose. */
+private val FabHeight = 80.dp
 
 /** FABs have no disabled state, so it steps away while a scan or a move is running. */
 @Composable
 private fun MoveFab(vm: SiftViewModel, visible: Boolean) {
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
-        SmallExtendedFloatingActionButton(
+        MediumExtendedFloatingActionButton(
             text = { FitLabel("Move ${vm.queued.grouped()}") },
-            icon = { Icon(Icons.Rounded.DoneAll, null) },
+            icon = { Icon(Icons.Rounded.DoneAll, null, Modifier.size(FloatingActionButtonDefaults.MediumIconSize)) },
             onClick = { vm.move() },
             modifier = Modifier.semantics { traversalIndex = -1f },
             containerColor = MaterialTheme.colorScheme.primary,
