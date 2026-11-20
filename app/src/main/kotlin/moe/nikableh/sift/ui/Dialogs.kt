@@ -231,12 +231,8 @@ fun Dialogs(vm: SiftViewModel) {
             confirmButton = {
                 Button(onClick = { vm.reviewSelections() }, shapes = ButtonDefaults.shapes()) { Text("Review") }
             },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = close) { Text("Cancel") }
-                    TextButton(onClick = { vm.dialog = Dialog.ConfirmClear }) { Text("Clear") }
-                }
-            },
+            // Clear lives on the Selections screen that Review opens
+            dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
         )
 
         is Dialog.ConfirmRemoveSource -> AlertDialog(
@@ -263,12 +259,7 @@ fun Dialogs(vm: SiftViewModel) {
                     shapes = ButtonDefaults.shapes(),
                 ) { Text("Remove") }
             },
-            dismissButton = {
-                Row {
-                    TextButton(onClick = close) { Text("Cancel") }
-                    TextButton(onClick = { vm.reviewSelections() }) { Text("Review") }
-                }
-            },
+            dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
         )
 
         is Dialog.ConfirmRemoveDest -> Confirm(
