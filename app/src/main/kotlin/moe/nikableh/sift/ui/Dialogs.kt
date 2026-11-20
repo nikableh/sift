@@ -32,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
@@ -51,6 +53,7 @@ import moe.nikableh.sift.SiftViewModel
 @Composable
 fun Dialogs(vm: SiftViewModel) {
     val close = { vm.dialog = null }
+    val haptic = LocalHapticFeedback.current
     // Read from the run itself, so a view model made while it is on shows it too
     val run = MoveRunner.run
     if (run != null) {
@@ -127,19 +130,24 @@ fun Dialogs(vm: SiftViewModel) {
             }
         }
 
-        is Dialog.MoveDone -> AlertDialog(
-            onDismissRequest = close,
-            icon = { Icon(Icons.Rounded.DoneAll, null) },
-            title = { Text("Moved ${files(d.result.moved)}") },
-            text = { applyDetails(d.result)?.let { Text(it) } },
-            confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
-            dismissButton = {
-                val batch = d.batch
-                if (batch != null) {
-                    TextButton(onClick = { vm.undoBatch(batch) }) { Text("Undo this batch") }
-                }
-            },
-        )
+        is Dialog.MoveDone -> {
+            LaunchedEffect(d) {
+                haptic.performHapticFeedback(if (d.result.failed.isEmpty()) HapticFeedbackType.Confirm else HapticFeedbackType.Reject)
+            }
+            AlertDialog(
+                onDismissRequest = close,
+                icon = { Icon(Icons.Rounded.DoneAll, null) },
+                title = { Text("Moved ${files(d.result.moved)}") },
+                text = { applyDetails(d.result)?.let { Text(it) } },
+                confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
+                dismissButton = {
+                    val batch = d.batch
+                    if (batch != null) {
+                        TextButton(onClick = { vm.undoBatch(batch) }) { Text("Undo this batch") }
+                    }
+                },
+            )
+        }
 
         is Dialog.ConfirmUndoBatch -> {
             val b = d.batch
@@ -154,12 +162,15 @@ fun Dialogs(vm: SiftViewModel) {
             }
         }
 
-        is Dialog.UndoFailed -> AlertDialog(
-            onDismissRequest = close,
-            title = { Text("Moved ${d.restored.grouped()} back") },
-            text = { Text("${d.failed.size.grouped()} could not be moved back:\n" + failureLines(d.failed)) },
-            confirmButton = { TextButton(onClick = close) { Text("OK") } },
-        )
+        is Dialog.UndoFailed -> {
+            LaunchedEffect(d) { haptic.performHapticFeedback(HapticFeedbackType.Reject) }
+            AlertDialog(
+                onDismissRequest = close,
+                title = { Text("Moved ${d.restored.grouped()} back") },
+                text = { Text("${d.failed.size.grouped()} could not be moved back:\n" + failureLines(d.failed)) },
+                confirmButton = { TextButton(onClick = close) { Text("OK") } },
+            )
+        }
 
         is Dialog.ConfirmDiscardPicks -> Confirm(
             title = if (d.unticked == 0) "Leave without adding?" else "Leave without saving?",
