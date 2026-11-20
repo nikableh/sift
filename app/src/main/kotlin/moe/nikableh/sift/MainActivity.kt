@@ -39,7 +39,6 @@ class MainActivity : ComponentActivity() {
     private fun styleSystemBars() {
         val bars = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = bars, navigationBarStyle = bars)
-        window.isNavigationBarContrastEnforced = false
     }
 
     override fun onResume() {
