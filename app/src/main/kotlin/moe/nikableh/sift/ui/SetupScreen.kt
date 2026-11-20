@@ -1,6 +1,7 @@
 package moe.nikableh.sift.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -53,7 +54,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -457,8 +457,8 @@ private fun OrderButtons(vm: SiftViewModel) {
                 checked = vm.order == value,
                 onCheckedChange = { vm.changeOrder(value) },
                 modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
-                // One tone above the row, or the unselected options vanish into it
-                colors = ToggleButtonDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                // outline rather than the outlined default outlineVariant, so each option reaches 3:1 on the row
+                border = if (vm.order == value) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                 shapes = when (i) {
                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
