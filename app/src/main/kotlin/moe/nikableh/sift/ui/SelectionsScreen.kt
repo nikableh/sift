@@ -1,11 +1,18 @@
 package moe.nikableh.sift.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.BoundsTransform
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -59,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -74,14 +82,12 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Scanner
 import moe.nikableh.sift.Selection
 import moe.nikableh.sift.SiftViewModel
 import moe.nikableh.sift.Store
-import androidx.compose.ui.window.Dialog as WindowDialog
 
 /** Every queued photo, with where it goes. A list, so long folder names have room. */
 @Composable
@@ -93,76 +99,101 @@ fun SelectionsScreen(vm: SiftViewModel) {
     var preview by remember { mutableStateOf<Selection?>(null) }
     val layoutDirection = LocalLayoutDirection.current
     val scroll = TopAppBarDefaults.pinnedScrollBehavior()
+    val motion = MaterialTheme.motionScheme
 
-    preview?.let { PhotoPreview(it) { preview = null } }
+    BackHandler(enabled = preview != null) { preview = null }
 
-    // The defaults cover system bars only, so in landscape the list and app bar ran under the camera cutout
-    Scaffold(
-        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
-        contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = {
-            TopAppBar(
-                // Ahead of the FAB, which TalkBack would otherwise reach only after every row
-                modifier = Modifier.semantics { isTraversalGroup = true; traversalIndex = -2f },
-                scrollBehavior = scroll,
-                windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
-                title = { Text("Selections", Modifier.semantics { heading() }) },
-                navigationIcon = {
-                    IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
-                },
-                actions = {
-                    if (groups.isNotEmpty()) {
-                        IconButton(onClick = {
-                            collapsed = if (allCollapsed) emptySet() else groups.mapTo(HashSet()) { it.dest }
-                        }) {
-                            if (allCollapsed) Icon(Icons.Rounded.UnfoldMore, "Expand all")
-                            else Icon(Icons.Rounded.UnfoldLess, "Collapse all")
+    // In the tree rather than a dialog window, so the photo can grow out of its thumbnail
+    SharedTransitionLayout {
+        // The defaults cover system bars only, so in landscape the list and app bar ran under the camera cutout
+        Scaffold(
+            modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
+            contentWindowInsets = WindowInsets.safeDrawing,
+            topBar = {
+                TopAppBar(
+                    // Ahead of the FAB, which TalkBack would otherwise reach only after every row
+                    modifier = Modifier.semantics { isTraversalGroup = true; traversalIndex = -2f },
+                    scrollBehavior = scroll,
+                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+                    title = { Text("Selections", Modifier.semantics { heading() }) },
+                    navigationIcon = {
+                        IconButton(onClick = { vm.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+                    },
+                    actions = {
+                        if (groups.isNotEmpty()) {
+                            IconButton(onClick = {
+                                collapsed = if (allCollapsed) emptySet() else groups.mapTo(HashSet()) { it.dest }
+                            }) {
+                                if (allCollapsed) Icon(Icons.Rounded.UnfoldMore, "Expand all")
+                                else Icon(Icons.Rounded.UnfoldLess, "Collapse all")
+                            }
+                            IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready) {
+                                Icon(Icons.Rounded.ClearAll, "Clear selections")
+                            }
                         }
-                        IconButton(onClick = { vm.dialog = Dialog.ConfirmClear }, enabled = ready) {
-                            Icon(Icons.Rounded.ClearAll, "Clear selections")
-                        }
-                    }
-                },
-            )
-        },
-        floatingActionButton = { MoveFab(vm, visible = vm.queued > 0 && ready) },
-    ) { padding ->
-        if (groups.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    "Nothing is waiting to move",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    },
                 )
-            }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(
-                    start = padding.calculateStartPadding(layoutDirection),
-                    end = padding.calculateEndPadding(layoutDirection),
-                    // The FAB floats over the list, so the last row needs room to scroll out from under it
-                    bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
-                ),
-                // Not content padding: a sticky header pins to the viewport's edge, which would be under the app bar
-                modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
-            ) {
-                for (group in groups) {
-                    val dest = group.dest
-                    val rows = group.rows
-                    val color = destColor(vm, dest)
-                    val folded = dest in collapsed
-                    stickyHeader(key = "group:$dest", contentType = "group") {
-                        GroupHeader(dest, rows.size, color, folded) {
-                            collapsed = if (folded) collapsed - dest else collapsed + dest
+            },
+            floatingActionButton = { MoveFab(vm, visible = vm.queued > 0 && ready) },
+        ) { padding ->
+            if (groups.isEmpty()) {
+                Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Nothing is waiting to move",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        start = padding.calculateStartPadding(layoutDirection),
+                        end = padding.calculateEndPadding(layoutDirection),
+                        // The FAB floats over the list, so the last row needs room to scroll out from under it
+                        bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
+                    ),
+                    // Not content padding: a sticky header pins to the viewport's edge, which would be under the app bar
+                    modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()),
+                ) {
+                    for (group in groups) {
+                        val dest = group.dest
+                        val rows = group.rows
+                        val color = destColor(vm, dest)
+                        val folded = dest in collapsed
+                        stickyHeader(key = "group:$dest", contentType = "group") {
+                            GroupHeader(dest, rows.size, color, folded) {
+                                collapsed = if (folded) collapsed - dest else collapsed + dest
+                            }
                         }
-                    }
-                    if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
-                        SelectionRow(row, vm.placeOf(row.file), ready, onPreview = { preview = row }) { vm.dropSelection(row) }
+                        if (!folded) items(rows, key = { it.file.path }, contentType = { "photo" }) { row ->
+                            SelectionRow(
+                                row,
+                                vm.placeOf(row.file),
+                                ready,
+                                previewing = preview?.file?.path == row.file.path,
+                                onPreview = { preview = row },
+                            ) { vm.dropSelection(row) }
+                        }
                     }
                 }
             }
         }
+        AnimatedContent(
+            preview,
+            transitionSpec = {
+                (fadeIn(motion.defaultEffectsSpec()) togetherWith fadeOut(motion.defaultEffectsSpec())).using(null)
+            },
+            label = "preview",
+        ) { shown ->
+            if (shown != null) PhotoPreview(shown, this) { preview = null }
+        }
     }
+}
+
+@Composable
+private fun spatialBounds(): BoundsTransform {
+    val spec = MaterialTheme.motionScheme.defaultSpatialSpec<Rect>()
+    return BoundsTransform { _, _ -> spec }
 }
 
 /** Folders that are no longer buttons get no colour. */
@@ -214,25 +245,32 @@ fun Dot(color: Color?) {
 }
 
 @Composable
-private fun SelectionRow(
+private fun SharedTransitionScope.SelectionRow(
     row: Selection,
     place: String?,
     enabled: Boolean,
+    previewing: Boolean,
     onPreview: () -> Unit,
     onRemove: () -> Unit,
 ) {
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(
-            model = row.file,
-            contentDescription = row.file.name,
-            contentScale = ContentScale.Crop,
-            // List spec leading media sizes: 114x64dp for a video, 56dp for an image
-            modifier = Modifier
-                .then(if (Scanner.isVideo(row.file.name)) Modifier.size(width = 114.dp, height = 64.dp) else Modifier.size(56.dp))
-                .clip(MaterialTheme.shapes.small)
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                .clickable(onClickLabel = "Preview", role = Role.Image, onClick = onPreview),
-        )
+        // List spec leading media sizes: 114x64dp for a video, 56dp for an image
+        Box(if (Scanner.isVideo(row.file.name)) Modifier.size(width = 114.dp, height = 64.dp) else Modifier.size(56.dp)) {
+            // Not the RowScope overload, which only Row content may call
+            androidx.compose.animation.AnimatedVisibility(!previewing, enter = fadeIn(), exit = fadeOut()) {
+                AsyncImage(
+                    model = row.file,
+                    contentDescription = row.file.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .sharedBounds(rememberSharedContentState(row.file.path), this, boundsTransform = spatialBounds())
+                        .fillMaxSize()
+                        .clip(MaterialTheme.shapes.small)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .clickable(onClickLabel = "Preview", role = Role.Image, onClick = onPreview),
+                )
+            }
+        }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(row.file.name, style = MaterialTheme.typography.bodyLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
             // With several albums the one it comes from. With subfolders included, the folders under that
@@ -250,29 +288,31 @@ private fun SelectionRow(
 
 /** The whole photo fitted to the screen, so a thumbnail's crop doesn't hide what is being moved. */
 @Composable
-private fun PhotoPreview(row: Selection, onDismiss: () -> Unit) {
+private fun SharedTransitionScope.PhotoPreview(row: Selection, scope: AnimatedVisibilityScope, onDismiss: () -> Unit) {
     val file = row.file
-    WindowDialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            Modifier.fillMaxSize()
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClickLabel = "Close preview",
-                    onClick = onDismiss,
-                )
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            AsyncImage(
-                model = file,
-                // The preview shows no text, so a camera file name would tell TalkBack users nothing
-                contentDescription = "${if (Scanner.isVideo(file.name)) "Video" else "Photo"} going to ${Store.labelFor(row.dest)}",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
+    Box(
+        Modifier.fillMaxSize()
+            // The dim the dialog window used to draw
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClickLabel = "Close preview",
+                onClick = onDismiss,
             )
-        }
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .padding(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = file,
+            // The preview shows no text, so a camera file name would tell TalkBack users nothing
+            contentDescription = "${if (Scanner.isVideo(file.name)) "Video" else "Photo"} going to ${Store.labelFor(row.dest)}",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .sharedBounds(rememberSharedContentState(file.path), scope, boundsTransform = spatialBounds())
+                .fillMaxSize(),
+        )
     }
 }
 
