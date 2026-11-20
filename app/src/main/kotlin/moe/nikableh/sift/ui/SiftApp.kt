@@ -125,7 +125,7 @@ fun SiftApp(vm: SiftViewModel) {
                     when (screen) {
                         Screen.Home -> saved.SaveableStateProvider("home") { HomeScreen(vm, host) }
                         // A video waits for the slide to end, so its picture never comes in halfway through one
-                        Screen.Sort -> SortScreen(vm, settled = !transition.isRunning)
+                        Screen.Sort -> SortScreen(vm, host, settled = !transition.isRunning)
                         Screen.Setup -> SetupScreen(vm, host)
                         Screen.Selections -> SelectionsScreen(vm, host)
                         Screen.About -> AboutScreen(vm, host)

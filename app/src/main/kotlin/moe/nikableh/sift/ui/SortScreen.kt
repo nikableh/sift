@@ -71,6 +71,8 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -165,7 +167,7 @@ import moe.nikableh.sift.VideoPlayer
  * [settled] is false while the screen is still sliding in or out
  */
 @Composable
-fun SortScreen(vm: SiftViewModel, settled: Boolean) {
+fun SortScreen(vm: SiftViewModel, snackbar: SnackbarHostState, settled: Boolean) {
     val context = LocalContext.current
     // Held above the two layouts, so turning the phone doesn't start the video over
     val player = remember { VideoPlayer(context.applicationContext) }
@@ -205,12 +207,12 @@ fun SortScreen(vm: SiftViewModel, settled: Boolean) {
                         // The fixed pane is 360dp at expanded window widths
                         val panelWidth = if (maxWidth >= 840.dp) 360.dp else 280.dp
                         Row(Modifier.fillMaxSize()) {
-                            Viewer(vm, player, stage, landscape = true, Modifier.weight(1f).fillMaxHeight())
+                            Viewer(vm, player, stage, snackbar, landscape = true, Modifier.weight(1f).fillMaxHeight())
                             Panel(vm, landscape = true, Modifier.width(panelWidth).fillMaxHeight())
                         }
                     } else {
                         Column(Modifier.fillMaxSize()) {
-                            Viewer(vm, player, stage, landscape = false, Modifier.weight(1f).fillMaxWidth())
+                            Viewer(vm, player, stage, snackbar, landscape = false, Modifier.weight(1f).fillMaxWidth())
                             Panel(vm, landscape = false, Modifier.fillMaxWidth())
                         }
                     }
@@ -413,13 +415,13 @@ private fun PaleBarIcons() {
 }
 
 @Composable
-private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, landscape: Boolean, modifier: Modifier) {
+private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, snackbar: SnackbarHostState, landscape: Boolean, modifier: Modifier) {
     val folder = vm.albumsLabel
 
     Column(modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))) {
         TopBar(vm, folder)
         Photo(
-            vm, player, stage, folder, landscape,
+            vm, player, stage, snackbar, folder, landscape,
             Modifier.weight(1f).fillMaxWidth().onGloballyPositioned {
                 stage.slot = it
                 stage.place()
@@ -430,7 +432,15 @@ private fun Viewer(vm: SiftViewModel, player: VideoPlayer, stage: Stage, landsca
 
 /** What lies over the photo. The photo itself is [Media], under all of this. */
 @Composable
-private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: String, landscape: Boolean, modifier: Modifier) {
+private fun Photo(
+    vm: SiftViewModel,
+    player: VideoPlayer,
+    stage: Stage,
+    snackbar: SnackbarHostState,
+    folder: String,
+    landscape: Boolean,
+    modifier: Modifier,
+) {
     val view = LocalView.current
     val gate = vm.gate
     val video = gate == Gate.None && vm.current?.video == true
@@ -504,6 +514,8 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: 
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Above the pill and the video bar, so a snackbar never covers them or the folder buttons
+            SnackbarHost(snackbar)
             val assigned = vm.assigned
             if (assigned != null) {
                 val i = vm.dests.indexOfFirst { it.path == assigned }
