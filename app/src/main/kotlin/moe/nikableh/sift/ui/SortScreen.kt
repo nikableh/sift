@@ -40,7 +40,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -947,7 +946,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                 if (vm.assign(dest)) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             },
             // Past about 16dp the corner curve reaches the badge and the selection ring cuts through it
-            shapes = ButtonDefaults.shapes(shape = RoundedCornerShape(14.dp), pressedShape = RoundedCornerShape(6.dp)),
+            shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large, pressedShape = ButtonDefaults.mediumPressedShape),
             colors = ButtonDefaults.buttonColors(containerColor = color.tile(), contentColor = ink),
             // A dark ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel.
             // In dark theme a ring at the edge is either pale on a pale tile or dark on the dark panel,
@@ -966,7 +965,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
         ) {
             Box(Modifier.fillMaxSize()) {
                 if (selected && dark) {
-                    Box(Modifier.fillMaxSize().padding(3.dp).border(3.dp, ink, RoundedCornerShape(11.dp)))
+                    Box(Modifier.fillMaxSize().padding(3.dp).border(3.dp, ink, MaterialTheme.shapes.medium))
                 }
                 Column(Modifier.fillMaxSize().padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 4.dp)) {
                     // The badge row is laid out even at zero, so a label never moves when its first count shows up,
