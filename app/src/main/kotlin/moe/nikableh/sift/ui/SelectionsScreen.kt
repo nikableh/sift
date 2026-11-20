@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.UnfoldLess
 import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallExtendedFloatingActionButton
@@ -64,6 +65,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.traversalIndex
@@ -130,8 +133,8 @@ fun SelectionsScreen(vm: SiftViewModel) {
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(
-                    start = padding.calculateStartPadding(layoutDirection) + 16.dp,
-                    end = padding.calculateEndPadding(layoutDirection) + 8.dp,
+                    start = padding.calculateStartPadding(layoutDirection),
+                    end = padding.calculateEndPadding(layoutDirection),
                     // The FAB floats over the list, so the last row needs room to scroll out from under it
                     bottom = padding.calculateBottomPadding() + FabHeight + 32.dp,
                 ),
@@ -168,41 +171,35 @@ private val KeySetSaver = Saver<Set<String>, ArrayList<String>>(save = { ArrayLi
 @Composable
 private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Boolean, onToggle: () -> Unit) {
     val turn by animateFloatAsState(if (collapsed) -90f else 0f, label = "chevron")
-    Column(
-        Modifier.fillMaxWidth()
-            // Opaque, so rows don't show through while the header is pinned
+    ListItem(
+        onClick = onToggle,
+        modifier = Modifier
+            // Opaque, so rows don't show through the gap while the header is pinned
             .background(MaterialTheme.colorScheme.background)
             .padding(top = 12.dp)
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClickLabel = if (collapsed) "Expand" else "Collapse", role = Role.Button, onClick = onToggle)
+            // ListItem takes no click label
             .semantics {
+                onClick(label = if (collapsed) "Expand" else "Collapse") { onToggle(); true }
+                role = Role.Button
                 heading()
                 stateDescription = if (collapsed) "Collapsed" else "Expanded"
+            },
+        leadingContent = { Dot(color) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    count.grouped(),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { contentDescription = files(count) },
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(turn))
             }
-            .padding(top = 8.dp, bottom = 8.dp, end = 8.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Dot(color)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                Store.labelFor(dest),
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                count.grouped(),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics { contentDescription = files(count) },
-            )
-            Spacer(Modifier.width(4.dp))
-            Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(turn))
-        }
+        },
         // The whole path wraps instead of being cut, it is what tells two folders apart
-        Text(
-            dest,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        supportingContent = { Text(dest) },
+    ) {
+        Text(Store.labelFor(dest), style = MaterialTheme.typography.titleMediumEmphasized)
     }
 }
 
@@ -219,7 +216,7 @@ private fun SelectionRow(
     onPreview: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 4.dp, end = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(
             model = row.file,
             contentDescription = row.file.name,
