@@ -92,7 +92,7 @@ import moe.nikableh.sift.SiftViewModel
 @Composable
 fun HomeScreen(vm: SiftViewModel) {
     when {
-        !vm.allowed -> AccessScreen(vm)
+        !vm.allowed -> AccessScreen(vm, onAbout = { vm.open(Screen.About) })
 
         vm.sources.isEmpty() || vm.dests.isEmpty() -> Welcome(
             icon = Icons.Rounded.PhotoLibrary,

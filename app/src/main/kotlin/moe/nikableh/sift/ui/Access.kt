@@ -40,6 +40,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
@@ -82,7 +84,7 @@ fun openManageMedia(context: Context) {
 
 /** What Home and the sorting screen show until Android lets Sift see and move photos. */
 @Composable
-fun AccessScreen(vm: SiftViewModel) {
+fun AccessScreen(vm: SiftViewModel, onAbout: (() -> Unit)? = null) {
     val context = LocalContext.current
     val activity = LocalActivity.current
     // After two refusals Android no longer offers full access: it answers at once, or with
@@ -111,6 +113,7 @@ fun AccessScreen(vm: SiftViewModel) {
                 icon = Icons.Rounded.PhotoLibrary,
                 title = "Let Sift sort your photos",
                 body = if (photosDone) "One more thing and Sift is ready." else "Sift needs two things.",
+                onAbout = onAbout,
             ) {
                 Steps(photosDone, showManage = Build.VERSION.SDK_INT >= 31)
                 if (photosDone) {
@@ -129,6 +132,7 @@ fun AccessScreen(vm: SiftViewModel) {
             icon = Icons.Rounded.HideImage,
             title = "Sift can't see your photos",
             body = "Photo access is off. Sift needs it to show your albums.",
+            onAbout = onAbout,
         ) {
             if (refused) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -147,6 +151,7 @@ fun AccessScreen(vm: SiftViewModel) {
             icon = Icons.Rounded.Collections,
             title = "Sift sees only some photos",
             body = "You chose limited access, so albums would be missing photos. Allow all photos to sort whole albums.",
+            onAbout = onAbout,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (refused) {
@@ -164,9 +169,30 @@ fun AccessScreen(vm: SiftViewModel) {
 }
 
 @Composable
-private fun AccessLayout(icon: ImageVector, title: String, body: String, content: @Composable () -> Unit) {
+private fun AccessLayout(
+    icon: ImageVector,
+    title: String,
+    body: String,
+    onAbout: (() -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        AccessContent(icon, title, body, content)
+        // About and Licenses work without photo access, so the gate on Home keeps a way to them
+        if (onAbout != null) {
+            IconButton(
+                onClick = onAbout,
+                shapes = IconButtonDefaults.shapes(),
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 8.dp),
+            ) { Icon(Icons.Outlined.Info, "About") }
+        }
+    }
+}
+
+@Composable
+private fun AccessContent(icon: ImageVector, title: String, body: String, content: @Composable () -> Unit) {
     Box(
-        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         contentAlignment = Alignment.Center,
     ) {
         Column(
