@@ -108,7 +108,7 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "Sorts photos and videos into folders, one tap each.",
+                "Sorts photos and videos into folders, one tap each",
                 Modifier.padding(horizontal = 16.dp),
                 // Evens out the lines, so a narrow screen doesn't leave the last word on its own
                 style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Heading),
