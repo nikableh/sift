@@ -8,6 +8,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import coil3.SingletonImageLoader
 import coil3.video.VideoFrameDecoder
 import moe.nikableh.sift.ui.SiftApp
@@ -16,6 +17,7 @@ class MainActivity : ComponentActivity() {
     private val vm: SiftViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         styleSystemBars()
         super.onCreate(savedInstanceState)
         val bounds = windowManager.currentWindowMetrics.bounds
