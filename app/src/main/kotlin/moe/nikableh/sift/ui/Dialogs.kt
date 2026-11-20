@@ -304,6 +304,8 @@ fun Dialogs(vm: SiftViewModel) {
             hint = if (d.album) "Created in ${d.parent.name}, where gallery apps look for albums" else null,
             initial = "",
             confirm = "Create",
+            required = true,
+            problemOf = { if ('/' in it) "Can't contain /" else null },
             onConfirm = {
                 close()
                 vm.createFolder(d.parent, it, d.forSource)
@@ -407,8 +409,13 @@ private fun TextPrompt(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     icon: ImageVector? = null,
+    required: Boolean = false,
+    problemOf: (String) -> String? = { null },
 ) {
     var value by remember { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
+    val problem = problemOf(value.text)
+    val valid = problem == null && !(required && value.text.isBlank())
+    val submit = { if (valid) onConfirm(value.text) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     AlertDialog(
@@ -426,13 +433,17 @@ private fun TextPrompt(
                         capitalization = KeyboardCapitalization.Sentences,
                         imeAction = ImeAction.Done,
                     ),
-                    keyboardActions = KeyboardActions(onDone = { onConfirm(value.text) }),
-                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    isError = problem != null,
+                    supportingText = problem?.let { { Text(it) } },
+                    keyboardActions = KeyboardActions(onDone = { submit() }),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics {
+                        if (problem != null) error(problem)
+                    },
                 )
             }
         },
         confirmButton = {
-            Button(onClick = { onConfirm(value.text) }, shapes = ButtonDefaults.shapes()) { Text(confirm) }
+            Button(onClick = { submit() }, enabled = valid, shapes = ButtonDefaults.shapes()) { Text(confirm) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
