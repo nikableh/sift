@@ -53,6 +53,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
@@ -90,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import moe.nikableh.sift.Dialog
+import moe.nikableh.sift.MoveRunner
 import moe.nikableh.sift.Scanner
 import moe.nikableh.sift.Selection
 import moe.nikableh.sift.SiftViewModel
@@ -142,7 +145,14 @@ fun SelectionsScreen(vm: SiftViewModel) {
                 )
             },
             // Icon only while scrolling down, so it covers less of the rows passing under it
-            floatingActionButton = { MoveFab(vm, visible = vm.queued > 0 && ready, expanded = !list.lastScrolledForward) },
+            floatingActionButton = {
+                MoveFab(
+                    vm,
+                    visible = vm.queued > 0 && !vm.scanning && MoveRunner.run == null,
+                    // The wait is said in the label
+                    expanded = vm.preparing || !list.lastScrolledForward,
+                )
+            },
         ) { padding ->
             if (groups.isEmpty()) {
                 Box(Modifier.fillMaxSize().padding(padding).padding(32.dp), contentAlignment = Alignment.Center) {
@@ -370,14 +380,24 @@ private fun SharedTransitionScope.PhotoPreview(
 /** Height of the medium extended FAB, which material3 doesn't expose. */
 private val FabHeight = 80.dp
 
-/** FABs have no disabled state, so it steps away while a scan or a move is running. */
+/** FABs have no disabled state, so it steps away while a scan or a move is running, and shows the wait before one. */
 @Composable
 private fun MoveFab(vm: SiftViewModel, visible: Boolean, expanded: Boolean) {
     AnimatedVisibility(visible, enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
         MediumExtendedFloatingActionButton(
-            text = { Text("Move ${vm.queued.grouped()}") },
-            icon = { Icon(Icons.Rounded.DoneAll, null, Modifier.size(FloatingActionButtonDefaults.MediumIconSize)) },
-            onClick = { vm.move() },
+            text = { Text(if (vm.preparing) "Getting ready to move" else "Move ${vm.queued.grouped()}") },
+            icon = {
+                val size = Modifier.size(FloatingActionButtonDefaults.MediumIconSize)
+                if (vm.preparing) {
+                    // The default indicator colour is primary, the colour of this FAB
+                    val color = LocalContentColor.current
+                    if (rememberAnimationsOn()) LoadingIndicator(size, color = color)
+                    else LoadingIndicator(progress = { 0f }, modifier = size, color = color)
+                } else {
+                    Icon(Icons.Rounded.DoneAll, null, size)
+                }
+            },
+            onClick = { if (!vm.preparing) vm.move() },
             modifier = Modifier.semantics { traversalIndex = -1f },
             expanded = expanded,
             containerColor = MaterialTheme.colorScheme.primary,

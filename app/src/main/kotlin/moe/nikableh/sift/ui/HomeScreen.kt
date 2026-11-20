@@ -184,7 +184,13 @@ private fun Home(vm: SiftViewModel) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton(onClick = { vm.dialog = Dialog.ConfirmUndoBatch(batch) }) { Text("Undo") }
+                        TextButton(onClick = { if (!vm.preparing) vm.dialog = Dialog.ConfirmUndoBatch(batch) }) {
+                            if (vm.preparing) {
+                                Loading(Modifier.size(24.dp).semantics { contentDescription = "Getting ready to move back" })
+                            } else {
+                                Text("Undo")
+                            }
+                        }
                     }
                 }
                 Spacer(Modifier.height(8.dp))

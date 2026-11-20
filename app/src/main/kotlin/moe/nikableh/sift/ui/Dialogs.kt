@@ -4,10 +4,7 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.rememberScrollState
@@ -94,20 +91,8 @@ fun Dialogs(vm: SiftViewModel) {
         return
     }
     when (val d = vm.dialog) {
-        null -> {}
-
-        is Dialog.Preparing -> AlertDialog(
-            onDismissRequest = goHome,
-            properties = DialogProperties(dismissOnClickOutside = false),
-            title = { Text(d.title) },
-            text = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Loading(Modifier.size(32.dp).semantics { contentDescription = "Asking Android for access to the files" })
-                    Text("Asking Android for access to the files")
-                }
-            },
-            confirmButton = {},
-        )
+        // The wait shows on the Move FAB and the Undo button instead
+        null, is Dialog.Preparing -> {}
 
         is Dialog.MoveInterrupted -> if (d.left == 0) {
             AlertDialog(

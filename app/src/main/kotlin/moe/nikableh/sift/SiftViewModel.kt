@@ -164,7 +164,8 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     var scanning by mutableStateOf(false)
         private set
     /** Asking Android for write access, before a run starts. */
-    private var preparing by mutableStateOf(false)
+    var preparing by mutableStateOf(false)
+        private set
 
     /** A Move or an undo is being prepared or is running, started here or by a view model before this one. */
     val busy: Boolean get() = preparing || MoveRunner.run != null
@@ -785,11 +786,9 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         // Where to land afterwards: the first photo from here on that isn't moved
         val landing = photos.getOrNull(firstUnsorted(index))?.path
         preparing = true
-        dialog = Dialog.Preparing("Getting ready to move")
         viewModelScope.launch {
             // Refused in Android's own dialog, so the untouched list says enough
             val granted = grantWrite(entries.map { it.first })
-            dialog = null
             if (granted) {
                 Store.lastPath = landing
                 MoveRunner.move(ctx, entries)
@@ -806,11 +805,11 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         // A folder read counts against the queue from another thread, so the queue holds still until it ends
         if (busy || scanning) return
         preparing = true
-        dialog = Dialog.Preparing("Getting ready to move back")
+        // Every way in is a dialog button
+        dialog = null
         viewModelScope.launch {
             val moved = withContext(Dispatchers.IO) { Mover.readJournal(batch.journal).map { it.second } }
             val granted = grantWrite(moved)
-            dialog = null
             if (granted) MoveRunner.undo(ctx, batch)
             preparing = false
         }
