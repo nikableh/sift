@@ -4,7 +4,10 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -185,6 +188,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     /** [keepView] swaps in a sharper bitmap of the same photo without resetting zoom and pan. */
     fun setImage(b: Bitmap?, keepView: Boolean = false) {
         bitmap = b
+        matchHdr()
         if (!keepView) {
             settle?.cancel()
             dragX = 0f
@@ -296,6 +300,7 @@ class ZoomImageView(ctx: Context) : View(ctx) {
             next = old
             prev = null
         }
+        matchHdr()
         dragX += dir * page
         unzoom()
     }
@@ -332,11 +337,37 @@ class ZoomImageView(ctx: Context) : View(ctx) {
         }
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        matchHdr()
+    }
+
     override fun onDetachedFromWindow() {
         settle?.cancel()
         glide?.end()
         scroller.forceFinished(true)
+        matchHdr(on = false)
         super.onDetachedFromWindow()
+    }
+
+    /**
+     * The window draws an Ultra HDR photo's extra brightness only in HDR mode. That mode raises the
+     * screen's brightness and can dim the rest of the app, so it lasts only while such a photo is the current page
+     */
+    private fun matchHdr(on: Boolean = isAttachedToWindow && bitmap?.hasGainmap() == true) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        val window = activity()?.window ?: return
+        val mode = if (on) ActivityInfo.COLOR_MODE_HDR else ActivityInfo.COLOR_MODE_DEFAULT
+        if (window.colorMode != mode) window.colorMode = mode
+    }
+
+    private fun activity(): Activity? {
+        var c = context
+        while (c is ContextWrapper) {
+            if (c is Activity) return c
+            c = c.baseContext
+        }
+        return null
     }
 
     private fun fitScale(b: Bitmap) = min(frame.width() / b.width, frame.height() / b.height)
