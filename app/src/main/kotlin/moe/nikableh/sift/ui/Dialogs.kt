@@ -200,7 +200,7 @@ fun Dialogs(vm: SiftViewModel) {
                 when {
                     d.unticked > 0 -> "Your albums stay as they were"
                     d.count == 1 -> "1 ticked folder has not been added"
-                    else -> "${d.count} ticked folders have not been added"
+                    else -> "${d.count.grouped()} ticked folders have not been added"
                 }
             )
         }
@@ -239,7 +239,7 @@ fun Dialogs(vm: SiftViewModel) {
 
         is Dialog.ConfirmRemoveSource -> AlertDialog(
             onDismissRequest = close,
-            title = { Text(if (d.paths.size == 1) "Remove ${File(d.paths[0]).name}?" else "Remove ${d.paths.size} albums?") },
+            title = { Text(if (d.paths.size == 1) "Remove ${File(d.paths[0]).name}?" else "Remove ${d.paths.size.grouped()} albums?") },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     val where = if (d.paths.size == 1) "this album" else "these albums"
@@ -247,7 +247,7 @@ fun Dialogs(vm: SiftViewModel) {
                     // Counted, not listed, so the line stays one line at any number of albums
                     val others = vm.activeAlbums.count { it !in d.paths }
                     if (d.elsewhere > 0 && others > 0) {
-                        Text(if (others == 1) "Selections in the other album stay" else "Selections in the other $others albums stay")
+                        Text(if (others == 1) "Selections in the other album stay" else "Selections in the other ${others.grouped()} albums stay")
                     }
                 }
             },
@@ -339,15 +339,15 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
                 onValueChange = { v -> if (v.text.all { it.isDigit() } && v.text.length <= 9) value = v },
                 label = { Text("Photo number") },
                 singleLine = true,
-                suffix = { Text("/ $max") },
+                suffix = { Text("/ ${max.grouped()}") },
                 isError = invalid,
                 // No description, the field's error semantics already announce it
                 trailingIcon = if (invalid) { { Icon(Icons.Rounded.Error, null) } } else null,
-                supportingText = { Text("From 1 to $max") },
+                supportingText = { Text("From 1 to ${max.grouped()}") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { submit() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus).semantics {
-                    if (invalid) error("Enter a number from 1 to $max")
+                    if (invalid) error("Enter a number from 1 to ${max.grouped()}")
                 },
             )
         },
