@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -81,7 +82,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -105,6 +105,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
@@ -162,9 +163,10 @@ fun PaneSwap(
 }
 
 @Composable
-private fun AppIcon(modifier: Modifier) {
-    // The drawing fills only the middle 58 of the adaptive foreground's 108 units, so zoom it to the given height
-    Image(painterResource(R.drawable.ic_launcher_foreground), null, modifier.scale(108f / 58f))
+private fun AppIcon(height: Dp) {
+    // The drawing fills only the middle 58 of the adaptive foreground's 108 units. Lay the whole canvas out larger and let it
+    // overflow, because a scale modifier would stretch the bitmap the vector painter drew at the small size
+    Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.size(height).requiredSize(height * 108f / 58f))
 }
 
 @Composable
@@ -175,7 +177,7 @@ private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
         val direction = LocalLayoutDirection.current
         val title = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AppIcon(Modifier.size(28.dp))
+                AppIcon(28.dp)
                 Text("Sift", Modifier.semantics { heading() })
             }
         }
