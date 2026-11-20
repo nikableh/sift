@@ -46,7 +46,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
@@ -59,6 +58,7 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
@@ -101,7 +101,7 @@ import java.io.File
 /** The albums to sort, the scan options and the list of destination folders. */
 @Composable
 fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
-    val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
     val sources = vm.sources
     val active = vm.activeAlbums
     val sorted = vm.sortedAlbums
@@ -122,9 +122,8 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
-            MediumFlexibleTopAppBar(
+            TopAppBar(
                 title = { Text("Folders", Modifier.semantics { heading() }) },
-                subtitle = { Text("What to sort and where it can go") },
                 navigationIcon = {
                     IconButton(onClick = { vm.back() }, shapes = IconButtonDefaults.shapes()) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
                 },
@@ -268,8 +267,8 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 }
                 item(key = "destinations:about") {
                     Text(
-                        "Each folder becomes a button under the photo. One tap queues the photo for that folder and shows " +
-                            "the next one. Nothing moves until you press Move. For photos you want to delete, add a folder " +
+                        "Each folder becomes a button under the photo. Pressing it queues the photo for that folder. " +
+                            "Nothing moves until you review and press Move. For photos you want to delete, add a folder " +
                             "such as \"To delete\" and empty it later.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

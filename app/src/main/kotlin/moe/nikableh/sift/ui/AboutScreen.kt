@@ -109,7 +109,7 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
             )
             Spacer(Modifier.height(12.dp))
             Text(
-                "Sorts photos and videos into folders, one tap each",
+                "Sort photos and videos into albums with a single tap",
                 Modifier.padding(horizontal = 16.dp),
                 // Evens out the lines, so a narrow screen doesn't leave the last word on its own
                 style = MaterialTheme.typography.bodyLarge.copy(lineBreak = LineBreak.Heading),
@@ -151,7 +151,7 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                     colors = segmentColors(),
                     leadingContent = { Icon(Icons.Rounded.Balance, null) },
                     trailingContent = { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null) },
-                    supportingContent = { Text("MIT for Sift, Apache 2.0 for the libraries in it") },
+                    supportingContent = { Text("MIT for Sift, Apache 2.0 for the libraries") },
                 ) { Text("Licenses") }
             }
             Spacer(Modifier.height(24.dp))
