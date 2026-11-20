@@ -249,7 +249,14 @@ private fun GroupHeader(dest: String, count: Int, color: Color?, collapsed: Bool
                     modifier = Modifier.semantics { contentDescription = files(count) },
                 )
                 Spacer(Modifier.width(4.dp))
-                Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(turn))
+                // Hand-built because no public material3 API reads ExpandedListTokens
+                Box(
+                    Modifier.clip(CircleShape)
+                        .background(if (collapsed) Color.Transparent else MaterialTheme.colorScheme.surfaceContainer)
+                        .padding(4.dp),
+                ) {
+                    Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(turn))
+                }
             }
         },
         // The whole path wraps instead of being cut, it is what tells two folders apart
