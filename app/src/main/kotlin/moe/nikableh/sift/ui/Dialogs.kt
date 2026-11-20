@@ -59,6 +59,7 @@ import moe.nikableh.sift.Batch
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.MoveRunner
 import moe.nikableh.sift.Mover
+import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
 
 @Composable
@@ -142,14 +143,15 @@ fun Dialogs(vm: SiftViewModel, snackbar: SnackbarHostState) {
                 haptic.performHapticFeedback(if (d.result.failed.isEmpty()) HapticFeedbackType.Confirm else HapticFeedbackType.Reject)
             }
             val details = applyDetails(d.result)
-            if (details == null) {
+            // The sorting screen has no snackbar host, and a move started from its Review lands back on it
+            if (details == null && vm.screen != Screen.Sort) {
                 Report(vm, snackbar, scope, d, "Moved ${files(d.result.moved)}", d.batch)
             } else {
                 AlertDialog(
                     onDismissRequest = close,
                     icon = { Icon(Icons.Rounded.DoneAll, null) },
                     title = { Text("Moved ${files(d.result.moved)}") },
-                    text = { Column(Modifier.verticalScroll(rememberScrollState())) { Text(details) } },
+                    text = details?.let { text -> { Column(Modifier.verticalScroll(rememberScrollState())) { Text(text) } } },
                     confirmButton = { Button(onClick = close, shapes = ButtonDefaults.shapes()) { Text("Done") } },
                     dismissButton = {
                         val batch = d.batch
