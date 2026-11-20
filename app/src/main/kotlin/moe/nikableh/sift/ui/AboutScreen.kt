@@ -47,12 +47,15 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
@@ -85,10 +88,12 @@ fun AboutScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         }
         Unit
     }
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = { BackBar("About", vm) },
+        topBar = { BackBar("About", vm, scroll) },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Page(padding, Alignment.CenterHorizontally) {
@@ -197,10 +202,12 @@ private val libraries = listOf(
 fun LicensesScreen(vm: SiftViewModel) {
     val context = LocalContext.current
     val apache = remember { paragraphs(context, R.raw.license_apache_2_0) }
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         contentWindowInsets = WindowInsets.safeDrawing,
-        topBar = { BackBar("Licenses", vm) },
+        topBar = { BackBar("Licenses", vm, scroll) },
     ) { padding ->
         Page(padding, Alignment.CenterHorizontally) {
             Column(Modifier.widthIn(max = 560.dp).fillMaxWidth()) {
@@ -254,8 +261,9 @@ private fun Page(
 }
 
 @Composable
-private fun BackBar(title: String, vm: SiftViewModel) {
+private fun BackBar(title: String, vm: SiftViewModel, scroll: TopAppBarScrollBehavior) {
     TopAppBar(
+        scrollBehavior = scroll,
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         title = { Text(title, Modifier.semantics { heading() }) },
         navigationIcon = {

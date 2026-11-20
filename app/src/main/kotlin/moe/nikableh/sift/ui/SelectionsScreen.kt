@@ -47,6 +47,7 @@ import androidx.compose.material3.MediumExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
@@ -90,16 +92,19 @@ fun SelectionsScreen(vm: SiftViewModel) {
     val allCollapsed = groups.all { it.dest in collapsed }
     var preview by remember { mutableStateOf<Selection?>(null) }
     val layoutDirection = LocalLayoutDirection.current
+    val scroll = TopAppBarDefaults.pinnedScrollBehavior()
 
     preview?.let { PhotoPreview(it) { preview = null } }
 
     // The defaults cover system bars only, so in landscape the list and app bar ran under the camera cutout
     Scaffold(
+        modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
                 // Ahead of the FAB, which TalkBack would otherwise reach only after every row
                 modifier = Modifier.semantics { isTraversalGroup = true; traversalIndex = -2f },
+                scrollBehavior = scroll,
                 windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 title = { Text("Selections", Modifier.semantics { heading() }) },
                 navigationIcon = {
