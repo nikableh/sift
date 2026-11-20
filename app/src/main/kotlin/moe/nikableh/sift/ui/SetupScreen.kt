@@ -37,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
@@ -117,7 +118,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         ) {
             // Each header carries the button that adds to its list
             item(key = "header:albums") {
-                SectionHeader("Albums to sort", "Add albums", Modifier.animateItem()) { vm.pickAlbums() }
+                SectionHeader("Albums to sort", "Add albums", Modifier.animateItem(), reading = vm.scanning) { vm.pickAlbums() }
             }
             if (sources.isEmpty()) {
                 item(key = "albums:none") {
@@ -268,9 +269,12 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
     }
 }
 
-/** A section's name with the button that adds to its list. [addLabel] is what a screen reader says for the button. */
+/**
+ * A section's name with the button that adds to its list. [addLabel] is what a screen reader says for the button.
+ * [reading] shows one indicator for the whole list while its rows are still being read.
+ */
 @Composable
-private fun SectionHeader(text: String, addLabel: String, modifier: Modifier = Modifier, onAdd: () -> Unit) {
+private fun SectionHeader(text: String, addLabel: String, modifier: Modifier = Modifier, reading: Boolean = false, onAdd: () -> Unit) {
     Row(
         modifier.fillMaxWidth().padding(start = 4.dp, top = 12.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -281,6 +285,11 @@ private fun SectionHeader(text: String, addLabel: String, modifier: Modifier = M
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
+        if (reading) {
+            // As tall as the button beside it, so the header keeps its height when the read ends
+            LoadingIndicator(Modifier.size(ButtonDefaults.MinHeight).semantics { contentDescription = "Reading the albums" })
+            Spacer(Modifier.width(8.dp))
+        }
         FilledTonalButton(
             onClick = onAdd,
             shapes = ButtonDefaults.shapes(),
