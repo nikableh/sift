@@ -67,6 +67,7 @@ import androidx.compose.material3.DropdownMenuItem
 
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilledIconToggleButton
+import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Slider
 import androidx.compose.material3.HorizontalDivider
@@ -512,7 +513,11 @@ private fun Photo(vm: SiftViewModel, player: VideoPlayer, stage: Stage, folder: 
 private fun VideoBar(vm: SiftViewModel, player: VideoPlayer) {
     HorizontalFloatingToolbar(
         expanded = true,
-        modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth(),
+        // The bar sits on the video, which can be any colour, so it carries its own edge. A shadow is
+        // lost on a dark frame, hence the outline too
+        modifier = Modifier.padding(horizontal = 16.dp).widthIn(max = 480.dp).fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, FloatingToolbarDefaults.ContainerShape),
+        expandedShadowElevation = 6.dp,
     ) {
         // A video starts by itself, so until the player has it the button already shows what is about to happen
         val playing = player.playing || player.path == null
