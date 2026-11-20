@@ -47,7 +47,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FolderOpen
@@ -890,7 +889,7 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
             // Past about 16dp the corner curve reaches the badge and the selection ring cuts through it
             shapes = ButtonDefaults.shapes(shape = MaterialTheme.shapes.large, pressedShape = ButtonDefaults.mediumPressedShape),
             colors = ButtonDefaults.buttonColors(containerColor = color.tile(), contentColor = ink),
-            // A ring and a tick mark the queued folder. Brightness alone is too subtle on a light panel
+            // A ring marks the queued folder. Brightness alone is too subtle on a light panel
             border = if (selected) BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface) else null,
             contentPadding = PaddingValues(0.dp),
             modifier = Modifier.fillMaxSize().semantics {
@@ -927,10 +926,6 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (selected) {
-                        Icon(Icons.Rounded.Check, null, Modifier.size(ButtonDefaults.SmallIconSize))
-                        Spacer(Modifier.width(4.dp))
-                    }
                     // A line height relative to the size, so two shrunk lines fit where two full ones would not
                     val style = ButtonDefaults.textStyleFor(ButtonDefaults.MediumContainerHeight).copy(lineHeight = 1.25.em)
                     Text(
