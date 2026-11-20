@@ -661,8 +661,9 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
             .semantics { stateDescription = if (menu) "Expanded" else "Collapsed" }
 
         @Composable
-        fun details(style: TextStyle, color: Color) {
+        fun details(base: TextStyle, color: Color) {
             if (photo == null) return
+            val style = base.copy(fontFeatureSettings = "tnum")
             Row {
                 // The position never gets cut. When even a line of its own is too narrow it breaks
                 // after the slash, which a no-break space keeps with the first number
