@@ -614,7 +614,7 @@ private fun TopBar(vm: SiftViewModel, folder: String) {
 
         // The count drops out where it would take more than a fair share of the bar, which at large
         // font sizes would squeeze the photo details down to a few letters
-        val style = MaterialTheme.typography.labelLarge
+        val style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum")
         val withCount = "Review ${vm.queued.grouped()}"
         val maxButton = barWidth * 0.45f
         val padding = ButtonDefaults.ButtonWithIconContentPadding
@@ -999,7 +999,12 @@ private fun FolderButton(vm: SiftViewModel, dest: Dest, index: Int, modifier: Mo
                             .clearAndSetSemantics {},
                         containerColor = ink,
                         contentColor = Color.White,
-                    ) { FitLabel(if (count > 999) "999+" else count.grouped()) }
+                    ) {
+                        FitLabel(
+                            if (count > 999) "999+" else count.grouped(),
+                            LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                        )
+                    }
                     Row(
                         Modifier.weight(1f).fillMaxWidth().padding(end = 4.dp),
                         horizontalArrangement = Arrangement.Center,
