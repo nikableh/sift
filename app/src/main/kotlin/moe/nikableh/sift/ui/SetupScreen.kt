@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectableGroup
@@ -242,7 +243,7 @@ fun SetupScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
                         "such as \"To delete\" and empty it later.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.animateItem().padding(start = 4.dp, end = 4.dp, bottom = 10.dp),
+                    modifier = Modifier.animateItem().padding(start = 4.dp, end = 4.dp, bottom = 10.dp).widthIn(max = 480.dp),
                 )
             }
             itemsIndexed(dests, key = { _, d -> d.path }) { i, dest ->
