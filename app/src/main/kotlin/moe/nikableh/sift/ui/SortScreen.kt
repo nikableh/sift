@@ -193,9 +193,11 @@ fun SortScreen(vm: SiftViewModel, settled: Boolean) {
                 val stage = remember { Stage() }
                 Media(vm, player, stage)
                 if (wide) {
+                    // The fixed pane is 360dp at expanded window widths
+                    val panelWidth = if (maxWidth >= 840.dp) 360.dp else 280.dp
                     Row(Modifier.fillMaxSize()) {
                         Viewer(vm, player, stage, landscape = true, Modifier.weight(1f).fillMaxHeight())
-                        Panel(vm, landscape = true, Modifier.width(280.dp).fillMaxHeight())
+                        Panel(vm, landscape = true, Modifier.width(panelWidth).fillMaxHeight())
                     }
                 } else {
                     Column(Modifier.fillMaxSize()) {
