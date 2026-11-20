@@ -1,5 +1,6 @@
 package moe.nikableh.sift.ui
 
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -75,12 +76,15 @@ private fun MoveProgress(run: MoveRunner.Run) {
 fun Dialogs(vm: SiftViewModel) {
     val close = { vm.dialog = null }
     val haptic = LocalHapticFeedback.current
+    // Back leaves Sift instead of cancelling, the work goes on while it is away
+    val activity = LocalActivity.current
+    val goHome = { activity?.moveTaskToBack(true); Unit }
     // Read from the run itself, so a view model made while it is on shows it too
     val run = MoveRunner.run
     if (run != null) {
         AlertDialog(
-            onDismissRequest = {},
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            onDismissRequest = goHome,
+            properties = DialogProperties(dismissOnClickOutside = false),
             title = { Text(run.title) },
             text = { MoveProgress(run) },
             confirmButton = {
@@ -93,8 +97,8 @@ fun Dialogs(vm: SiftViewModel) {
         null -> {}
 
         is Dialog.Preparing -> AlertDialog(
-            onDismissRequest = {},
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            onDismissRequest = goHome,
+            properties = DialogProperties(dismissOnClickOutside = false),
             title = { Text(d.title) },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
