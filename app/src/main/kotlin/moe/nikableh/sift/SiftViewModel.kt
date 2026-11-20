@@ -989,6 +989,23 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
     /** Takes an album out of sorting and drops the selections made in it. Its photos stay where they are. */
     fun removeSource(path: String) {
         if (busy || scanning || !Store.ready) return
+        dropSource(path)
+        // These changes are made on Home, which only reads the albums again when Back lands on it
+        refresh()
+    }
+
+    /** Takes every sorted album off the list. They are empty, so no confirmation is needed. */
+    fun clearSorted() {
+        if (busy || scanning || !Store.ready) {
+            messages.tryEmit("Wait until the albums have been read")
+            return
+        }
+        // One read for all of them: a read started by the first would turn the rest away
+        for (path in sortedAlbums) dropSource(path)
+        refresh()
+    }
+
+    private fun dropSource(path: String) {
         val at = Store.sources.indexOf(path)
         if (at < 0) return
         if (Store.pending.keys.removeAll { Store.albumOf(it) == at }) {
@@ -999,20 +1016,10 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         changed(rescan = true)
     }
 
-    /** Takes every sorted album off the list. They are empty, so no confirmation is needed. */
-    fun clearSorted() {
-        if (busy || scanning || !Store.ready) {
-            messages.tryEmit("Wait until the albums have been read")
-            return
-        }
-        for (path in sortedAlbums) removeSource(path)
-    }
-
     fun changeRecursive(on: Boolean) {
         if (!on && locked()) return
         Store.recursive = on
         changed(rescan = true)
-        // The Folders screen shows what each album holds, and that just changed
         refresh()
     }
 
@@ -1020,6 +1027,7 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         if (value == Store.order) return
         Store.order = value
         changed(rescan = true)
+        refresh()
     }
 
     fun isSource(path: String): Boolean = path in sources
@@ -1076,8 +1084,6 @@ class SiftViewModel(app: Application) : AndroidViewModel(app) {
         clearPicks()
         changed(rescan = true)
         back()
-        // The Folders screen shows what each album holds, so new albums are read without waiting for Home
-        if (forSource) refresh()
     }
 
     /** False when the albums stay for now, because a folder read is on or the user has to confirm. */

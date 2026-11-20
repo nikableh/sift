@@ -4,7 +4,12 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.text.modifiers.TextAutoSizeLayoutScope
 import androidx.compose.material3.LocalTextStyle
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,6 +104,18 @@ private fun TextLayoutResult.splitsWord(text: AnnotatedString): Boolean {
         }
     }
     return false
+}
+
+/** One line cut in the middle, so the storage root and the folder stay. A long press shows the whole path. */
+@Composable
+fun PathText(path: String) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text(path) } },
+        state = rememberTooltipState(),
+    ) {
+        Text(path, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+    }
 }
 
 /** A label for a button that can grow taller. It keeps its type role and wraps to a second line before it gets cut */

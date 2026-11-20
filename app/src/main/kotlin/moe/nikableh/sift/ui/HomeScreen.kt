@@ -1,9 +1,15 @@
 package moe.nikableh.sift.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -34,6 +40,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,8 +49,8 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Done
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -61,13 +68,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -109,6 +119,7 @@ import moe.nikableh.sift.AlbumStat
 import moe.nikableh.sift.Dialog
 import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
+import moe.nikableh.sift.Store
 
 /** Where the app opens and where Back from sorting lands. */
 @Composable
@@ -122,12 +133,7 @@ fun HomeScreen(vm: SiftViewModel, snackbar: SnackbarHostState) {
         when (it) {
             Step.Access -> AccessScreen(vm, onAbout = { vm.open(Screen.About) })
 
-            Step.Welcome -> Welcome(
-                icon = Icons.Rounded.PhotoLibrary,
-                title = "Pick your folders",
-                body = "Choose the albums to sort and the folders their photos can go to.",
-                action = "Set up folders",
-            ) { vm.open(Screen.Setup) }
+            Step.Welcome -> SetupWelcome(vm)
 
             Step.Content -> Home(vm, snackbar)
         }
@@ -268,7 +274,7 @@ private fun DestinationsCard(vm: SiftViewModel) {
     }
 }
 
-/** The albums being sorted, with how many photos they hold. */
+/** The albums being sorted, with how many photos they hold. Albums are added, removed and read from here. */
 @Composable
 private fun AlbumCard(vm: SiftViewModel) {
     if (vm.sources.isEmpty()) return
@@ -276,18 +282,15 @@ private fun AlbumCard(vm: SiftViewModel) {
     // A sorted album holds nothing to count
     val albums = vm.albumStats.filter { it.path in active }
     // The rows match the albums only once those have been read. Until then the row waits disabled, so the
-    // cards below don't jump when reading ends
-    val read = !vm.scanning && albums.map { it.path } == active
+    // cards below don't jump when reading ends. Later reads keep it open, since its own controls start them
+    val read = albums.map { it.path } == active
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         AlbumHeader(vm, Modifier.padding(16.dp))
-        // One album is the whole card already
-        if (active.size > 1) {
-            // The default outlineVariant all but vanishes on the card's primaryContainer
-            HorizontalDivider(color = MaterialTheme.colorScheme.background)
-            AlbumRows(albums, enabled = read)
-        }
+        // The default outlineVariant all but vanishes on the card's primaryContainer
+        HorizontalDivider(color = MaterialTheme.colorScheme.background)
+        Details(vm, albums, enabled = read)
     }
 }
 
@@ -353,12 +356,12 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
                 }
             }
         }
-        val edit = @Composable {
+        val add = @Composable {
             FilledIconButton(
-                onClick = { vm.open(Screen.Setup) },
+                onClick = { vm.pickAlbums() },
                 shapes = IconButtonDefaults.shapes(),
             ) {
-                Icon(Icons.Rounded.Edit, "Change albums")
+                Icon(Icons.Rounded.Add, "Add albums")
             }
         }
         if (beside) {
@@ -366,14 +369,14 @@ private fun AlbumHeader(vm: SiftViewModel, modifier: Modifier) {
                 Covers(covers, placeholder)
                 Spacer(Modifier.width(16.dp))
                 titles(Modifier.weight(1f))
-                edit()
+                add()
             }
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Covers(covers, placeholder)
                     Spacer(Modifier.weight(1f))
-                    edit()
+                    add()
                 }
                 titles(Modifier)
             }
@@ -435,18 +438,19 @@ private fun Cover(file: File?, placeholder: ImageVector?, modifier: Modifier, sh
 }
 
 /**
- * How many photos each album holds, behind a line that unfolds it. Folded is how it starts, so the card is
- * the same height at any number of albums and Home fits a screen. Whether it is unfolded is kept
+ * Each album with its count and a way to remove it, the sorted albums and the read options, behind a line that
+ * unfolds them. Folded is how it starts, so the card is the same height at any number of albums and Home fits a
+ * screen. Whether it is unfolded is kept
  */
 @Composable
-private fun AlbumRows(albums: List<AlbumStat>, enabled: Boolean) {
+private fun Details(vm: SiftViewModel, albums: List<AlbumStat>, enabled: Boolean) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     // A row that waits for the albums stays folded, whatever was kept
     val open = expanded && enabled
     val content = MaterialTheme.colorScheme.onPrimaryContainer
     // The default disabled onSurface reads as grey on the card's primaryContainer
     val disabled = content.copy(alpha = 0.38f)
-    val label = if (open) "Hide the albums" else "Show each album"
+    val label = if (open) "Hide details" else "Show details"
     val motion = MaterialTheme.motionScheme
     val arrow by animateFloatAsState(if (open) 180f else 0f, motion.fastSpatialSpec())
     Column {
@@ -473,36 +477,128 @@ private fun AlbumRows(albums: List<AlbumStat>, enabled: Boolean) {
                         .padding(4.dp),
                 ) { Icon(Icons.Rounded.ExpandMore, null, Modifier.rotate(arrow)) }
             },
-        ) { Text("By album") }
-        // Shown at once, as it was before: growing the card frame by frame lays out the whole page every frame
-        if (open) {
-            Column(
-                Modifier.padding(top = 4.dp, bottom = 16.dp)
-                    .semantics { collectionInfo = CollectionInfo(albums.size, 1) },
-            ) {
-                albums.forEachIndexed { index, album -> AlbumRow(album, index, content) }
+        ) { Text("Details") }
+        // From the top, so the rows stay in place under the growing clip instead of sliding down with its edge
+        AnimatedVisibility(
+            open,
+            enter = expandVertically(motion.defaultSpatialSpec(), expandFrom = Alignment.Top) +
+                fadeIn(motion.defaultEffectsSpec()),
+            exit = shrinkVertically(motion.defaultSpatialSpec(), shrinkTowards = Alignment.Top) +
+                fadeOut(motion.fastEffectsSpec()),
+        ) {
+            Column {
+                val colors = ListItemDefaults.colors(
+                    containerColor = Color.Transparent,
+                    contentColor = content,
+                    supportingContentColor = content,
+                    trailingContentColor = content,
+                )
+                val sorted = vm.sortedAlbums
+                Column(Modifier.padding(top = 4.dp, bottom = 8.dp)) {
+                    if (albums.isNotEmpty()) {
+                        Column(Modifier.semantics { collectionInfo = CollectionInfo(albums.size, 1) }) {
+                            albums.forEachIndexed { index, album -> AlbumRow(vm, album, index, colors) }
+                        }
+                    }
+                    if (sorted.isNotEmpty()) SortedRow(vm, sorted, colors)
+                }
+                // Inset, because it splits related content inside the open card. The full-width line above marks the fold
+                HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.background)
+                Column(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
+                    val several = vm.shownAlbums.size > 1
+                    ListItem(
+                        checked = vm.recursive,
+                        onCheckedChange = { vm.changeRecursive(it) },
+                        colors = colors,
+                        supportingContent = {
+                            Text(if (several) "Of every album. Destination folders inside them are left out" else "Destination folders inside it are left out")
+                        },
+                        trailingContent = { Switch(checked = vm.recursive, onCheckedChange = null) },
+                    ) { Text("Include subfolders") }
+                    ListItem(
+                        colors = colors,
+                        supportingContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OrderButtons(vm)
+                                if (several) Text("All albums are sorted as one list")
+                            }
+                        },
+                    ) { Text("Order") }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AlbumRow(album: AlbumStat, index: Int, content: Color) {
+private fun AlbumRow(vm: SiftViewModel, album: AlbumStat, index: Int, colors: ListItemColors) {
     ListItem(
         modifier = Modifier.semantics(mergeDescendants = true) {
             collectionItemInfo = CollectionItemInfo(index, 1, 0, 1)
         },
-        colors = ListItemDefaults.colors(
-            containerColor = Color.Transparent,
-            contentColor = content,
-            trailingContentColor = content,
-        ),
+        colors = colors,
         leadingContent = {
             Cover(album.cover, Icons.Rounded.PhotoLibrary, Modifier.size(56.dp), MaterialTheme.shapes.small)
         },
-        trailingContent = { Text(items(album.total), style = MaterialTheme.typography.bodyMedium) },
+        supportingContent = { PathText(album.path) },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(items(album.total), style = MaterialTheme.typography.bodyMedium)
+                IconButton(onClick = { vm.askRemoveSource(album.path) }, shapes = IconButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.Close, "Remove ${album.name}")
+                }
+            }
+        },
     ) {
         Text(album.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Albums a Move emptied, in one row however many there are. They come back by themselves when they fill up again */
+@Composable
+private fun SortedRow(vm: SiftViewModel, sorted: List<String>, colors: ListItemColors) {
+    ListItem(
+        colors = colors,
+        leadingContent = {
+            Cover(null, Icons.Rounded.Done, Modifier.size(56.dp), MaterialTheme.shapes.small)
+        },
+        supportingContent = { Text(sorted.joinToString(", ") { File(it).name }, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        trailingContent = {
+            // The default primary text is too faint on the card's primaryContainer
+            TextButton(
+                onClick = { vm.clearSorted() },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onPrimaryContainer),
+            ) { Text("Clear") }
+        },
+    ) { Text(if (sorted.size == 1) "1 album sorted" else "${sorted.size} albums sorted") }
+}
+
+/** Connected toggle buttons, the Expressive replacement for a segmented control. */
+@Composable
+private fun OrderButtons(vm: SiftViewModel) {
+    val options = listOf(
+        Store.ORDER_NEWEST to "Newest",
+        Store.ORDER_OLDEST to "Oldest",
+        Store.ORDER_NAME to "By name",
+    )
+    Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+    ) {
+        options.forEachIndexed { i, (value, label) ->
+            ToggleButton(
+                checked = vm.order == value,
+                onCheckedChange = { vm.changeOrder(value) },
+                modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
+                // outline rather than the outlined default outlineVariant, so each option reaches 3:1 on the card
+                border = if (vm.order == value) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                shapes = when (i) {
+                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                },
+            ) { FitLabel(label, MaterialTheme.typography.labelMedium) }
+        }
     }
 }
 

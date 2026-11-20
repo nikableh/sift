@@ -184,12 +184,7 @@ fun SortScreen(vm: SiftViewModel, snackbar: SnackbarHostState, settled: Boolean)
             when (shown) {
                 Step.Access -> AccessScreen(vm)
 
-                Step.Welcome -> Welcome(
-                    icon = Icons.Rounded.PhotoLibrary,
-                    title = "Pick your folders",
-                    body = "Choose the albums to sort and the folders their photos can go to.",
-                    action = "Set up folders",
-                ) { vm.open(Screen.Setup) }
+                Step.Welcome -> SetupWelcome(vm)
 
                 Step.Content -> BoxWithConstraints(Modifier.fillMaxSize()) {
                     // From the window width, not the orientation, so a portrait tablet gets the side panel
@@ -243,6 +238,26 @@ fun sharePhoto(context: Context, file: File) {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(Intent.createChooser(send, null))
+}
+
+/** Albums come first, because Folders only holds where their photos go. */
+@Composable
+fun SetupWelcome(vm: SiftViewModel) {
+    if (vm.sources.isEmpty()) {
+        Welcome(
+            icon = Icons.Rounded.PhotoLibrary,
+            title = "Pick your albums",
+            body = "Choose the albums whose photos you want to sort.",
+            action = "Add albums",
+        ) { vm.pickAlbums() }
+    } else {
+        Welcome(
+            icon = Icons.Rounded.FolderOpen,
+            title = "Pick your folders",
+            body = "Choose the folders the photos can go to. Each one becomes a button under the photo.",
+            action = "Set up folders",
+        ) { vm.open(Screen.Setup) }
+    }
 }
 
 @Composable
