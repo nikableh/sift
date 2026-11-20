@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Transition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.updateTransition
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,7 +28,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -90,7 +88,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -105,13 +102,11 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import java.io.File
 import moe.nikableh.sift.AlbumStat
 import moe.nikableh.sift.Dialog
-import moe.nikableh.sift.R
 import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
 
@@ -163,13 +158,6 @@ fun PaneSwap(
 }
 
 @Composable
-private fun AppIcon(height: Dp) {
-    // The drawing fills only the middle 58 of the adaptive foreground's 108 units. Lay the whole canvas out larger and let it
-    // overflow, because a scale modifier would stretch the bitmap the vector painter drew at the small size
-    Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.size(height).requiredSize(height * 108f / 58f))
-}
-
-@Composable
 private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val content = rememberScrollState()
@@ -177,7 +165,7 @@ private fun Home(vm: SiftViewModel, snackbar: SnackbarHostState) {
         val direction = LocalLayoutDirection.current
         val title = @Composable {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                AppIcon(28.dp)
+                HeaderIcon(28.dp)
                 Text("Sift", Modifier.semantics { heading() })
             }
         }

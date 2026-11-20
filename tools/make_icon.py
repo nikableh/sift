@@ -127,8 +127,28 @@ picture = ('            <group>\n                <clip-path android:pathData="%s
            + shape(HILL_BACK, '#6FCB8C', 16) + shape(HILL_FRONT, '#3FAE6A', 16) + '            </group>\n')
 # The print is white on a white background, so this outline is all that separates the two
 print_ = shape(PRINT, '#FFFFFF', 12, stroke='#8E9FD9', stroke_width=1.4) + picture
-foreground = (HEAD + OPEN % '' + GROUP + folder_shape(BACK, BLUE, 8) + tilted(print_, 8)
-              + folder_shape(MIDDLE, AMBER, 8) + folder_shape(FRONT, CORAL, 8) + '    </group>\n</vector>\n')
+
+
+def indent(text, by):
+    return ''.join(' ' * by + line if line.strip() else line for line in text.splitlines(True))
+
+
+def plain_group(name, pad, attrs, body):
+    sp = ' ' * pad
+    lines = ''.join('\n%s    android:%s="%s"' % (sp, k, v) for k, v in [('name', name)] + attrs)
+    return '%s<group%s>\n%s%s</group>\n' % (sp, lines, body, sp)
+
+
+# The Home header plays a hop on tap by overriding these groups. They carry no transform of their
+# own, so an override there is an offset and the tilt and the shift above stay as they are.
+# The folders sit in two groups that move as one, so the print between them can fly its own path
+# instead of swinging along with the folders' tilt. They tilt about the middle of the stack
+HOP_PIVOT = [('pivotX', f((LEFT + RIGHT) / 2)), ('pivotY', f((min(y for _, y in BACK) + BOTTOM) / 2))]
+foreground = (HEAD + OPEN % '' + GROUP
+              + plain_group('hop_back', 8, HOP_PIVOT, indent(folder_shape(BACK, BLUE, 8), 4))
+              + plain_group('fly', 8, [('pivotX', f(cx)), ('pivotY', f(cy))], indent(tilted(print_, 8), 4))
+              + plain_group('hop_front', 8, HOP_PIVOT, indent(folder_shape(MIDDLE, AMBER, 8) + folder_shape(FRONT, CORAL, 8), 4))
+              + '    </group>\n</vector>\n')
 
 # ---- background ----
 background = HEAD + OPEN % '' + shape('M0,0h108v108h-108z', '#FFFFFF', 4) + '</vector>\n'
