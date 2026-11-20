@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.nikableh.sift.ui.files
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -41,7 +42,7 @@ object MoveRunner {
         val journal = Store.newJournal()
         val stop = AtomicBoolean(false)
         cancel = stop
-        start(ctx, Run("Moving ${entries.size} files", entries.size, cancellable = true), journal, undo = false) { app ->
+        start(ctx, Run("Moving ${files(entries.size)}", entries.size, cancellable = true), journal, undo = false) { app ->
             val result = withContext(Dispatchers.IO) { Mover.move(app, entries, journal, stop, ::tick) }
             for (path in result.settled) Store.pending.remove(path)
             Store.noteMovedFrom(result.settled)
@@ -51,7 +52,7 @@ object MoveRunner {
 
     fun undo(ctx: Context, batch: Batch) {
         cancel = null
-        start(ctx, Run("Moving ${batch.moved} files back", batch.moved, cancellable = false), batch.journal, undo = true) { app ->
+        start(ctx, Run("Moving ${files(batch.moved)} back", batch.moved, cancellable = false), batch.journal, undo = true) { app ->
             val result = withContext(Dispatchers.IO) { Mover.undo(app, batch.journal, ::tick) }
             for ((path, dest) in result.restored) Store.pending[path] = dest
             Store.lastPath = result.restored.lastOrNull()?.first
