@@ -100,7 +100,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
@@ -161,7 +160,6 @@ import moe.nikableh.sift.VideoPlayer
  */
 @Composable
 fun SortScreen(vm: SiftViewModel, settled: Boolean) {
-    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     val context = LocalContext.current
     // Held above the two layouts, so turning the phone doesn't start the video over
     val player = remember { VideoPlayer(context.applicationContext) }
@@ -181,12 +179,15 @@ fun SortScreen(vm: SiftViewModel, settled: Boolean) {
                 action = "Set up folders",
             ) { vm.open(Screen.Setup) }
 
-            else -> Box(Modifier.fillMaxSize()) {
+            else -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                // From the window width, not the orientation, so a portrait tablet gets the side panel
+                // and a narrow landscape window doesn't
+                val wide = maxWidth >= 600.dp
                 // Under the header and the folder buttons and as large as the screen, so an open photo
                 // can come up over them. Shared by the two layouts, so turning the phone keeps the zoom
                 val stage = remember { Stage() }
                 Media(vm, player, stage)
-                if (landscape) {
+                if (wide) {
                     Row(Modifier.fillMaxSize()) {
                         Viewer(vm, player, stage, landscape = true, Modifier.weight(1f).fillMaxHeight())
                         Panel(vm, landscape = true, Modifier.width(280.dp).fillMaxHeight())

@@ -1,6 +1,5 @@
 package moe.nikableh.sift.ui
 
-import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -66,7 +65,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CollectionInfo
@@ -432,69 +430,71 @@ private fun Actions(vm: SiftViewModel) {
     val queued = vm.queued
     val elsewhere = queued - vm.queuedHere
     val ready = !vm.scanning && !vm.busy
-    val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    Column(
-        Modifier.fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        val review = @Composable { modifier: Modifier ->
-            FilledTonalButton(
-                onClick = { vm.reviewSelections() },
-                enabled = ready,
-                shapes = ButtonDefaults.shapes(),
-                modifier = modifier.height(size),
-            ) {
-                Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
-                Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
-                val style = ButtonDefaults.textStyleFor(size)
-                FitLabel(reviewLabel(vm), style)
+    BoxWithConstraints {
+        val wide = maxWidth >= 600.dp
+        Column(
+            Modifier.fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            val review = @Composable { modifier: Modifier ->
+                FilledTonalButton(
+                    onClick = { vm.reviewSelections() },
+                    enabled = ready,
+                    shapes = ButtonDefaults.shapes(),
+                    modifier = modifier.height(size),
+                ) {
+                    Icon(Icons.Rounded.Checklist, null, Modifier.size(ButtonDefaults.iconSizeFor(size)))
+                    Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
+                    val style = ButtonDefaults.textStyleFor(size)
+                    FitLabel(reviewLabel(vm), style)
+                }
             }
-        }
-        val start = @Composable { modifier: Modifier ->
-            // With nothing to sort the button leads to more albums, like the one on the sorting screen
-            val add = !vm.scanning && vm.photos.isEmpty()
-            Button(
-                onClick = { if (add) vm.pickAlbums() else vm.open(Screen.Sort) },
-                enabled = ready,
-                shapes = ButtonDefaults.shapes(),
-                modifier = modifier.height(size),
-            ) {
-                Icon(
-                    if (add) Icons.Rounded.Add else Icons.Rounded.PlayArrow,
-                    null,
-                    Modifier.size(ButtonDefaults.iconSizeFor(size)),
+            val start = @Composable { modifier: Modifier ->
+                // With nothing to sort the button leads to more albums, like the one on the sorting screen
+                val add = !vm.scanning && vm.photos.isEmpty()
+                Button(
+                    onClick = { if (add) vm.pickAlbums() else vm.open(Screen.Sort) },
+                    enabled = ready,
+                    shapes = ButtonDefaults.shapes(),
+                    modifier = modifier.height(size),
+                ) {
+                    Icon(
+                        if (add) Icons.Rounded.Add else Icons.Rounded.PlayArrow,
+                        null,
+                        Modifier.size(ButtonDefaults.iconSizeFor(size)),
+                    )
+                    Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
+                    val style = ButtonDefaults.textStyleFor(size)
+                    FitLabel(
+                        when {
+                            add -> "Add albums"
+                            vm.index > 0 || vm.queuedHere > 0 -> "Continue sorting"
+                            else -> "Start sorting"
+                        },
+                        style,
+                    )
+                }
+            }
+            if (elsewhere > 0 && !vm.scanning) {
+                // The queue spans albums, and the count on the button covers all of it
+                Text(
+                    "Includes ${elsewhere.grouped()} queued in other albums",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp),
                 )
-                Spacer(Modifier.width(ButtonDefaults.iconSpacingFor(size)))
-                val style = ButtonDefaults.textStyleFor(size)
-                FitLabel(
-                    when {
-                        add -> "Add albums"
-                        vm.index > 0 || vm.queuedHere > 0 -> "Continue sorting"
-                        else -> "Start sorting"
-                    },
-                    style,
-                )
             }
-        }
-        if (elsewhere > 0 && !vm.scanning) {
-            // The queue spans albums, and the count on the button covers all of it
-            Text(
-                "Includes ${elsewhere.grouped()} queued in other albums",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 8.dp),
-            )
-        }
-        if (landscape) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (queued > 0) review(Modifier.weight(1f))
-                start(Modifier.weight(1f))
+            if (wide) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (queued > 0) review(Modifier.weight(1f))
+                    start(Modifier.weight(1f))
+                }
+            } else {
+                if (queued > 0) review(Modifier.fillMaxWidth())
+                start(Modifier.fillMaxWidth())
             }
-        } else {
-            if (queued > 0) review(Modifier.fillMaxWidth())
-            start(Modifier.fillMaxWidth())
         }
     }
 }
