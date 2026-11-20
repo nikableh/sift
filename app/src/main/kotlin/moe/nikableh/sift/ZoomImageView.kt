@@ -361,13 +361,13 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     }
 
     /** Follows a pinch, which holds the image inside its bounds the whole way. */
-    private fun zoomTo(target: Float, focusX: Float, focusY: Float) {
+    private fun zoomTo(target: Float, focusX: Float, focusY: Float, moveX: Float, moveY: Float) {
         val next = target.coerceIn(1f, MAX_ZOOM)
         val cx = focusX - frame.centerX()
         val cy = focusY - frame.centerY()
         val k = next / zoom
-        panX = cx - (cx - panX) * k
-        panY = cy - (cy - panY) * k
+        panX = cx - (cx - panX) * k + moveX
+        panY = cy - (cy - panY) * k + moveY
         zoom = next
         if (!isZoomed) {
             zoom = 1f
@@ -492,11 +492,25 @@ class ZoomImageView(ctx: Context) : View(ctx) {
     }
 
     private val scaleDetector = ScaleGestureDetector(ctx, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        private var lastFocusX = 0f
+        private var lastFocusY = 0f
+
+        override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
+            lastFocusX = d.focusX
+            lastFocusY = d.focusY
+            return true
+        }
+
         override fun onScale(d: ScaleGestureDetector): Boolean {
+            // Two fingers moving together pan the image in the same gesture as the pinch
+            val moveX = d.focusX - lastFocusX
+            val moveY = d.focusY - lastFocusY
+            lastFocusX = d.focusX
+            lastFocusY = d.focusY
             if (bitmap == null || !zoomable || glide != null || dismissing) return true
             dragX = 0f
             // A pinch in the slot opens the image first, and goes on zooming once it is open
-            if (spread < 1f) open() else zoomTo(zoom * d.scaleFactor, d.focusX, d.focusY)
+            if (spread < 1f) open() else zoomTo(zoom * d.scaleFactor, d.focusX, d.focusY, moveX, moveY)
             return true
         }
     }).apply {
