@@ -1,7 +1,10 @@
 package moe.nikableh.sift.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.SeekableTransitionState
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -16,11 +19,18 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import moe.nikableh.sift.Screen
 import moe.nikableh.sift.SiftViewModel
 
@@ -32,7 +42,32 @@ fun SiftApp(vm: SiftViewModel) {
     LaunchedEffect(vm) {
         vm.messages.collect { snackbar.showSnackbar(it) }
     }
-    BackHandler(enabled = vm.backStack.size > 1) { vm.back() }
+    // The depth tells a step forward from a step back
+    val target = vm.screen to vm.backStack.size
+    val screens = remember { SeekableTransitionState(target) }
+    val scope = rememberCoroutineScope()
+    var goingBack by remember { mutableStateOf<Job?>(null) }
+    LaunchedEffect(target) {
+        goingBack?.cancel()
+        screens.animateTo(target)
+    }
+    // A back swipe drags the slide along with the finger, and letting go finishes it from there
+    PredictiveBackHandler(enabled = vm.backStack.size > 1) { events ->
+        goingBack?.cancel()
+        val previous = vm.backStack[vm.backStack.size - 2] to vm.backStack.size - 1
+        try {
+            events.collect { screens.seekTo(it.progress, previous) }
+            vm.back()
+        } catch (e: CancellationException) {
+            // The gesture's job is already cancelled here, so the slide back from where the finger
+            // left it runs in a job of its own
+            goingBack = scope.launch {
+                animate(screens.fraction, 0f) { value, _ -> launch { screens.seekTo(value) } }
+                screens.snapTo(screens.currentState)
+            }
+            throw e
+        }
+    }
     if (vm.busy) KeepScreenOn()
 
     val animationsOn = rememberAnimationsOn()
@@ -40,9 +75,7 @@ fun SiftApp(vm: SiftViewModel) {
         val slide = MaterialTheme.motionScheme.defaultSpatialSpec<IntOffset>()
         val surface = MaterialTheme.colorScheme.surface
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            AnimatedContent(
-                // The depth tells a step forward from a step back
-                targetState = vm.screen to vm.backStack.size,
+            rememberTransition(screens, label = "screen").AnimatedContent(
                 // A slide instead of a fade: the first fade after launch stutters for a third of a
                 // second while the GPU sets up drawing at partial alpha, and opaque screens need none
                 transitionSpec = {
@@ -57,7 +90,6 @@ fun SiftApp(vm: SiftViewModel) {
                             .apply { targetContentZIndex = -1f }
                     }
                 },
-                label = "screen",
             ) { (screen) ->
                 // Opaque even where a screen draws no background of its own, or the one under it shows through
                 Box(Modifier.fillMaxSize().background(surface)) {
