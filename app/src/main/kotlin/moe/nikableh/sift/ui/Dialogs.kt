@@ -337,6 +337,7 @@ private fun NumberPrompt(title: String, current: Int, max: Int, onConfirm: (Int)
             OutlinedTextField(
                 value = value,
                 onValueChange = { v -> if (v.text.all { it.isDigit() } && v.text.length <= 9) value = v },
+                label = { Text("Photo number") },
                 singleLine = true,
                 suffix = { Text("/ $max") },
                 isError = invalid,
@@ -424,6 +425,7 @@ private fun TextPrompt(
                 OutlinedTextField(
                     value = value,
                     onValueChange = { value = it },
+                    label = { Text("Name") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Sentences,
